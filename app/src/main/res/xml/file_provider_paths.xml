@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Internal storage -->
+    <files-path name="internal_files" path="." />
+    <files-path name="internal_exports" path="exports/" />
+
+    <!-- Cache directory -->
+    <cache-path name="cache_files" path="." />
+    <cache-path name="cache_exports" path="WiMap/" />
+
+    <!-- External files directory (doesn't require WRITE_EXTERNAL_STORAGE on API 19+) -->
+    <external-files-path name="external_files" path="." />
+    <external-files-path name="external_documents" path="Documents/" />
+    <external-files-path name="external_downloads" path="Downloads/" />
+    <external-files-path name="external_exports" path="WiMap/" />
+
+    <!-- External cache directory -->
+    <external-cache-path name="external_cache" path="." />
+    <external-cache-path name="external_cache_exports" path="WiMap/" />
+
+    <!-- Pictures directory for photo attachments -->
+    <external-files-path name="external_pictures" path="Pictures/" />
+</paths>

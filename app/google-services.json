@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "699595317102",
+    "project_id": "wimap-aa49e",
+    "storage_bucket": "wimap-aa49e.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:699595317102:android:b7a8a78cc2d40158f12b7f",
+        "android_client_info": {
+          "package_name": "com.ner.wimap"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBI7sEQJClwAFY0PuSo47X4kRLD8ILHhbc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
