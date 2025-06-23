@@ -1,8 +1,11 @@
 package com.ner.wimap.ui.viewmodel
 
+import android.Manifest
 import android.app.Application
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Observer
 import com.ner.wimap.LocationProvider
@@ -25,7 +28,7 @@ class ScanManager(
     private val locationProvider: LocationProvider,
     private val viewModelScope: CoroutineScope
 ) {
-    private val isTestMode = true
+    private val isTestMode = false
 
     // StateFlows
     private val _wifiNetworks = MutableStateFlow<List<WifiNetwork>>(emptyList())
@@ -39,16 +42,30 @@ class ScanManager(
 
     // Observer for WifiScanner's LiveData
     private val wifiNetworksObserver = Observer<List<WifiNetwork>> { networks ->
+        println("DEBUG: ScanManager received ${networks.size} networks from WifiScanner")
+        networks.forEachIndexed { index, network ->
+            println("DEBUG: ScanManager [$index] SSID: '${network.ssid}', BSSID: ${network.bssid}, RSSI: ${network.rssi}")
+        }
         _wifiNetworks.value = networks
     }
+
+    private var isObserverRegistered = false
 
     fun initialize() {
         wifiScanner.isScanning.observeForever { isScanning ->
             _isScanning.value = isScanning
         }
+        
+        // Register the observer once during initialization
+        if (!isObserverRegistered) {
+            wifiScanner.wifiNetworks.observeForever(wifiNetworksObserver)
+            isObserverRegistered = true
+            println("DEBUG: WifiScanner observer registered during initialization")
+        }
     }
 
     fun startScan(onPermissionError: (String) -> Unit) {
+        println("DEBUG: startScan called, isScanning: ${_isScanning.value}")
         if (_isScanning.value) return
 
         _isScanning.value = true
@@ -56,21 +73,38 @@ class ScanManager(
 
         viewModelScope.launch {
             try {
-                if (isTestMode || isEmulator()) {
+                val isEmulatorDetected = isEmulator()
+                println("DEBUG: isTestMode: $isTestMode, isEmulator: $isEmulatorDetected")
+                
+                if (isTestMode || isEmulatorDetected) {
+                    println("DEBUG: Using mock data - testMode: $isTestMode, emulator: $isEmulatorDetected")
                     delay(2000)
                     val mockNetworks = generateMockNetworks()
                     _wifiNetworks.value = mockNetworks
                     _isScanning.value = false
-                    println("DEBUG: Emulator detected - using mock WiFi networks with passwords")
+                    println("DEBUG: Mock networks generated: ${mockNetworks.size} networks")
                 } else {
-                    wifiScanner.wifiNetworks.observeForever(wifiNetworksObserver)
+                    println("DEBUG: Starting real WiFi scanning")
+                    
+                    // Check permissions before starting scan
+                    if (!hasLocationPermission()) {
+                        println("DEBUG: Location permission not granted, triggering permission request")
+                        onPermissionError("Location permission is required to scan for Wi-Fi networks. Please grant location access to continue.")
+                        _isScanning.value = false
+                        return@launch
+                    }
+                    
+                    // Observer is already registered in initialize(), just start scanning
                     wifiScanner.startScanning()
+                    println("DEBUG: WifiScanner.startScanning() called")
                 }
             } catch (e: SecurityException) {
+                println("DEBUG: SecurityException: ${e.message}")
                 onPermissionError("Location and WiFi permissions are required to scan networks. Please grant them in app settings.")
                 _errorMessage.value = "Permission denied: ${e.message}"
                 _isScanning.value = false
             } catch (e: Exception) {
+                println("DEBUG: Exception: ${e.message}")
                 _errorMessage.value = "Scan error: ${e.message}"
                 _isScanning.value = false
             }
@@ -80,8 +114,8 @@ class ScanManager(
     fun stopScan() {
         _isScanning.value = false
         locationProvider.stopLocationUpdates()
-        wifiScanner.wifiNetworks.removeObserver(wifiNetworksObserver)
         wifiScanner.stopScanning()
+        println("DEBUG: Scan stopped")
     }
 
     fun toggleScan(onPermissionError: (String) -> Unit) {
@@ -93,6 +127,7 @@ class ScanManager(
     }
 
     fun clearNetworks() {
+        wifiScanner.clearNetworks()
         _wifiNetworks.value = emptyList()
     }
 
@@ -161,6 +196,13 @@ class ScanManager(
 
     fun clearError() {
         _errorMessage.value = null
+    }
+
+    private fun hasLocationPermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            application,
+            Manifest.permission.ACCESS_FINE_LOCATION
+        ) == PackageManager.PERMISSION_GRANTED
     }
 
     private fun isEmulator(): Boolean {

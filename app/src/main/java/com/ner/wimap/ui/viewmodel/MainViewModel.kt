@@ -23,7 +23,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     // Managers
     private val scanManager = ScanManager(application, wifiScanner, locationProvider, viewModelScope)
-    private val connectionManager = ConnectionManager(wifiScanner, firebaseRepository, pinnedNetworkDao, viewModelScope)
+    private val connectionManager = ConnectionManager(application, wifiScanner, firebaseRepository, pinnedNetworkDao, viewModelScope)
     private val pinnedNetworksManager = PinnedNetworksManager(pinnedNetworkDao, viewModelScope)
     private val exportManager = ExportManager(viewModelScope)
 
@@ -152,6 +152,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun clearConnectionProgress() = connectionManager.clearConnectionProgress()
+
+    fun cancelConnection(networkBssid: String) = connectionManager.cancelConnection(networkBssid)
 
     // Pinned network functions
     fun pinNetwork(network: WifiNetwork, comment: String?, password: String?, photoUri: String?) =
@@ -297,6 +299,33 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun clearUploadStatus() {
         _uploadStatus.value = null
+    }
+
+    // Clear all local data
+    fun clearAllLocalData() {
+        viewModelScope.launch {
+            try {
+                // Clear scanned networks
+                scanManager.clearNetworks()
+                
+                // Clear all pinned networks from database
+                pinnedNetworkDao.clearAllPinnedNetworks()
+                
+                // Clear all passwords
+                connectionManager.clearAllPasswords()                
+                // Clear status messages
+                pinnedNetworksManager.clearStatusMessage()
+                clearConnectionProgress()
+                clearUploadStatus()
+                clearExportStatus()
+                clearExportError()
+                
+                _uploadStatus.value = "✅ All local data cleared successfully"
+                
+            } catch (e: Exception) {
+                _uploadStatus.value = "❌ Error clearing data: ${e.message}"
+            }
+        }
     }
 
     override fun onCleared() {

@@ -14,6 +14,8 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Construction
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -43,6 +45,7 @@ fun SettingsScreen(
     onConnectionTimeoutChange: (Int) -> Unit,
     rssiThresholdForConnection: Int,
     onRssiThresholdForConnectionChange: (Int) -> Unit,
+    onClearAllData: () -> Unit,
     onBack: () -> Unit
 ) {
     var newPassword by remember { mutableStateOf("") }
@@ -314,6 +317,19 @@ fun SettingsScreen(
                 )
             }
 
+            // Clear All Data Section
+            item {
+                ModernSettingsCategoryCard(
+                    icon = Icons.Default.DeleteSweep,
+                    title = "Clear All Data",
+                    subtitle = "Remove all locally stored data",
+                    gradientColors = listOf(Color(0xFFE74C3C), Color(0xFFC0392B)),
+                    content = {
+                        ClearAllDataSection(onClearAllData = onClearAllData)
+                    }
+                )
+            }
+
             // Add some bottom padding
             item { Spacer(modifier = Modifier.height(20.dp)) }
         }
@@ -520,4 +536,208 @@ fun EmptyPasswordsState() {
             color = Color(0xFFBDC3C7)
         )
     }
+}
+
+@Composable
+fun ClearAllDataSection(
+    onClearAllData: () -> Unit
+) {
+    var showConfirmationDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.padding(24.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Warning message
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    Color(0xFFFFF3CD),
+                    RoundedCornerShape(12.dp)
+                )
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = Color(0xFF856404),
+                modifier = Modifier.size(24.dp)
+            )
+            Column {
+                Text(
+                    text = "Warning",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xFF856404)
+                )
+                Text(
+                    text = "This action will permanently delete all your saved data including pinned networks, passwords, and scan history.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF856404)
+                )
+            }
+        }
+
+        // Data items that will be cleared
+        Column(
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "The following data will be cleared:",
+                style = MaterialTheme.typography.titleSmall.copy(
+                    fontWeight = FontWeight.SemiBold
+                ),
+                color = Color(0xFF2C3E50)
+            )
+            
+            val dataItems = listOf(
+                "All pinned WiFi networks",
+                "Saved network passwords",
+                "Connection history",
+                "Scan results",
+                "Network comments and photos"
+            )
+            
+            dataItems.forEach { item ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(6.dp)
+                            .background(
+                                Color(0xFFE74C3C),
+                                RoundedCornerShape(3.dp)
+                            )
+                    )
+                    Text(
+                        text = item,
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF34495E)
+                    )
+                }
+            }
+        }
+
+        // Clear All button
+        Button(
+            onClick = { showConfirmationDialog = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            shape = RoundedCornerShape(16.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFE74C3C)
+            )
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteSweep,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "Clear All Data",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color.White
+                )
+            }
+        }
+    }
+
+    // Confirmation Dialog
+    if (showConfirmationDialog) {
+        ClearAllDataConfirmationDialog(
+            onConfirm = {
+                showConfirmationDialog = false
+                onClearAllData()
+            },
+            onDismiss = {
+                showConfirmationDialog = false
+            }
+        )
+    }
+}
+
+@Composable
+fun ClearAllDataConfirmationDialog(
+    onConfirm: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = Color(0xFFE74C3C),
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Clear All Data?",
+                style = MaterialTheme.typography.titleLarge.copy(
+                    fontWeight = FontWeight.Bold
+                ),
+                color = Color(0xFF2C3E50)
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Are you sure you want to clear all locally stored data?",
+                    style = MaterialTheme.typography.bodyLarge,
+                    color = Color(0xFF34495E)
+                )
+                Text(
+                    text = "This action cannot be undone. All your pinned networks, saved passwords, and scan history will be permanently deleted.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF7F8C8D)
+                )
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = onConfirm,
+                shape = RoundedCornerShape(12.dp),
+                colors = ButtonDefaults.buttonColors(
+                    containerColor = Color(0xFFE74C3C)
+                )
+            ) {
+                Text(
+                    text = "Clear All",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White
+                )
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismiss,
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text(
+                    text = "Cancel",
+                    fontWeight = FontWeight.Medium,
+                    color = Color(0xFF95A5A6)
+                )
+            }
+        },
+        shape = RoundedCornerShape(20.dp),
+        containerColor = Color.White
+    )
 }

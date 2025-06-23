@@ -22,6 +22,7 @@ import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
 import coil.compose.rememberAsyncImagePainter
+import android.Manifest
 import android.net.Uri
 import android.os.Environment
 import android.widget.Toast
@@ -32,6 +33,8 @@ import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
+import com.ner.wimap.camera.rememberCameraLauncher
+import com.ner.wimap.camera.rememberPermissionLauncher
 
 @Composable
 fun WifiNetworkCard(
@@ -67,6 +70,26 @@ fun WifiNetworkCard(
 
     // Check if this network has a valid password (either saved locally or from successful connection)
     val hasValidPassword = savedPassword.isNotEmpty() || successfulPasswords.containsKey(network.bssid)
+
+    // Camera functionality
+    val (cameraLauncher, takePicture) = rememberCameraLauncher(
+        onImageCaptured = { uri ->
+            photoUri = uri
+            onUpdateNetworkData(network, comment, savedPassword, uri.toString())
+            Toast.makeText(context, "Photo captured successfully!", Toast.LENGTH_SHORT).show()
+        },
+        onError = { error ->
+            Toast.makeText(context, error, Toast.LENGTH_SHORT).show()
+        }
+    )
+
+    val permissionLauncher = rememberPermissionLauncher { isGranted ->
+        if (isGranted) {
+            takePicture(network.ssid)
+        } else {
+            Toast.makeText(context, "Camera permission is required to take photos", Toast.LENGTH_SHORT).show()
+        }
+    }
 
     Card(
         modifier = Modifier
@@ -120,18 +143,15 @@ fun WifiNetworkCard(
                 onShowPasswordDialog = { showPasswordDialog = true },
                 onCameraClick = {
                     if (photoUri == null) {
-                        try {
-                            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                            val imageFileName = "WIFI_${network.ssid.replace(" ", "_")}_$timeStamp.jpg"
-                            val file = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), imageFileName)
-                            val newPhotoUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            photoUri = newPhotoUri
-                            onUpdateNetworkData(network, comment, savedPassword, newPhotoUri.toString())
-                            Toast.makeText(context, "Photo simulated!", Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
+                        // Check camera permission and launch camera
+                        val cameraManager = com.ner.wimap.camera.CameraManager(context)
+                        if (cameraManager.hasPermission()) {
+                            takePicture(network.ssid)
+                        } else {
+                            permissionLauncher.launch(Manifest.permission.CAMERA)
                         }
                     } else {
+                        // Remove existing photo
                         photoUri = null
                         onUpdateNetworkData(network, comment, savedPassword, null)
                         Toast.makeText(context, "Photo removed!", Toast.LENGTH_SHORT).show()

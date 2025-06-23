@@ -173,6 +173,7 @@ class MainActivity : ComponentActivity() {
                     },
                     onUnpinNetwork = { bssid -> viewModel.unpinNetwork(bssid) },
                     onClearConnectionProgress = { viewModel.clearConnectionProgress() },
+                    onCancelConnection = { bssid -> viewModel.cancelConnection(bssid) },
                     onUpdateNetworkData = { network, comment, password, photoUri ->
                         viewModel.updateNetworkData(network, comment, password, photoUri)
                     },
@@ -201,6 +202,7 @@ class MainActivity : ComponentActivity() {
                     onConnectionTimeoutChange = { viewModel.setConnectionTimeoutSeconds(it) },
                     rssiThresholdForConnection = rssiThresholdForConnection,
                     onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
+                    onClearAllData = { viewModel.clearAllLocalData() },
                     onBack = { navController.popBackStack() }
                 )
             }

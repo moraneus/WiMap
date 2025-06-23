@@ -60,9 +60,6 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     private var currentNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
-    // Persistent network map to maintain networks across scans
-    private val persistentNetworkMap = mutableMapOf<String, WifiNetwork>()
-
     private val scanInterval = 10000L // 10 seconds, adjust as needed
     private val handler = Handler(Looper.getMainLooper())
 
@@ -148,35 +145,19 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
         }
         try {
             val results: List<ScanResult> = wifiManager.scanResults
-            println("WIMAP_DEBUG: ===== STARTING SCAN PROCESSING =====")
-            println("WIMAP_DEBUG: Total raw scan results: ${results.size}")
+            println("DEBUG: Processing ${results.size} scan results")
             
-            // Log all raw scan results first
-            results.forEachIndexed { index, scanResult ->
-                if (scanResult.BSSID != null) {
-                    println("WIMAP_DEBUG: RAW[$index] BSSID: ${scanResult.BSSID}, SSID: '${scanResult.SSID}', RSSI: ${scanResult.level}")
-                }
-            }
+            // Group scan results by BSSID to handle duplicates
+            val networkMap = mutableMapOf<String, WifiNetwork>()
             
-            // Process current scan results and deduplicate within this scan
-            val currentScanMap = mutableMapOf<String, WifiNetwork>()
-            
-            println("WIMAP_DEBUG: ----- PROCESSING SCAN RESULTS -----")
-            for ((index, scanResult) in results.withIndex()) {
-                if (scanResult.BSSID == null) {
-                    println("WIMAP_DEBUG: SKIP[$index] - NULL BSSID")
-                    continue
-                }
+            for (scanResult in results) {
+                if (scanResult.BSSID == null) continue
                 
                 val bssid = scanResult.BSSID
                 val rawSsid = scanResult.SSID
                 val ssid = rawSsid?.takeIf { it.isNotEmpty() && it.trim().isNotEmpty() } ?: ""
                 
-                println("WIMAP_DEBUG: PROCESS[$index] BSSID: $bssid")
-                println("WIMAP_DEBUG: PROCESS[$index] Raw SSID: '$rawSsid'")
-                println("WIMAP_DEBUG: PROCESS[$index] Cleaned SSID: '$ssid'")
-                println("WIMAP_DEBUG: PROCESS[$index] RSSI: ${scanResult.level}")
-                println("WIMAP_DEBUG: PROCESS[$index] Will be displayed as: '${if (ssid.isEmpty()) "<Hidden Network>" else ssid}'")
+                println("DEBUG: Processing - BSSID: $bssid, Raw SSID: '$rawSsid', Cleaned SSID: '$ssid', RSSI: ${scanResult.level}")
                 
                 // Create network object
                 val network = WifiNetwork(
@@ -191,139 +172,63 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                     password = null
                 )
                 
-                val existingInCurrentScan = currentScanMap[bssid]
+                val existingNetwork = networkMap[bssid]
                 
-                if (existingInCurrentScan == null) {
-                    // First time seeing this BSSID in current scan
-                    println("WIMAP_DEBUG: PROCESS[$index] NEW BSSID - Adding to currentScanMap")
-                    currentScanMap[bssid] = network
+                if (existingNetwork == null) {
+                    // First time seeing this BSSID
+                    println("DEBUG: New BSSID $bssid - Adding: ${network.ssid}")
+                    networkMap[bssid] = network
                 } else {
-                    // BSSID already exists in current scan, decide which one to keep
-                    println("WIMAP_DEBUG: PROCESS[$index] DUPLICATE BSSID DETECTED!")
-                    println("WIMAP_DEBUG: PROCESS[$index] Existing in map: SSID='${existingInCurrentScan.ssid}', RSSI=${existingInCurrentScan.rssi}")
-                    println("WIMAP_DEBUG: PROCESS[$index] New candidate: SSID='${network.ssid}', RSSI=${network.rssi}")
+                    // BSSID already exists, decide which one to keep
+                    println("DEBUG: Duplicate BSSID $bssid - Existing: '${existingNetwork.ssid}' (${existingNetwork.rssi}dBm), New: '${network.ssid}' (${network.rssi}dBm)")
                     
                     val shouldReplace = when {
                         // Prefer non-hidden networks over hidden ones
-                        existingInCurrentScan.ssid == "<Hidden Network>" && network.ssid != "<Hidden Network>" -> {
-                            println("WIMAP_DEBUG: PROCESS[$index] DECISION: Replace hidden with named '${network.ssid}'")
+                        existingNetwork.ssid == "<Hidden Network>" && network.ssid != "<Hidden Network>" -> {
+                            println("DEBUG: Replacing hidden network with named network: ${network.ssid}")
                             true
                         }
                         // If new one is hidden but existing has name, keep existing
-                        network.ssid == "<Hidden Network>" && existingInCurrentScan.ssid != "<Hidden Network>" -> {
-                            println("WIMAP_DEBUG: PROCESS[$index] DECISION: Keep existing named '${existingInCurrentScan.ssid}', reject hidden")
+                        network.ssid == "<Hidden Network>" && existingNetwork.ssid != "<Hidden Network>" -> {
+                            println("DEBUG: Keeping existing named network: ${existingNetwork.ssid}")
                             false
                         }
                         // Both have names or both are hidden - prefer stronger signal
-                        network.rssi > existingInCurrentScan.rssi -> {
-                            println("WIMAP_DEBUG: PROCESS[$index] DECISION: Replace with stronger signal ${network.rssi} > ${existingInCurrentScan.rssi}")
+                        network.rssi > existingNetwork.rssi -> {
+                            println("DEBUG: Replacing with stronger signal: ${network.rssi} > ${existingNetwork.rssi}")
                             true
                         }
                         // Keep existing if it's better or equal
                         else -> {
-                            println("WIMAP_DEBUG: PROCESS[$index] DECISION: Keep existing (stronger or equal signal)")
+                            println("DEBUG: Keeping existing network")
                             false
                         }
                     }
                     
                     if (shouldReplace) {
-                        println("WIMAP_DEBUG: PROCESS[$index] REPLACING in currentScanMap")
-                        currentScanMap[bssid] = network
-                    } else {
-                        println("WIMAP_DEBUG: PROCESS[$index] KEEPING existing in currentScanMap")
+                        // If we're replacing, but the existing had GPS coordinates and new one doesn't, preserve GPS
+                        val finalNetwork = if (existingNetwork.latitude != null && existingNetwork.longitude != null && 
+                                             network.latitude == null && network.longitude == null) {
+                            network.copy(latitude = existingNetwork.latitude, longitude = existingNetwork.longitude)
+                        } else {
+                            network
+                        }
+                        networkMap[bssid] = finalNetwork
+                        println("DEBUG: Replaced network for BSSID $bssid")
                     }
                 }
             }
             
-            println("WIMAP_DEBUG: ----- CURRENT SCAN MAP AFTER DEDUPLICATION -----")
-            currentScanMap.forEach { (bssid, network) ->
-                println("WIMAP_DEBUG: MAP_ENTRY: BSSID=$bssid, SSID='${network.ssid}', RSSI=${network.rssi}")
-            }
-            
-            // Now create final networks list - ONLY networks from current scan, but enhanced with persistent data
-            println("WIMAP_DEBUG: ----- MERGING WITH PERSISTENT DATA -----")
-            println("WIMAP_DEBUG: Persistent networks count: ${persistentNetworkMap.size}")
-            
-            val finalNetworks = mutableListOf<WifiNetwork>()
-            
-            for ((bssid, currentNetwork) in currentScanMap) {
-                val existingPersistent = persistentNetworkMap[bssid]
-                
-                println("WIMAP_DEBUG: MERGE: Processing BSSID=$bssid, Current='${currentNetwork.ssid}'")
-                
-                val finalNetwork = if (existingPersistent == null) {
-                    // New network not seen before
-                    println("WIMAP_DEBUG: MERGE: New network - adding to persistent map")
-                    persistentNetworkMap[bssid] = currentNetwork
-                    currentNetwork
-                } else {
-                    // Network exists in persistent map, merge data intelligently
-                    println("WIMAP_DEBUG: MERGE: Existing persistent='${existingPersistent.ssid}', Current='${currentNetwork.ssid}'")
-                    
-                    val mergedNetwork = when {
-                        // Always prefer non-hidden networks over hidden ones
-                        existingPersistent.ssid == "<Hidden Network>" && currentNetwork.ssid != "<Hidden Network>" -> {
-                            println("WIMAP_DEBUG: MERGE: Using current named over historical hidden")
-                            currentNetwork.copy(password = existingPersistent.password)
-                        }
-                        // If current is hidden but existing has name, keep existing name but update RSSI
-                        currentNetwork.ssid == "<Hidden Network>" && existingPersistent.ssid != "<Hidden Network>" -> {
-                            println("WIMAP_DEBUG: MERGE: Keeping historical name with current RSSI")
-                            existingPersistent.copy(
-                                rssi = currentNetwork.rssi,
-                                latitude = currentNetwork.latitude ?: existingPersistent.latitude,
-                                longitude = currentNetwork.longitude ?: existingPersistent.longitude,
-                                timestamp = currentNetwork.timestamp
-                            )
-                        }
-                        // For networks with same visibility, use current data but preserve GPS from stronger signal and password
-                        else -> {
-                            println("WIMAP_DEBUG: MERGE: Standard merge with GPS/password preservation")
-                            if (existingPersistent.rssi > currentNetwork.rssi && 
-                                existingPersistent.latitude != null && existingPersistent.longitude != null &&
-                                (currentNetwork.latitude == null || currentNetwork.longitude == null)) {
-                                currentNetwork.copy(
-                                    latitude = existingPersistent.latitude,
-                                    longitude = existingPersistent.longitude,
-                                    password = existingPersistent.password
-                                )
-                            } else {
-                                currentNetwork.copy(password = existingPersistent.password)
-                            }
-                        }
-                    }
-                    
-                    println("WIMAP_DEBUG: MERGE: Final merged network='${mergedNetwork.ssid}', RSSI=${mergedNetwork.rssi}")
-                    
-                    // Update persistent map
-                    persistentNetworkMap[bssid] = mergedNetwork
-                    mergedNetwork
-                }
-                
-                finalNetworks.add(finalNetwork)
-                println("WIMAP_DEBUG: MERGE: Added to final list: BSSID=$bssid, SSID='${finalNetwork.ssid}'")
-            }
-            
-            // Sort by signal strength
-            val networks = finalNetworks.sortedByDescending { it.rssi }
-            
-            println("WIMAP_DEBUG: ----- FINAL RESULTS -----")
-            println("WIMAP_DEBUG: Final network count (current scan only): ${networks.size}")
-            println("WIMAP_DEBUG: Persistent map size (historical): ${persistentNetworkMap.size}")
-            
-            // Debug: Log final networks
-            networks.forEachIndexed { index, network ->
-                println("WIMAP_DEBUG: FINAL[$index] BSSID=${network.bssid}, SSID='${network.ssid}', RSSI=${network.rssi}")
-            }
-            
-            println("WIMAP_DEBUG: ===== SCAN PROCESSING COMPLETE =====")
+            // Convert to list and sort by signal strength
+            val networks = networkMap.values.toList().sortedByDescending { it.rssi }
+            println("DEBUG: Final network count after deduplication: ${networks.size}")
             
             _wifiNetworks.postValue(networks)
         } catch (e: SecurityException) {
             _isScanning.value = false 
             _connectionStatus.postValue("Permission error processing scan results.")
         } catch (e: Exception) {
-            println("WIMAP_DEBUG: Exception in processScanResults: ${e.message}")
+            println("DEBUG: Exception in processScanResults: ${e.message}")
             _isScanning.value = false 
         }
     }
@@ -464,50 +369,18 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     private fun hasRequiredPermissions(checkAccessWifiState: Boolean = true, checkChangeWifiState: Boolean = true): Boolean {
         val fineLocationPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-        if (fineLocationPermission != PackageManager.PERMISSION_GRANTED) {
-            println("WIMAP_PERMISSION_DEBUG: Missing ACCESS_FINE_LOCATION permission")
-            return false
-        }
+        if (fineLocationPermission != PackageManager.PERMISSION_GRANTED) return false
 
         if (checkAccessWifiState) {
             val wifiStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_WIFI_STATE)
-            if (wifiStatePermission != PackageManager.PERMISSION_GRANTED) {
-                println("WIMAP_PERMISSION_DEBUG: Missing ACCESS_WIFI_STATE permission")
-                return false
-            }
+            if (wifiStatePermission != PackageManager.PERMISSION_GRANTED) return false
         }
 
         if (checkChangeWifiState) {
             val changeWifiStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE)
-            if (changeWifiStatePermission != PackageManager.PERMISSION_GRANTED) {
-                println("WIMAP_PERMISSION_DEBUG: Missing CHANGE_WIFI_STATE permission")
-                return false
-            }
-            
-            // Check additional network permissions for Android 10+
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                val changeNetworkStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_NETWORK_STATE)
-                if (changeNetworkStatePermission != PackageManager.PERMISSION_GRANTED) {
-                    println("WIMAP_PERMISSION_DEBUG: Missing CHANGE_NETWORK_STATE permission (required for Android 10+)")
-                    return false
-                }
-                
-                val accessNetworkStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_NETWORK_STATE)
-                if (accessNetworkStatePermission != PackageManager.PERMISSION_GRANTED) {
-                    println("WIMAP_PERMISSION_DEBUG: Missing ACCESS_NETWORK_STATE permission (required for Android 10+)")
-                    return false
-                }
-            }
+            if (changeWifiStatePermission != PackageManager.PERMISSION_GRANTED) return false
         }
-        
-        println("WIMAP_PERMISSION_DEBUG: All required permissions granted")
         return true
-    }
-
-    fun clearNetworks() {
-        persistentNetworkMap.clear()
-        _wifiNetworks.postValue(emptyList())
-        println("WIMAP_DEBUG: Cleared persistent network map")
     }
 
     fun unregisterReceiver() {

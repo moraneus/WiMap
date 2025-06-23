@@ -1,0 +1,23 @@
+DUPLICATE WIFI NETWORKS ISSUE - FIXED
+
+The issue was caused by two problems:
+
+1. **UI Layer Issue (MAIN CAUSE)**: In MainScreen.kt, the LazyColumn items() function was using a key that included RSSI:
+   ```kotlin
+   key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
+   ```
+   This caused Compose to treat the same network as different items when RSSI changed, creating duplicate cards.
+   
+   **FIXED**: Changed to use only BSSID as the key:
+   ```kotlin
+   key = { network -> network.bssid }
+   ```
+
+2. **Scanner Layer Issue**: WifiScanner was not maintaining persistent network state across scans, causing potential duplicates.
+   
+   **FIXED**: Added persistent network map with proper deduplication logic that:
+   - Prefers named networks over hidden networks
+   - Updates RSSI while preserving GPS coordinates from strongest signal
+   - Maintains network state across multiple scans
+
+RESULT: Each network (identified by BSSID) now appears only once, with updated RSSI values and proper GPS coordinate preservation.

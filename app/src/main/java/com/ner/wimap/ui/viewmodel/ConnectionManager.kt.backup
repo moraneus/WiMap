@@ -533,7 +533,4 @@ class ConnectionManager(
             WifiNetwork("DemoWiFi", "77:88:99:aa:bb:cc", -50, 40, "WPA2", null, null, System.currentTimeMillis(), "demo12345")
         )
     }
-    fun clearAllPasswords() {
-        passwordManager.clearAllPasswords()
-    }
 }

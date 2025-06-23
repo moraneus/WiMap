@@ -66,6 +66,7 @@ fun MainScreen(
     onPinNetwork: (WifiNetwork, String?, String?, String?) -> Unit,
     onUnpinNetwork: (String) -> Unit,
     onClearConnectionProgress: () -> Unit,
+    onCancelConnection: (String) -> Unit,
     onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit,
     onOpenMaps: () -> Unit // New parameter for opening maps
 ) {
@@ -93,93 +94,117 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        containerColor = Color(0xFFF8F9FA),
-        topBar = {
-            MainTopAppBar(
-                onOpenPinnedNetworks = onOpenPinnedNetworks,
-                onOpenSettings = onOpenSettings
-            )
-        },
-        floatingActionButton = {
-            ScanFab(
-                isScanning = isScanning,
-                fabSize = fabSize,
-                onStartScan = onStartScan,
-                onStopScan = onStopScan
-            )
-        },
-        floatingActionButtonPosition = FabPosition.Center,
-        bottomBar = {
-            ModernBottomAppBar(
-                customNotchShape = customNotchShape,
-                onShareExportClicked = { showExportDialog = true }, // Consolidated share/export
-                onClearNetworks = onClearNetworks,
-                onOpenMaps = onOpenMaps // New maps button
-            )
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        LazyColumn(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = Color(0xFFF8F9FA),
+            topBar = {
+                MainTopAppBar(
+                    onOpenPinnedNetworks = onOpenPinnedNetworks,
+                    onOpenSettings = onOpenSettings
+                )
+            },
+            floatingActionButton = {
+                ScanFab(
+                    isScanning = isScanning,
+                    fabSize = fabSize,
+                    onStartScan = onStartScan,
+                    onStopScan = onStopScan
+                )
+            },
+            floatingActionButtonPosition = FabPosition.Center,
+            bottomBar = {
+                ModernBottomAppBar(
+                    customNotchShape = customNotchShape,
+                    onShareExportClicked = { showExportDialog = true }, // Consolidated share/export
+                    onClearNetworks = onClearNetworks,
+                    onOpenMaps = onOpenMaps // New maps button
+                )
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        ) { innerPadding ->
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(innerPadding)
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Add top padding for fixed status cards
+                item {
+                    key("top_spacer") {
+                        Spacer(modifier = Modifier.height(
+                            if (isScanning && isConnecting && connectionProgress != null) 180.dp
+                            else if (isScanning || (isConnecting && connectionProgress != null)) 90.dp
+                            else 0.dp
+                        ))
+                    }
+                }
+
+                item {
+                    key("network_count_${wifiNetworks.size}") {
+                        NetworkCountHeader(
+                            networkCount = wifiNetworks.size,
+                            networksWithLocationCount = wifiNetworks.count {
+                                it.latitude != null && it.longitude != null &&
+                                        it.latitude != 0.0 && it.longitude != 0.0
+                            }
+                        )
+                    }
+                }
+
+                items(
+                    items = wifiNetworks,
+                    key = { network -> network.bssid }
+                ) { network ->
+                    WifiNetworkCard(
+                        network = network,
+                        onConnectClicked = { onConnect(network) },
+                        pinnedNetworks = pinnedNetworks,
+                        onPinNetwork = onPinNetwork,
+                        onUnpinNetwork = onUnpinNetwork,
+                        isConnecting = connectingNetworks.contains(network.bssid),
+                        successfulPasswords = successfulPasswords,
+                        onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
+                            onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
+                        }
+                    )
+                }
+
+                item {
+                    key("bottom_spacer") {
+                        Spacer(modifier = Modifier.height(100.dp))
+                    }
+                }
+            }
+        }
+
+        // Fixed status cards at the top
+        Column(
             modifier = Modifier
-                .fillMaxSize()
-                .padding(innerPadding)
-                .padding(horizontal = 20.dp)
-                .padding(top = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .fillMaxWidth()
+                .padding(top = 64.dp) // Account for top bar
+                .padding(horizontal = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
             if (isScanning) {
-                item {
-                    key("scanning_status") {
-                        ScanningStatusCard()
-                    }
+                key("scanning_status_fixed") {
+                    ScanningStatusCard()
                 }
             }
 
             if (isConnecting && connectionProgress != null) {
-                item {
-                    key("connection_progress_$connectionProgress") {
-                        ConnectionProgressCard(
-                            message = connectionProgress,
-                            onDismiss = onClearConnectionProgress
-                        )
-                    }
-                }
-            }
-
-            item {
-                key("network_count_${wifiNetworks.size}") {
-                    NetworkCountHeader(
-                        networkCount = wifiNetworks.size,
-                        networksWithLocationCount = wifiNetworks.count {
-                            it.latitude != null && it.longitude != null &&
-                                    it.latitude != 0.0 && it.longitude != 0.0
+                key("connection_progress_fixed_$connectionProgress") {
+                    ConnectionProgressCard(
+                        message = connectionProgress,
+                        onDismiss = {
+                            // Cancel all connecting networks
+                            connectingNetworks.forEach { bssid ->
+                                onCancelConnection(bssid)
+                            }
+                            onClearConnectionProgress()
                         }
                     )
-                }
-            }
-
-            items(
-                items = wifiNetworks,
-                key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
-            ) { network ->
-                WifiNetworkCard(
-                    network = network,
-                    onConnectClicked = { onConnect(network) },
-                    pinnedNetworks = pinnedNetworks,
-                    onPinNetwork = onPinNetwork,
-                    onUnpinNetwork = onUnpinNetwork,
-                    isConnecting = connectingNetworks.contains(network.bssid),
-                    successfulPasswords = successfulPasswords,
-                    onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
-                        onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
-                    }
-                )
-            }
-
-            item {
-                key("bottom_spacer") {
-                    Spacer(modifier = Modifier.height(100.dp))
                 }
             }
         }
