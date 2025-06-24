@@ -9,5 +9,9 @@ data class WifiNetwork(
     val latitude: Double?,
     val longitude: Double?,
     val timestamp: Long,
-    val password: String? = null
+    val password: String? = null,
+    val peakRssi: Int = rssi, // Track the strongest RSSI seen for this network
+    val peakRssiLatitude: Double? = latitude, // GPS coordinates where peak RSSI was observed
+    val peakRssiLongitude: Double? = longitude,
+    val lastSeenTimestamp: Long = timestamp // Track when this network was last seen
 )

@@ -89,24 +89,19 @@ class MainViewModel @Inject constructor(
     private val rawWifiNetworks = scanWifiNetworksUseCase.getWifiNetworks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
-    // Filtered networks based on current filter settings
-    private val filteredNetworks = combine(
+    // Filtered and sorted networks based on current filter and sorting settings
+    val wifiNetworks = combine(
         rawWifiNetworks,
         _ssidFilter,
         _securityFilter,
         _rssiThreshold,
-        _bssidFilter
-    ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter ->
-        applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
+        _bssidFilter,
+        _sortingMode
+    ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter, sortingMode ->
+        val filtered = applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
+        applySorting(filtered, sortingMode)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
-    // Sorted networks based on current sorting mode
-    val wifiNetworks = combine(
-        filteredNetworks,
-        _sortingMode
-    ) { networks, sortingMode ->
-        applySorting(networks, sortingMode)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
     val isScanning = scanWifiNetworksUseCase.isScanning()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
@@ -413,9 +408,6 @@ class MainViewModel @Inject constructor(
         
         // Load hide networks setting from SharedPreferences
         val savedHideNetworksHours = sharedPreferences.getInt("hide_networks_unseen_for_hours", 24)
-        // Load sorting preferences
-        loadSortingFromPreferences()
-        
         _hideNetworksUnseenForHours.value = savedHideNetworksHours
         
         // Start periodic cleanup of stale networks
@@ -631,34 +623,4 @@ class MainViewModel @Inject constructor(
         "PSK",
         "EAP"
     )
-    // Sorting functions
-    fun setSortingMode(mode: SortingMode) {
-        _sortingMode.value = mode
-        saveSortingToPreferences()
-    }
-
-    // Sorting logic
-    private fun applySorting(networks: List<WifiNetwork>, sortingMode: SortingMode): List<WifiNetwork> {
-        return when (sortingMode) {
-            SortingMode.LAST_SEEN -> networks.sortedByDescending { it.lastSeenTimestamp }
-            SortingMode.SIGNAL_STRENGTH -> networks.sortedByDescending { it.rssi }
-            SortingMode.SSID_ALPHABETICAL -> networks.sortedBy { it.ssid.lowercase() }
-        }
-    }
-
-    // Sorting persistence
-    private fun saveSortingToPreferences() {
-        sharedPreferences.edit()
-            .putString("sorting_mode", _sortingMode.value.name)
-            .apply()
-    }
-
-    private fun loadSortingFromPreferences() {
-        val savedSortingMode = sharedPreferences.getString("sorting_mode", SortingMode.LAST_SEEN.name)
-        _sortingMode.value = try {
-            SortingMode.valueOf(savedSortingMode ?: SortingMode.LAST_SEEN.name)
-        } catch (e: IllegalArgumentException) {
-            SortingMode.LAST_SEEN
-        }
-    }
 }

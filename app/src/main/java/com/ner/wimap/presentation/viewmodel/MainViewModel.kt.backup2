@@ -89,24 +89,19 @@ class MainViewModel @Inject constructor(
     private val rawWifiNetworks = scanWifiNetworksUseCase.getWifiNetworks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
-    // Filtered networks based on current filter settings
-    private val filteredNetworks = combine(
+    // Filtered and sorted networks based on current filter and sorting settings
+    val wifiNetworks = combine(
         rawWifiNetworks,
         _ssidFilter,
         _securityFilter,
         _rssiThreshold,
-        _bssidFilter
-    ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter ->
-        applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
+        _bssidFilter,
+        _sortingMode
+    ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter, sortingMode ->
+        val filtered = applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
+        applySorting(filtered, sortingMode)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
-    // Sorted networks based on current sorting mode
-    val wifiNetworks = combine(
-        filteredNetworks,
-        _sortingMode
-    ) { networks, sortingMode ->
-        applySorting(networks, sortingMode)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
     val isScanning = scanWifiNetworksUseCase.isScanning()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
@@ -631,7 +626,7 @@ class MainViewModel @Inject constructor(
         "PSK",
         "EAP"
     )
-    // Sorting functions
+}    // Sorting functions
     fun setSortingMode(mode: SortingMode) {
         _sortingMode.value = mode
         saveSortingToPreferences()
@@ -661,4 +656,3 @@ class MainViewModel @Inject constructor(
             SortingMode.LAST_SEEN
         }
     }
-}

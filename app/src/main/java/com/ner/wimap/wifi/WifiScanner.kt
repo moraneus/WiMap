@@ -143,19 +143,61 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
         }
         try {
             val results: List<ScanResult> = wifiManager.scanResults
+            val currentLocation = currentLocationFlow.value
+            val currentTime = System.currentTimeMillis()
+            
+            // Get existing networks to maintain peak RSSI data
+            val existingNetworks = _wifiNetworks.value ?: emptyList()
+            val existingNetworkMap = existingNetworks.associateBy { it.bssid }
+            
             val networks = results.mapNotNull { scanResult ->
                 if (scanResult.BSSID == null || scanResult.SSID == null) null
-                else WifiNetwork(
-                    ssid = scanResult.SSID.ifEmpty { "<Hidden Network>" },
-                    bssid = scanResult.BSSID,
-                    rssi = scanResult.level,
-                    channel = convertFrequencyToChannel(scanResult.frequency),
-                    security = getSecurityType(scanResult.capabilities ?: ""),
-                    latitude = currentLocationFlow.value?.latitude,
-                    longitude = currentLocationFlow.value?.longitude,
-                    timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) scanResult.timestamp else System.currentTimeMillis(),
-                    password = null
-                )
+                else {
+                    val currentRssi = scanResult.level
+                    val existingNetwork = existingNetworkMap[scanResult.BSSID]
+                    
+                    // Determine peak RSSI and corresponding GPS coordinates
+                    val (peakRssi, peakLat, peakLng) = if (existingNetwork != null) {
+                        // If current RSSI is stronger than existing peak, update peak location
+                        if (currentRssi > existingNetwork.peakRssi) {
+                            Triple(
+                                currentRssi,
+                                currentLocation?.latitude ?: existingNetwork.peakRssiLatitude,
+                                currentLocation?.longitude ?: existingNetwork.peakRssiLongitude
+                            )
+                        } else {
+                            // Keep existing peak data
+                            Triple(
+                                existingNetwork.peakRssi,
+                                existingNetwork.peakRssiLatitude,
+                                existingNetwork.peakRssiLongitude
+                            )
+                        }
+                    } else {
+                        // New network - current location becomes peak location
+                        Triple(
+                            currentRssi,
+                            currentLocation?.latitude,
+                            currentLocation?.longitude
+                        )
+                    }
+                    
+                    WifiNetwork(
+                        ssid = scanResult.SSID.ifEmpty { "<Hidden Network>" },
+                        bssid = scanResult.BSSID,
+                        rssi = currentRssi, // Current RSSI
+                        channel = convertFrequencyToChannel(scanResult.frequency),
+                        security = getSecurityType(scanResult.capabilities ?: ""),
+                        latitude = currentLocation?.latitude, // Current location
+                        longitude = currentLocation?.longitude, // Current location
+                        timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) scanResult.timestamp else currentTime,
+                        password = existingNetwork?.password, // Preserve existing password
+                        peakRssi = peakRssi, // Peak RSSI seen so far
+                        peakRssiLatitude = peakLat, // GPS coordinates where peak RSSI was observed
+                        peakRssiLongitude = peakLng, // GPS coordinates where peak RSSI was observed
+                        lastSeenTimestamp = currentTime // Update last seen time
+                    )
+                }
             }.sortedByDescending { it.rssi } 
             _wifiNetworks.postValue(networks)
         } catch (e: SecurityException) {

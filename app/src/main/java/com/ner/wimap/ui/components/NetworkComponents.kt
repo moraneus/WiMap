@@ -31,8 +31,8 @@ fun NetworkInfoChips(
         InfoChip("Ch${network.channel}", Color(0xFFE67E22))
         InfoChip(network.security, Color(0xFF16A085))
 
-        if (network.latitude != null && network.longitude != null &&
-            network.latitude != 0.0 && network.longitude != 0.0) {
+        if (network.peakRssiLatitude != null && network.peakRssiLongitude != null &&
+            network.peakRssiLatitude != 0.0 && network.peakRssiLongitude != 0.0) {
             InfoChip("GPS", Color(0xFFE74C3C))
         }
 
@@ -169,9 +169,11 @@ fun NetworkDetails(
             if (displayPassword.isNotEmpty() && !isOpenNetwork) {
                 DetailRow("Password", displayPassword) // Show the actual password (successful or saved)
             }
-            if (network.latitude != null && network.longitude != null &&
-                network.latitude != 0.0 && network.longitude != 0.0) {
-                DetailRow("GPS", "${String.format("%.4f", network.latitude)}, ${String.format("%.4f", network.longitude)}")
+            // Show GPS location where peak signal was observed
+            if (network.peakRssiLatitude != null && network.peakRssiLongitude != null &&
+                network.peakRssiLatitude != 0.0 && network.peakRssiLongitude != 0.0) {
+                DetailRow("Peak GPS", "${String.format("%.4f", network.peakRssiLatitude)}, ${String.format("%.4f", network.peakRssiLongitude)}")
+                DetailRow("Peak RSSI", "${network.peakRssi}dBm")
             }
             DetailRow("Frequency", "${if (network.channel <= 14) "2.4" else "5"} GHz")
             DetailRow("Timestamp", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(network.timestamp)))

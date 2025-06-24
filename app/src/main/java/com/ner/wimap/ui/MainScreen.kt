@@ -51,6 +51,7 @@ fun MainScreen(
     currentAttempt: Int,
     totalAttempts: Int,
     connectingNetworkName: String?,
+    currentSortingMode: com.ner.wimap.presentation.viewmodel.SortingMode,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
     onConnect: (WifiNetwork) -> Unit,
@@ -73,7 +74,8 @@ fun MainScreen(
     onUnpinNetwork: (String) -> Unit,
     onClearConnectionProgress: () -> Unit,
     onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit,
-    onOpenMaps: () -> Unit // New parameter for opening maps
+    onOpenMaps: () -> Unit,
+    onSortingModeChanged: (com.ner.wimap.presentation.viewmodel.SortingMode) -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val isProduction = remember { BuildConfig.BUILD_TYPE == "release" }
@@ -125,7 +127,7 @@ fun MainScreen(
                 val statusText = when {
                     !hasEverScanned -> "Tap Start to discover nearby Wi-Fi networks."
                     isScanning -> "Scanning..."
-                    else -> "No Wi-Fi networks found nearby."
+                    else -> "Tap Start to discover nearby Wi-Fi networks."
                 }
                 
                 EmptyNetworksAnimation(
@@ -148,13 +150,21 @@ fun MainScreen(
                             NetworkCountHeader(
                                 networkCount = wifiNetworks.size,
                                 networksWithLocationCount = wifiNetworks.count {
-                                    it.latitude != null && it.longitude != null &&
-                                            it.latitude != 0.0 && it.longitude != 0.0
+                                    it.peakRssiLatitude != null && it.peakRssiLongitude != null &&
+                                            it.peakRssiLatitude != 0.0 && it.peakRssiLongitude != 0.0
                                 }
                             )
                         }
                     }
 
+                    item {
+                        key("sorting_control") {
+                            SortingControl(
+                                currentSortingMode = currentSortingMode,
+                                onSortingModeChanged = onSortingModeChanged
+                            )
+                        }
+                    }
                     items(
                         items = wifiNetworks,
                         key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }

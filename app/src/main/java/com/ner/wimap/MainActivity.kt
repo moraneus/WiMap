@@ -90,6 +90,7 @@ class MainActivity : ComponentActivity() {
         val securityFilter by viewModel.securityFilter.collectAsState()
         val rssiThreshold by viewModel.rssiThreshold.collectAsState()
         val bssidFilter by viewModel.bssidFilter.collectAsState()
+        val sortingMode by viewModel.sortingMode.collectAsState()
         val passwords by viewModel.passwords.collectAsState()
         val maxRetries by viewModel.maxRetries.collectAsState()
         val connectionTimeoutSeconds by viewModel.connectionTimeoutSeconds.collectAsState()
@@ -162,6 +163,7 @@ class MainActivity : ComponentActivity() {
                     currentAttempt = currentAttempt,
                     totalAttempts = totalAttempts,
                     connectingNetworkName = connectingNetworkName,
+                    currentSortingMode = sortingMode,
                     onStartScan = { viewModel.startScan() },
                     onStopScan = { viewModel.stopScan() },
                     onConnect = { network -> viewModel.connectToNetwork(network) },
@@ -194,7 +196,8 @@ class MainActivity : ComponentActivity() {
                         // Open Google Maps activity with current networks
                         val intent = MapsActivity.createIntent(this@MainActivity, wifiNetworks)
                         startActivity(intent)
-                    }
+                    },
+                    onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) }
                 )
             }
 
