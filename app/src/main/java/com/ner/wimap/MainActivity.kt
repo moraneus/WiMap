@@ -5,6 +5,7 @@ import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
 import androidx.activity.ComponentActivity
+import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
@@ -13,47 +14,45 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.ner.wimap.presentation.viewmodel.MainViewModel
 import com.ner.wimap.ui.MainScreen
 import com.ner.wimap.ui.PinnedNetworksScreen
 import com.ner.wimap.ui.SettingsScreen
 import com.ner.wimap.ui.theme.WiMapTheme
-import com.ner.wimap.ui.viewmodel.MainViewModel
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
+import dagger.hilt.android.AndroidEntryPoint
 
+@AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-
-    private val requestPermissionsLauncher = registerForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        viewModel.handlePermissionsResult(permissions)
-    }
-
-    private lateinit var viewModel: MainViewModel
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
         setContent {
-            viewModel = viewModel<MainViewModel>()
-
             WiMapTheme {
                 Surface(
                     modifier = Modifier.fillMaxSize(),
                     color = MaterialTheme.colorScheme.background
                 ) {
-                    WiMapApp(viewModel)
+                    WiMapApp()
                 }
             }
         }
     }
 
     @Composable
-    fun WiMapApp(viewModel: MainViewModel) {
+    fun WiMapApp(viewModel: MainViewModel = hiltViewModel()) {
+        
+        val requestPermissionsLauncher = rememberLauncherForActivityResult(
+            ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            viewModel.handlePermissionsResult(permissions)
+        }
         val navController = rememberNavController()
         val snackbarHostState = remember { SnackbarHostState() }
 
@@ -74,6 +73,12 @@ class MainActivity : ComponentActivity() {
         val connectingNetworks by viewModel.connectingNetworks.collectAsState()
         val connectionProgress by viewModel.connectionProgress.collectAsState()
         val successfulPasswords by viewModel.successfulPasswords.collectAsState()
+        
+        // Real-time connection progress data
+        val currentPassword by viewModel.currentPassword.collectAsState()
+        val currentAttempt by viewModel.currentAttempt.collectAsState()
+        val totalAttempts by viewModel.totalAttempts.collectAsState()
+        val connectingNetworkName by viewModel.connectingNetworkName.collectAsState()
 
         // Export states
         val exportStatus by viewModel.exportStatus.collectAsState()
@@ -148,6 +153,10 @@ class MainActivity : ComponentActivity() {
                     connectingNetworks = connectingNetworks,
                     connectionProgress = connectionProgress,
                     successfulPasswords = successfulPasswords,
+                    currentPassword = currentPassword,
+                    currentAttempt = currentAttempt,
+                    totalAttempts = totalAttempts,
+                    connectingNetworkName = connectingNetworkName,
                     onStartScan = { viewModel.startScan() },
                     onStopScan = { viewModel.stopScan() },
                     onConnect = { network -> viewModel.connectToNetwork(network) },

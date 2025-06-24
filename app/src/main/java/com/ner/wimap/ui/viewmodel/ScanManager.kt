@@ -25,7 +25,7 @@ class ScanManager(
     private val locationProvider: LocationProvider,
     private val viewModelScope: CoroutineScope
 ) {
-    private val isTestMode = true
+    private val isTestMode = false
 
     // StateFlows
     private val _wifiNetworks = MutableStateFlow<List<WifiNetwork>>(emptyList())
@@ -37,9 +37,17 @@ class ScanManager(
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage
 
+    // Network storage for deduplication and RSSI updates
+    private val networkMap = mutableMapOf<String, WifiNetwork>()
+
     // Observer for WifiScanner's LiveData
     private val wifiNetworksObserver = Observer<List<WifiNetwork>> { networks ->
-        _wifiNetworks.value = networks
+        updateNetworksWithDeduplication(networks)
+    }
+
+    // Observer for WifiScanner's scanning state
+    private val scanningStateObserver = Observer<Boolean> { isScanning ->
+        _isScanning.value = isScanning
     }
 
     fun initialize() {
@@ -51,19 +59,30 @@ class ScanManager(
     fun startScan(onPermissionError: (String) -> Unit) {
         if (_isScanning.value) return
 
-        _isScanning.value = true
-        locationProvider.startLocationUpdates()
-
         viewModelScope.launch {
             try {
                 if (isTestMode || isEmulator()) {
+                    _isScanning.value = true
                     delay(2000)
                     val mockNetworks = generateMockNetworks()
-                    _wifiNetworks.value = mockNetworks
+                    updateNetworksWithDeduplication(mockNetworks)
                     _isScanning.value = false
                     println("DEBUG: Emulator detected - using mock WiFi networks with passwords")
                 } else {
+                    // Check permissions before starting
+                    if (!hasLocationPermission()) {
+                        onPermissionError("Location permission is required to scan WiFi networks. Please grant it in app settings.")
+                        return@launch
+                    }
+                    
+                    _isScanning.value = true
+                    locationProvider.startLocationUpdates()
+                    
+                    // Set up observers
                     wifiScanner.wifiNetworks.observeForever(wifiNetworksObserver)
+                    wifiScanner.isScanning.observeForever(scanningStateObserver)
+                    
+                    // Start scanning
                     wifiScanner.startScanning()
                 }
             } catch (e: SecurityException) {
@@ -77,10 +96,22 @@ class ScanManager(
         }
     }
 
+    private fun hasLocationPermission(): Boolean {
+        return try {
+            val context = application.applicationContext
+            val permission = android.Manifest.permission.ACCESS_FINE_LOCATION
+            androidx.core.content.ContextCompat.checkSelfPermission(context, permission) == 
+                android.content.pm.PackageManager.PERMISSION_GRANTED
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun stopScan() {
         _isScanning.value = false
         locationProvider.stopLocationUpdates()
         wifiScanner.wifiNetworks.removeObserver(wifiNetworksObserver)
+        wifiScanner.isScanning.removeObserver(scanningStateObserver)
         wifiScanner.stopScanning()
     }
 
@@ -93,7 +124,42 @@ class ScanManager(
     }
 
     fun clearNetworks() {
+        networkMap.clear()
         _wifiNetworks.value = emptyList()
+    }
+
+    /**
+     * Updates networks with deduplication logic:
+     * - For new networks: add them to the map
+     * - For existing networks: update RSSI but keep coordinates where RSSI was strongest
+     */
+    private fun updateNetworksWithDeduplication(newNetworks: List<WifiNetwork>) {
+        newNetworks.forEach { newNetwork ->
+            val key = "${newNetwork.bssid}_${newNetwork.ssid}"
+            val existingNetwork = networkMap[key]
+            
+            if (existingNetwork == null) {
+                // New network - add it
+                networkMap[key] = newNetwork
+            } else {
+                // Existing network - update with logic
+                val updatedNetwork = if (newNetwork.rssi > existingNetwork.rssi) {
+                    // New RSSI is stronger - update everything including coordinates
+                    newNetwork
+                } else {
+                    // Keep existing coordinates (where RSSI was strongest) but update other data
+                    newNetwork.copy(
+                        latitude = existingNetwork.latitude,
+                        longitude = existingNetwork.longitude
+                    )
+                }
+                networkMap[key] = updatedNetwork
+            }
+        }
+        
+        // Update the StateFlow with deduplicated networks sorted by RSSI
+        val deduplicatedNetworks = networkMap.values.toList().sortedByDescending { it.rssi }
+        _wifiNetworks.value = deduplicatedNetworks
     }
 
     fun exportToCsv(context: Context): String {

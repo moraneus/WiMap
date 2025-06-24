@@ -1,3 +1,318 @@
 <resources>
+    <!-- App Name -->
     <string name="app_name">WiMap</string>
+    
+    <!-- Main Screen -->
+    <string name="wifi_scanner">WiFi Scanner</string>
+    <string name="networks_found">Networks Found</string>
+    <string name="with_gps_location">with GPS location</string>
+    <string name="scanning_for_networks">Scanning for networks…</string>
+    <string name="share">Share</string>
+    <string name="clear">Clear</string>
+    <string name="maps">Maps</string>
+    <string name="share_wifi_networks">Share WiFi Networks</string>
+    
+    <!-- Navigation -->
+    <string name="pinned_networks">Pinned Networks</string>
+    <string name="settings">Settings</string>
+    <string name="back">Back</string>
+    
+    <!-- Scan Actions -->
+    <string name="start_scan">Start Scan</string>
+    <string name="stop_scan">Stop Scan</string>
+    <string name="dismiss">Dismiss</string>
+    
+    <!-- Network Details -->
+    <string name="signal_strength">Signal Strength</string>
+    <string name="open_network">Open Network</string>
+    <string name="valid_password_available">Valid Password Available</string>
+    <string name="secured_network">Secured Network</string>
+    <string name="pinned">Pinned</string>
+    <string name="connect_with_known_password">Connect with Known Password</string>
+    <string name="break_password">Break Password</string>
+    <string name="network_photo">Network Photo</string>
+    <string name="camera">Camera</string>
+    <string name="pin">Pin</string>
+    <string name="unpin">Unpin</string>
+    <string name="details">Details</string>
+    <string name="hide">Hide</string>
+    
+    <!-- Network Information -->
+    <string name="comment">Comment</string>
+    <string name="password">Password</string>
+    <string name="gps">GPS</string>
+    <string name="frequency">Frequency</string>
+    <string name="timestamp">Timestamp</string>
+    <string name="photo">Photo</string>
+    <string name="attached">Attached</string>
+    <string name="ghz_2_4">2.4 GHz</string>
+    <string name="ghz_5">5 GHz</string>
+    
+    <!-- Dialogs -->
+    <string name="add_comment">Add Comment</string>
+    <string name="network_label">Network: %1$s</string>
+    <string name="add_notes_placeholder">Add your notes about this network…</string>
+    <string name="save">Save</string>
+    <string name="cancel">Cancel</string>
+    
+    <string name="save_password">Save Password</string>
+    <string name="enter_password_placeholder">Enter network password…</string>
+    
+    <string name="enter_password_for">Enter Password for %1$s</string>
+    <string name="network_secured_message">This network is secured. Please enter the password to connect.</string>
+    <string name="connect">Connect</string>
+    
+    <!-- Export Dialog -->
+    <string name="export_wifi_networks">Export WiFi Networks</string>
+    <string name="select_format_message">Select the format you want to export:</string>
+    <string name="csv_file">CSV File</string>
+    <string name="csv_description">Spreadsheet format for data analysis</string>
+    <string name="google_maps_kml">Google Maps (KML)</string>
+    <string name="google_maps_description">View networks on Google Maps/Earth</string>
+    <string name="pdf_report">PDF Report</string>
+    <string name="pdf_description">Professional document with network details</string>
+    
+    <string name="choose_export_action">Choose Export Action</string>
+    <string name="export_action_message">What would you like to do with the %1$s file?</string>
+    <string name="save_to_device">Save to Device</string>
+    <string name="save_to_device_description">Save file to your device storage</string>
+    <string name="share_file">Share File</string>
+    <string name="share_file_description">Share immediately via apps</string>
+    <string name="save_and_share">Save &amp; Share</string>
+    <string name="save_and_share_description">Save to device and share</string>
+    <string name="select">Select</string>
+    
+    <!-- Settings Screen -->
+    <string name="wifi_scan_filters">WiFi Scan Filters</string>
+    <string name="customize_scanning_preferences">Customize your scanning preferences</string>
+    <string name="ssid_filter">SSID Filter</string>
+    <string name="enter_network_name_filter">Enter network name to filter</string>
+    <string name="security_type_filter">Security Type Filter</string>
+    <string name="security_filter_placeholder">e.g., WPA2, WPA3, OPEN</string>
+    <string name="min_rssi_threshold">Min RSSI Threshold (dBm)</string>
+    <string name="rssi_placeholder">e.g., -70</string>
+    
+    <string name="connection_settings">Connection Settings</string>
+    <string name="configure_connection_behavior">Configure automatic connection behavior</string>
+    <string name="max_retries_format">Max Retries: %1$d</string>
+    <string name="number_of_attempts_per_password">Number of attempts per password</string>
+    <string name="connection_timeout_format">Connection Timeout: %1$ds</string>
+    <string name="seconds_to_wait_per_attempt">Seconds to wait per connection attempt</string>
+    <string name="min_rssi_for_connection_format">Min RSSI for Connection: %1$ddBm</string>
+    <string name="dont_attempt_weak_signal">Don\'t attempt connection if signal is weaker</string>
+    
+    <string name="password_management">Password Management</string>
+    <string name="store_manage_passwords">Store and manage WiFi passwords</string>
+    <string name="new_password">New Password</string>
+    <string name="enter_password_to_save">Enter password to save</string>
+    <string name="add_password">Add Password</string>
+    <string name="saved_passwords_count">Saved Passwords (%1$d)</string>
+    <string name="password_length_format">(%1$d chars)</string>
+    <string name="remove_password">Remove Password</string>
+    <string name="no_saved_passwords">No saved passwords</string>
+    <string name="add_passwords_securely">Add passwords above to store them securely</string>
+    
+    <!-- Pinned Networks Screen -->
+    <string name="long_press_for_options">Long press on any network for more options</string>
+    <string name="actions_for_network">Actions for %1$s</string>
+    <string name="share_network">Share Network</string>
+    <string name="export_as">Export as…</string>
+    <string name="delete_network">Delete Network</string>
+    <string name="export_network_format">Export %1$s</string>
+    <string name="pinned_on_format">Pinned on %1$s</string>
+    
+    <!-- Connection Messages -->
+    <string name="checking_signal_strength">Checking network signal strength…</string>
+    <string name="signal_too_weak_format" formatted="false">❌ Signal too weak (%1$ddBm &lt; %2$ddBm)</string>
+    <string name="connection_aborted_weak_signal">Connection aborted - weak signal</string>
+    <string name="open_network_detected_format">ℹ️ Open network detected: %1$s</string>
+    <string name="open_networks_no_connection">Open networks don\'t require connection</string>
+    <string name="no_stored_passwords">No stored passwords found</string>
+    <string name="trying_password_format" formatted="false">Trying password %1$d/%2$d for %3$s…</string>
+    <string name="password_attempt_format" formatted="false">Password %1$d/%2$d, attempt %3$d/%4$d (timeout: %5$ds)</string>
+    <string name="connected_with_password_format" formatted="false">✅ Connected to %1$s with password: \'%2$s\'</string>
+    <string name="connection_successful_saving">Connection successful! Saving password…</string>
+    <string name="wrong_password_retrying_format">❌ Wrong password \'%1$s\', retrying in 2s…</string>
+    <string name="password_failed_after_retries_format" formatted="false">❌ Password \'%1$s\' failed after %2$d attempts</string>
+    <string name="all_passwords_failed_format">❌ All stored passwords failed for %1$s</string>
+    <string name="all_passwords_failed_manual_required">All passwords failed - manual entry required</string>
+    <string name="connection_error_format">Connection error: %1$s</string>
+    <string name="connection_failed_format">Connection failed: %1$s</string>
+    <string name="checking_signal_strength_manual">Checking signal strength…</string>
+    <string name="trying_manual_password_format" formatted="false">Trying manual password, attempt %1$d/%2$d (timeout: %3$ds)</string>
+    <string name="connected_manual_password_format">✅ Connected to %1$s with manual password!</string>
+    <string name="manual_connection_successful">Manual connection successful! Saving password…</string>
+    <string name="manual_attempt_failed_format">❌ Attempt %1$d failed, retrying in 2s…</string>
+    <string name="manual_password_failed_format" formatted="false">❌ Manual password failed for %1$s after %2$d attempts</string>
+    <string name="manual_password_incorrect">Manual password incorrect after all retries</string>
+    <string name="password_saved_to_pinned">✅ Password saved to pinned network</string>
+    <string name="password_updated_cloud">✅ Password updated in cloud database</string>
+    
+    <!-- Upload Messages -->
+    <string name="no_networks_to_upload">No networks to upload</string>
+    <string name="uploading_networks_format">Uploading %1$d networks to Firebase…</string>
+    <string name="upload_failed_format">Upload failed: %1$s</string>
+    
+    <!-- Pinned Network Messages -->
+    <string name="pinned_network_format">📌 Pinned %1$s</string>
+    <string name="failed_to_pin_format">Failed to pin network: %1$s</string>
+    <string name="network_unpinned">📌 Network unpinned</string>
+    <string name="failed_to_unpin_format">Failed to unpin network: %1$s</string>
+    <string name="removed_from_pinned_format">🗑️ Removed %1$s from pinned networks</string>
+    <string name="failed_to_delete_pinned_format">Failed to delete pinned network: %1$s</string>
+    <string name="failed_to_update_network_format">Failed to update network data: %1$s</string>
+    <string name="updated_pinned_network">📝 Updated pinned network info</string>
+    <string name="failed_to_update_pinned_format">Failed to update pinned network: %1$s</string>
+    
+    <!-- Export Messages -->
+    <string name="saving">Saving</string>
+    <string name="preparing_to_share">Preparing to share</string>
+    <string name="exporting">Exporting</string>
+    <string name="export_networks_format">%1$s %2$d networks as %3$s…</string>
+    <string name="export_network_format_single">%1$s %2$s as %3$s…</string>
+    <string name="file_not_created_error">File was not created or is empty</string>
+    <string name="export_failed_format">Export failed: %1$s</string>
+    <string name="saved_to_format">✅ Saved %1$s to: %2$s</string>
+    <string name="sharing_format">📤 Sharing %1$s…</string>
+    <string name="exported_from_wimap">%1$s exported from WiMap</string>
+    <string name="wimap_export_subject">WiMap Export - %1$s</string>
+    <string name="share_item_format">Share %1$s</string>
+    <string name="failed_to_share_format">Failed to share file: %1$s</string>
+    <string name="nothing_to_share_no_networks">Nothing to share - no networks scanned</string>
+    <string name="nothing_to_share_export_failed">Nothing to share - export failed</string>
+    <string name="share_wifi_networks_csv">Share WiFi Networks CSV</string>
+    <string name="shared_wifi_network_format">Shared WiFi Network: %1$s</string>
+    <string name="exported_network_format">Exported %1$s to %2$s</string>
+    <string name="export_error_format">Export error: %1$s</string>
+    
+    <!-- Permission Messages -->
+    <string name="location_wifi_permissions_required">Location and WiFi permissions are required to scan networks. Please grant them in app settings.</string>
+    <string name="permission_denied_format">Permission denied: %1$s</string>
+    <string name="scan_error_format">Scan error: %1$s</string>
+    
+    <!-- File Names and Formats -->
+    <string name="wifi_scan_filename_format">wifi_scan_%1$s.csv</string>
+    <string name="pinned_network_filename_format">pinned_network_%1$s_%2$s.csv</string>
+    <string name="wimap_networks_filename_format">WiMap_Networks_%1$s.csv</string>
+    <string name="wimap_googlemaps_filename_format">WiMap_GoogleMaps_%1$s.kml</string>
+    <string name="wimap_report_filename_format">WiMap_Report_%1$s.pdf</string>
+    <string name="wimap_network_filename_format">WiMap_%1$s_%2$s.csv</string>
+    <string name="wimap_network_kml_filename_format">WiMap_%1$s_%2$s.kml</string>
+    <string name="wimap_network_pdf_filename_format">WiMap_%1$s_%2$s.pdf</string>
+    <string name="wifi_photo_filename_format">WIFI_%1$s_%2$s.jpg</string>
+    
+    <!-- CSV Headers -->
+    <string name="csv_header_basic">SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Password</string>
+    <string name="csv_header_extended">SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Frequency,Timestamp,HasPassword,Comment</string>
+    <string name="csv_header_pinned">SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Comment,HasPassword,PinnedAt</string>
+    
+    <!-- Signal Strength -->
+    <string name="signal_excellent">Excellent</string>
+    <string name="signal_good">Good</string>
+    <string name="signal_fair">Fair</string>
+    <string name="signal_poor">Poor</string>
+    
+    <!-- Yes/No -->
+    <string name="yes">Yes</string>
+    <string name="no">No</string>
+    
+    <!-- Toast Messages -->
+    <string name="photo_captured_successfully">Photo captured successfully!</string>
+    <string name="photo_removed">Photo removed!</string>
+    <string name="camera_error_format">Camera error: %1$s</string>
+    <string name="error_format">Error: %1$s</string>
+    
+    <!-- Image Viewer -->
+    <string name="view_full_image">View full image</string>
+    <string name="reset_view">Reset View</string>
+    <string name="zoom_percentage_format">%1$d%%</string>
+    
+    <!-- Sticky Dialog Messages -->
+    <string name="discovering_networks">Discovering WiFi networks in your area...</string>
+    <string name="connecting_to_network">Connecting to Network</string>
+    <string name="attempting_connection_format">Attempting connection with password (%1$d/%2$d)</string>
+    <string name="connecting_to_format">Connecting to %1$s...</string>
+    <string name="breaking_password_format">Breaking Password for %1$s</string>
+    <string name="password_attempt_format_short">Password %1$d/%2$d - Attempt %3$d/%4$d</string>
+    <string name="uploading_networks">Uploading Networks</string>
+    <string name="uploading_network_data_format">Uploading network data to cloud (%1$d/%2$d)</string>
+    
+    <!-- Permission Dialog -->
+    <string name="permissions_required">Permissions Required</string>
+    <string name="required_permissions">Required Permissions:</string>
+    <string name="location_access">Location Access</string>
+    <string name="location_access_description">Required to scan WiFi networks and get GPS coordinates</string>
+    <string name="wifi_access">WiFi Access</string>
+    <string name="wifi_access_description">Required to discover and analyze wireless networks</string>
+    <string name="camera_access">Camera Access</string>
+    <string name="camera_access_description">Optional - to capture photos of network locations</string>
+    <string name="grant_permissions">Grant Permissions</string>
+    <string name="open_app_settings">Open App Settings</string>
+    
+    <!-- Password Dialog -->
+    <string name="show_password">Show password</string>
+    <string name="hide_password">Hide password</string>
+    
+    <!-- KML Content -->
+    <string name="kml_document_name">WiMap WiFi Networks</string>
+    <string name="kml_document_description">WiFi networks discovered by WiMap</string>
+    <string name="kml_bssid_label">BSSID:</string>
+    <string name="kml_security_label">Security:</string>
+    <string name="kml_signal_label">Signal:</string>
+    <string name="kml_channel_label">Channel:</string>
+    <string name="kml_frequency_label">Frequency:</string>
+    <string name="kml_discovered_label">Discovered:</string>
+    <string name="kml_password_known_label">Password Known:</string>
+    <string name="kml_discovered_by">Discovered by WiMap</string>
+    
+    <!-- PDF Content -->
+    <string name="pdf_title">WiMap WiFi Networks Report</string>
+    <string name="pdf_generated_format">Generated on %1$s</string>
+    <string name="pdf_total_networks_format">Total Networks Found: %1$d</string>
+    <string name="pdf_secured_networks_format">• Secured Networks: %1$d</string>
+    <string name="pdf_open_networks_format">• Open Networks: %1$d</string>
+    <string name="pdf_networks_with_passwords_format">• Networks with Known Passwords: %1$d</string>
+    <string name="pdf_networks_with_gps_format">• Networks with GPS Location: %1$d</string>
+    <string name="pdf_bssid_format">BSSID: %1$s</string>
+    <string name="pdf_security_format">Security: %1$s</string>
+    <string name="pdf_signal_format">Signal: %1$d dBm (%2$s)</string>
+    <string name="pdf_channel_format">Channel: %1$d (%2$s)</string>
+    <string name="pdf_location_format">Location: %1$s, %2$s</string>
+    <string name="pdf_password_available">Password: Available</string>
+    <string name="pdf_discovered_format">Discovered: %1$s</string>
+    <string name="pdf_footer_left">Generated by WiMap - WiFi Network Scanner</string>
+    <string name="pdf_footer_right_format">Page %1$d</string>
+    
+    <!-- Network Comments -->
+    <string name="wifi_network_found_comment">WiFi Network found by WiMap</string>
+    
+    <!-- MIME Types -->
+    <string name="mime_csv">text/csv</string>
+    <string name="mime_kml">application/vnd.google-earth.kml+xml</string>
+    <string name="mime_pdf">application/pdf</string>
+    
+    <!-- Content Descriptions -->
+    <string name="content_desc_signal_strength">Signal Strength</string>
+    <string name="content_desc_open_network">Open Network</string>
+    <string name="content_desc_valid_password">Valid Password Available</string>
+    <string name="content_desc_secured_network">Secured Network</string>
+    <string name="content_desc_pinned">Pinned</string>
+    <string name="content_desc_network_photo">Network Photo</string>
+    <string name="content_desc_camera">Camera</string>
+    <string name="content_desc_dismiss">Dismiss</string>
+    <string name="content_desc_back">Back</string>
+    <string name="content_desc_settings">Settings</string>
+    <string name="content_desc_pinned_networks">Pinned Networks</string>
+    <string name="content_desc_add_password">Add Password</string>
+    <string name="content_desc_remove_password">Remove Password</string>
+    
+    <!-- Debug Messages (for development) -->
+    <string name="debug_emulator_detected">DEBUG: Emulator detected - using mock WiFi networks with passwords</string>
+    <string name="debug_exact_password_match">DEBUG: ✅ Exact password match!</string>
+    <string name="debug_universal_demo_password">DEBUG: ✅ Universal demo password accepted</string>
+    <string name="debug_wrong_password_format">DEBUG: ❌ Wrong password: \'%1$s\' != \'%2$s\'</string>
+    <string name="debug_trying_password_format">DEBUG: Trying password \'%1$s\' for %2$s (correct: \'%3$s\')</string>
+    <string name="debug_failed_update_pinned_format">DEBUG: Failed to update pinned network password: %1$s</string>
+    <string name="debug_failed_update_firebase_format">DEBUG: Failed to update Firebase with password: %1$s</string>
+    <string name="debug_error_update_firebase_format">DEBUG: Error updating Firebase with password: %1$s</string>
 </resources>

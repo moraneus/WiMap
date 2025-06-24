@@ -1,6 +1,7 @@
 package com.ner.wimap.ui
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -45,6 +46,10 @@ fun MainScreen(
     connectingNetworks: Set<String> = emptySet(),
     connectionProgress: String?,
     successfulPasswords: Map<String, String> = emptyMap(),
+    currentPassword: String?,
+    currentAttempt: Int,
+    totalAttempts: Int,
+    connectingNetworkName: String?,
     onStartScan: () -> Unit,
     onStopScan: () -> Unit,
     onConnect: (WifiNetwork) -> Unit,
@@ -71,14 +76,11 @@ fun MainScreen(
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val isProduction = remember { BuildConfig.BUILD_TYPE == "release" }
-    val fabSize = 72.dp
-    val fabRadius = fabSize / 2
-    val notchMargin = 8.dp
-    val notchRadiusPx = with(LocalDensity.current) { (fabRadius + notchMargin).toPx() }
-    val customNotchShape = remember(notchRadiusPx) { ModernNotchShape(notchRadiusPx) }
 
-    // Export dialog state
+    // Dialog states
     var showExportDialog by remember { mutableStateOf(false) }
+    var showAboutDialog by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(connectionStatus) {
         connectionStatus?.let { snackbarHostState.showSnackbar(it) }
@@ -93,34 +95,30 @@ fun MainScreen(
         }
     }
 
-    Scaffold(
-        containerColor = Color(0xFFF8F9FA),
-        topBar = {
-            MainTopAppBar(
-                onOpenPinnedNetworks = onOpenPinnedNetworks,
-                onOpenSettings = onOpenSettings
-            )
-        },
-        floatingActionButton = {
-            ScanFab(
-                isScanning = isScanning,
-                fabSize = fabSize,
-                onStartScan = onStartScan,
-                onStopScan = onStopScan
-            )
-        },
-        floatingActionButtonPosition = FabPosition.Center,
-        bottomBar = {
-            ModernBottomAppBar(
-                customNotchShape = customNotchShape,
-                onShareExportClicked = { showExportDialog = true }, // Consolidated share/export
-                onClearNetworks = onClearNetworks,
-                onOpenMaps = onOpenMaps // New maps button
-            )
-        },
-        snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
-    ) { innerPadding ->
-        LazyColumn(
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(
+            containerColor = Color(0xFFF8F9FA),
+            topBar = {
+                MainTopAppBar(
+                    onOpenPinnedNetworks = onOpenPinnedNetworks,
+                    onOpenSettings = onOpenSettings
+                )
+            },
+            bottomBar = {
+                ModernBottomNavigationBar(
+                    isScanning = isScanning,
+                    onStartScan = onStartScan,
+                    onStopScan = onStopScan,
+                    onShareExportClicked = { showExportDialog = true },
+                    onClearNetworks = onClearNetworks,
+                    onOpenMaps = onOpenMaps,
+                    onShowAbout = { showAboutDialog = true },
+                    onShowTerms = { showTermsDialog = true }
+                )
+            },
+            snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
+        ) { innerPadding ->
+            LazyColumn(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
@@ -128,25 +126,6 @@ fun MainScreen(
                 .padding(top = 20.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            if (isScanning) {
-                item {
-                    key("scanning_status") {
-                        ScanningStatusCard()
-                    }
-                }
-            }
-
-            if (isConnecting && connectionProgress != null) {
-                item {
-                    key("connection_progress_$connectionProgress") {
-                        ConnectionProgressCard(
-                            message = connectionProgress,
-                            onDismiss = onClearConnectionProgress
-                        )
-                    }
-                }
-            }
-
             item {
                 key("network_count_${wifiNetworks.size}") {
                     NetworkCountHeader(
@@ -183,6 +162,32 @@ fun MainScreen(
                 }
             }
         }
+        }
+
+        // Sticky Dialogs - positioned directly below the top app bar
+        Column(
+            modifier = Modifier
+                .align(Alignment.TopCenter)
+                .fillMaxWidth()
+                .padding(top = 64.dp), // Account for top app bar height
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            // Scanning dialog (appears first, narrower)
+            StickyScanProgressDialog(
+                isVisible = isScanning,
+                onCancel = onStopScan
+            )
+
+            // Connection dialog (appears directly below scanning dialog, full width)
+            StickyConnectionProgressDialog(
+                isVisible = isConnecting && connectionProgress != null,
+                networkName = connectingNetworkName ?: "",
+                currentAttempt = currentAttempt,
+                totalAttempts = totalAttempts,
+                currentPassword = currentPassword,
+                onCancel = onClearConnectionProgress
+            )
+        }
     }
 
     // Export Format Dialog with Action Selection
@@ -218,71 +223,252 @@ fun MainScreen(
             )
         }
     }
+
+    // About Dialog
+    if (showAboutDialog) {
+        AboutDialog(
+            onDismiss = { showAboutDialog = false }
+        )
+    }
+
+    // Terms of Use Dialog
+    if (showTermsDialog) {
+        TermsOfUseDialog(
+            onDismiss = { showTermsDialog = false }
+        )
+    }
 }
 
 @Composable
-fun ModernBottomAppBar(
-    customNotchShape: Shape,
-    onShareExportClicked: () -> Unit, // Consolidated function
+fun ModernBottomNavigationBar(
+    isScanning: Boolean,
+    onStartScan: () -> Unit,
+    onStopScan: () -> Unit,
+    onShareExportClicked: () -> Unit,
     onClearNetworks: () -> Unit,
-    onOpenMaps: () -> Unit // New maps function
+    onOpenMaps: () -> Unit,
+    onShowAbout: () -> Unit,
+    onShowTerms: () -> Unit
 ) {
-    BottomAppBar(
+    Surface(
         modifier = Modifier
-            .clip(customNotchShape)
-            .shadow(12.dp, customNotchShape),
-        containerColor = Color(0xFF2C3E50),
-        contentColor = Color.White,
-        tonalElevation = 0.dp,
-        actions = {
-            BottomBarButton(
+            .fillMaxWidth()
+            .height(80.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        tonalElevation = 3.dp,
+        shadowElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(horizontal = 12.dp, vertical = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Share Button
+            ModernNavButton(
                 icon = Icons.Default.Share,
                 label = "Share",
                 onClick = onShareExportClicked
             )
-            BottomBarButton(
+            
+            // Clear Button  
+            ModernNavButton(
                 icon = Icons.Default.Clear,
                 label = "Clear",
                 onClick = onClearNetworks
             )
-            Spacer(Modifier.weight(1f))
-            BottomBarButton(
+            
+            // Integrated Scan Button (Center, Prominent)
+            IntegratedScanButton(
+                isScanning = isScanning,
+                onStartScan = onStartScan,
+                onStopScan = onStopScan
+            )
+            
+            // Maps Button
+            ModernNavButton(
                 icon = Icons.Default.Map,
                 label = "Maps",
                 onClick = onOpenMaps
             )
+            
+            // More/Menu Button with dropdown
+            MoreMenuButton(
+                onShowAbout = onShowAbout,
+                onShowTerms = onShowTerms
+            )
         }
-    )
+    }
 }
 
 @Composable
-private fun BottomBarButton(
+private fun ModernNavButton(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
     label: String,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(horizontal = 16.dp)
+        modifier = modifier
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onClick() }
+            .padding(horizontal = 8.dp, vertical = 6.dp)
     ) {
-        IconButton(
-            onClick = onClick,
-            modifier = Modifier
-                .size(48.dp)
-                .background(Color.White.copy(alpha = 0.1f), CircleShape)
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = label,
-                tint = Color.White,
-                modifier = Modifier.size(24.dp)
-            )
-        }
+        Icon(
+            imageVector = icon,
+            contentDescription = label,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(24.dp)
+        )
+        Spacer(modifier = Modifier.height(4.dp))
         Text(
             text = label,
             style = MaterialTheme.typography.labelSmall,
-            color = Color.White.copy(alpha = 0.8f)
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1
         )
+    }
+}
+
+@Composable
+private fun IntegratedScanButton(
+    isScanning: Boolean,
+    onStartScan: () -> Unit,
+    onStopScan: () -> Unit
+) {
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.padding(horizontal = 4.dp)
+    ) {
+        Box(
+            modifier = Modifier
+                .size(56.dp)
+                .shadow(
+                    elevation = if (isScanning) 6.dp else 4.dp,
+                    shape = CircleShape,
+                    ambientColor = if (isScanning) 
+                        MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                    else 
+                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+                )
+                .background(
+                    color = if (isScanning) 
+                        MaterialTheme.colorScheme.errorContainer 
+                    else 
+                        MaterialTheme.colorScheme.primaryContainer,
+                    shape = CircleShape
+                )
+                .clickable { if (isScanning) onStopScan() else onStartScan() },
+            contentAlignment = Alignment.Center
+        ) {
+            Icon(
+                imageVector = if (isScanning) Icons.Default.Stop else Icons.Default.PlayArrow,
+                contentDescription = if (isScanning) "Stop Scan" else "Start Scan",
+                tint = if (isScanning) 
+                    MaterialTheme.colorScheme.onErrorContainer 
+                else 
+                    MaterialTheme.colorScheme.onPrimaryContainer,
+                modifier = Modifier.size(28.dp)
+            )
+        }
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = if (isScanning) "Stop" else "Scan",
+            style = MaterialTheme.typography.labelSmall.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = if (isScanning) 
+                MaterialTheme.colorScheme.error 
+            else 
+                MaterialTheme.colorScheme.primary
+        )
+    }
+}
+
+@Composable
+private fun MoreMenuButton(
+    onShowAbout: () -> Unit,
+    onShowTerms: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    
+    Box {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            modifier = Modifier
+                .clip(RoundedCornerShape(12.dp))
+                .clickable { expanded = true }
+                .padding(horizontal = 8.dp, vertical = 6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "More",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(24.dp)
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "More",
+                style = MaterialTheme.typography.labelSmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1
+            )
+        }
+        
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Info,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "About",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onShowAbout()
+                }
+            )
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Description,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Terms of Use",
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onShowTerms()
+                }
+            )
+        }
     }
 }
 
@@ -320,6 +506,163 @@ private fun NetworkCountHeader(
             color = Color(0xFF3498DB)
         )
     }
+}
+
+@Composable
+private fun AboutDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Info,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "About WiMap",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold
+                )
+            )
+        },
+        text = {
+            Column(
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "WiMap is a comprehensive WiFi network scanner and mapping application designed to help you discover, analyze, and manage wireless networks in your area.",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Key Features:",
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.SemiBold
+                    )
+                )
+                Text(
+                    text = "• Real-time WiFi network scanning\n• GPS location mapping\n• Network security analysis\n• Export and sharing capabilities\n• Pinned network management\n• Background scanning support",
+                    style = MaterialTheme.typography.bodyMedium
+                )
+                Text(
+                    text = "Version 1.0",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("OK")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
+}
+
+@Composable
+private fun TermsOfUseDialog(
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        icon = {
+            Icon(
+                imageVector = Icons.Default.Description,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(32.dp)
+            )
+        },
+        title = {
+            Text(
+                text = "Terms of Use",
+                style = MaterialTheme.typography.headlineSmall.copy(
+                    fontWeight = FontWeight.Bold
+                )
+            )
+        },
+        text = {
+            LazyColumn(
+                modifier = Modifier.height(300.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                item {
+                    Text(
+                        text = "Legal Usage Notice",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                item {
+                    Text(
+                        text = "This application is intended for legitimate network analysis and educational purposes only. By using WiMap, you agree to the following terms:",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                item {
+                    Text(
+                        text = "Prohibited Activities:",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+                item {
+                    Text(
+                        text = "• Unauthorized access to networks you do not own\n• Attempting to crack or bypass network security\n• Using this app for illegal surveillance or hacking\n• Violating local privacy and cybersecurity laws\n• Commercial exploitation without permission",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                item {
+                    Text(
+                        text = "Data Collection:",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+                item {
+                    Text(
+                        text = "Network scan data, including SSIDs, signal strengths, and GPS coordinates, may be transmitted to our servers for statistical analysis and service improvement. This data helps us understand WiFi coverage patterns and enhance the application's functionality.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+                item {
+                    Text(
+                        text = "User Responsibility:",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    )
+                }
+                item {
+                    Text(
+                        text = "Users are solely responsible for ensuring their use of this application complies with all applicable local, state, and federal laws. The developers assume no liability for misuse of this application.",
+                        style = MaterialTheme.typography.bodyMedium
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = onDismiss
+            ) {
+                Text("I Understand")
+            }
+        },
+        containerColor = MaterialTheme.colorScheme.surface,
+        tonalElevation = 6.dp
+    )
 }
 
 object BuildConfig {

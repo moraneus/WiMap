@@ -32,6 +32,9 @@ import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
+import com.ner.wimap.camera.rememberCameraLauncher
+import com.ner.wimap.ui.dialogs.ImageViewerDialog
+import com.ner.wimap.R
 
 @Composable
 fun WifiNetworkCard(
@@ -52,6 +55,7 @@ fun WifiNetworkCard(
     var savedPassword by remember(pinnedNetwork?.bssid) { mutableStateOf(pinnedNetwork?.savedPassword ?: "") }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showCommentDialog by remember { mutableStateOf(false) }
+    var showImageViewer by remember { mutableStateOf(false) }
     var photoUri by remember(pinnedNetwork?.bssid) { mutableStateOf<Uri?>(pinnedNetwork?.photoUri?.let { Uri.parse(it) }) }
 
     // Update local state when pinnedNetwork changes
@@ -67,6 +71,18 @@ fun WifiNetworkCard(
 
     // Check if this network has a valid password (either saved locally or from successful connection)
     val hasValidPassword = savedPassword.isNotEmpty() || successfulPasswords.containsKey(network.bssid)
+
+    // Camera launcher
+    val cameraLauncher = rememberCameraLauncher(
+        onPhotoTaken = { uri ->
+            photoUri = uri
+            onUpdateNetworkData(network, comment, savedPassword, uri.toString())
+            Toast.makeText(context, context.getString(R.string.photo_captured_successfully), Toast.LENGTH_SHORT).show()
+        },
+        onError = { error ->
+            Toast.makeText(context, "Camera error: $error", Toast.LENGTH_SHORT).show()
+        }
+    )
 
     Card(
         modifier = Modifier
@@ -101,7 +117,10 @@ fun WifiNetworkCard(
             Spacer(modifier = Modifier.height(8.dp))
 
             // Photo thumbnail
-            NetworkPhoto(photoUri = photoUri)
+            NetworkPhoto(
+                photoUri = photoUri,
+                onPhotoClick = { showImageViewer = true }
+            )
 
             // Info chips
             NetworkInfoChips(
@@ -120,18 +139,10 @@ fun WifiNetworkCard(
                 onShowPasswordDialog = { showPasswordDialog = true },
                 onCameraClick = {
                     if (photoUri == null) {
-                        try {
-                            val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-                            val imageFileName = "WIFI_${network.ssid.replace(" ", "_")}_$timeStamp.jpg"
-                            val file = File(context.getExternalFilesDir(Environment.DIRECTORY_PICTURES), imageFileName)
-                            val newPhotoUri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                            photoUri = newPhotoUri
-                            onUpdateNetworkData(network, comment, savedPassword, newPhotoUri.toString())
-                            Toast.makeText(context, "Photo simulated!", Toast.LENGTH_SHORT).show()
-                        } catch (e: Exception) {
-                            Toast.makeText(context, "Error: ${e.message}", Toast.LENGTH_SHORT).show()
-                        }
+                        // Launch real camera
+                        cameraLauncher()
                     } else {
+                        // Remove existing photo
                         photoUri = null
                         onUpdateNetworkData(network, comment, savedPassword, null)
                         Toast.makeText(context, "Photo removed!", Toast.LENGTH_SHORT).show()
@@ -190,7 +201,17 @@ fun WifiNetworkCard(
             onDismiss = { showPasswordDialog = false }
         )
     }
-}
+
+    // Image Viewer Dialog
+    photoUri?.let { uri ->
+        if (showImageViewer) {
+            ImageViewerDialog(
+                imageUri = uri,
+                networkName = network.ssid,
+                onDismiss = { showImageViewer = false }
+            )
+        }
+    }    }
 
 @Composable
 private fun NetworkHeader(
@@ -302,20 +323,47 @@ private fun NetworkHeader(
 }
 
 @Composable
-private fun NetworkPhoto(photoUri: Uri?) {
+private fun NetworkPhoto(
+    photoUri: Uri?,
+    onPhotoClick: () -> Unit
+) {
     photoUri?.let { uri ->
         Card(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(120.dp),
+                .height(120.dp)
+                .clickable { onPhotoClick() },
             shape = RoundedCornerShape(8.dp)
         ) {
-            Image(
-                painter = rememberAsyncImagePainter(uri),
-                contentDescription = "Network Photo",
-                modifier = Modifier.fillMaxSize(),
-                contentScale = ContentScale.Crop
-            )
+            Box {
+                Image(
+                    painter = rememberAsyncImagePainter(uri),
+                    contentDescription = "Network Photo",
+                    modifier = Modifier.fillMaxSize(),
+                    contentScale = ContentScale.Crop
+                )
+                
+                // Overlay to indicate it's clickable
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.1f)),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.ZoomIn,
+                        contentDescription = "View full image",
+                        tint = Color.White,
+                        modifier = Modifier
+                            .size(32.dp)
+                            .background(
+                                Color.Black.copy(alpha = 0.5f),
+                                CircleShape
+                            )
+                            .padding(8.dp)
+                    )
+                }
+            }
         }
         Spacer(modifier = Modifier.height(8.dp))
     }

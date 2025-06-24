@@ -22,6 +22,7 @@ import androidx.lifecycle.LiveData
 import androidx.lifecycle.MutableLiveData
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.Coordinates
+import com.ner.wimap.utils.PermissionUtils
 import kotlinx.coroutines.flow.StateFlow
 
 // Helper function to convert frequency to channel
@@ -207,50 +208,81 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun connectWithNetworkSpecifier(network: WifiNetwork, password: String?) {
-        val specifierBuilder = WifiNetworkSpecifier.Builder()
-            .setSsid(network.ssid)
+        try {
+            val specifierBuilder = WifiNetworkSpecifier.Builder()
+                .setSsid(network.ssid)
 
-        if (!password.isNullOrEmpty()) {
-            // Use the 'security' field from WifiNetwork model which is derived from capabilities
-            when {
-                network.security.contains("WPA3") -> specifierBuilder.setWpa3Passphrase(password)
-                network.security.contains("WPA2") || network.security.contains("WPA") -> specifierBuilder.setWpa2Passphrase(password)
-                network.security.contains("WEP") -> {
-                    _connectionStatus.postValue("WEP connection not supported via NetworkSpecifier.")
-                    return
+            if (!password.isNullOrEmpty()) {
+                // Use the 'security' field from WifiNetwork model which is derived from capabilities
+                when {
+                    network.security.contains("WPA3", ignoreCase = true) -> {
+                        specifierBuilder.setWpa3Passphrase(password)
+                    }
+                    network.security.contains("WPA2", ignoreCase = true) || 
+                    network.security.contains("WPA", ignoreCase = true) -> {
+                        specifierBuilder.setWpa2Passphrase(password)
+                    }
+                    network.security.contains("WEP", ignoreCase = true) -> {
+                        _connectionStatus.postValue("❌ WEP networks are not supported on Android 10+")
+                        return
+                    }
+                    network.security.contains("Open", ignoreCase = true) -> {
+                        // No password needed for open networks
+                    }
+                    else -> {
+                        // Default to WPA2 for unknown security types
+                        specifierBuilder.setWpa2Passphrase(password)
+                    }
                 }
-                // Add other security types if necessary, or assume open if none match
-            }
-        } // For open networks, no passphrase is set
-
-        val networkRequest = NetworkRequest.Builder()
-            .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
-            .setNetworkSpecifier(specifierBuilder.build())
-            .build()
-
-        releaseCurrentNetworkCallback() 
-        currentNetworkCallback = object : ConnectivityManager.NetworkCallback() {
-            override fun onAvailable(net: Network) {
-                super.onAvailable(net)
-                connectivityManager.bindProcessToNetwork(net)
-                _connectionStatus.postValue("Connected to ${network.ssid}")
             }
 
-            override fun onLost(net: Network) {
-                super.onLost(net)
-                _connectionStatus.postValue("Lost connection to ${network.ssid}")
-                connectivityManager.bindProcessToNetwork(null) 
-                releaseCurrentNetworkCallback() 
-            }
+            val networkRequest = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .setNetworkSpecifier(specifierBuilder.build())
+                .build()
 
-            override fun onUnavailable() {
-                super.onUnavailable()
-                _connectionStatus.postValue("Could not connect to ${network.ssid}")
-                releaseCurrentNetworkCallback() 
+            releaseCurrentNetworkCallback() 
+            currentNetworkCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(net: Network) {
+                    super.onAvailable(net)
+                    try {
+                        connectivityManager.bindProcessToNetwork(net)
+                        _connectionStatus.postValue("✅ Connected to ${network.ssid}")
+                    } catch (e: Exception) {
+                        _connectionStatus.postValue("❌ Failed to bind to network: ${e.message}")
+                        releaseCurrentNetworkCallback()
+                    }
+                }
+
+                override fun onLost(net: Network) {
+                    super.onLost(net)
+                    _connectionStatus.postValue("⚠️ Lost connection to ${network.ssid}")
+                    connectivityManager.bindProcessToNetwork(null) 
+                    releaseCurrentNetworkCallback() 
+                }
+
+                override fun onUnavailable() {
+                    super.onUnavailable()
+                    _connectionStatus.postValue("❌ Could not connect to ${network.ssid} - check password and signal strength")
+                    releaseCurrentNetworkCallback() 
+                }
+                
+                override fun onCapabilitiesChanged(net: Network, networkCapabilities: NetworkCapabilities) {
+                    super.onCapabilitiesChanged(net, networkCapabilities)
+                    if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
+                        _connectionStatus.postValue("✅ WiFi connection established to ${network.ssid}")
+                    }
+                }
             }
+            
+            connectivityManager.requestNetwork(networkRequest, currentNetworkCallback!!)
+            _connectionStatus.postValue("🔄 Attempting to connect to ${network.ssid}...")
+            
+        } catch (e: SecurityException) {
+            _connectionStatus.postValue("❌ Permission error: ${e.message}")
+        } catch (e: Exception) {
+            _connectionStatus.postValue("❌ Connection error: ${e.message}")
         }
-        connectivityManager.requestNetwork(networkRequest, currentNetworkCallback!!)
-        _connectionStatus.postValue("Attempting to connect to ${network.ssid}...")
     }
 
     private fun connectWithWifiConfiguration(network: WifiNetwork, password: String?) {
@@ -310,8 +342,42 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
         if (checkChangeWifiState) {
             val changeWifiStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE)
             if (changeWifiStatePermission != PackageManager.PERMISSION_GRANTED) return false
+            
+            val changeNetworkStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_NETWORK_STATE)
+            if (changeNetworkStatePermission != PackageManager.PERMISSION_GRANTED) return false
         }
+
+        // Check for NEARBY_WIFI_DEVICES permission on Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            val nearbyWifiDevicesPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES)
+            if (nearbyWifiDevicesPermission != PackageManager.PERMISSION_GRANTED) return false
+        }
+
         return true
+    }
+
+    fun getMissingPermissions(): List<String> {
+        val missingPermissions = mutableListOf<String>()
+        
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            missingPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
+            missingPermissions.add(Manifest.permission.ACCESS_WIFI_STATE)
+        }
+        
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
+            missingPermissions.add(Manifest.permission.CHANGE_WIFI_STATE)
+        }
+        
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            if (ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
+                missingPermissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
+            }
+        }
+        
+        return missingPermissions
     }
 
     fun unregisterReceiver() {

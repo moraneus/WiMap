@@ -1,21 +1,27 @@
 package com.ner.wimap.ui.viewmodel
 
+import android.content.Context
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.isActive
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.wifi.WifiScanner
 import com.ner.wimap.FirebaseRepository
 import com.ner.wimap.Result
 import com.ner.wimap.data.database.PinnedNetworkDao
+import com.ner.wimap.utils.PermissionUtils
 
 class ConnectionManager(
     private val wifiScanner: WifiScanner,
     private val firebaseRepository: FirebaseRepository,
     private val pinnedNetworkDao: PinnedNetworkDao,
-    private val viewModelScope: CoroutineScope
+    private val viewModelScope: CoroutineScope,
+    private val context: Context
 ) {
     // Connection states - make connecting network-specific
     private val _connectingNetworks = MutableStateFlow<Set<String>>(emptySet()) // Track BSSIDs of connecting networks
@@ -33,6 +39,19 @@ class ConnectionManager(
     private val _successfulPasswords = MutableStateFlow<Map<String, String>>(emptyMap())
     val successfulPasswords: StateFlow<Map<String, String>> = _successfulPasswords
 
+    // Real-time connection progress data
+    private val _currentPassword = MutableStateFlow<String?>(null)
+    val currentPassword: StateFlow<String?> = _currentPassword
+
+    private val _currentAttempt = MutableStateFlow(0)
+    val currentAttempt: StateFlow<Int> = _currentAttempt
+
+    private val _totalAttempts = MutableStateFlow(0)
+    val totalAttempts: StateFlow<Int> = _totalAttempts
+
+    private val _connectingNetworkName = MutableStateFlow<String?>(null)
+    val connectingNetworkName: StateFlow<String?> = _connectingNetworkName
+
     // Settings
     private val _maxRetries = MutableStateFlow(3)
     val maxRetries: StateFlow<Int> = _maxRetries
@@ -46,16 +65,15 @@ class ConnectionManager(
     private val _passwords = MutableStateFlow<List<String>>(emptyList())
     val passwords: StateFlow<List<String>> = _passwords
 
-    private val isTestMode = true
+    // Connection job tracking for cancellation
+    private var currentConnectionJob: Job? = null
 
-    fun initializeTestPasswords() {
-        if (isTestMode || isEmulator()) {
-            _passwords.value = listOf(
-                "homepass123", "office2024", "myhotspot", "testpass123",
-                "supersecure2024", "demo12345", "password123", "12345678",
-                "test1234", "demo"
-            )
-        }
+    private val isTestMode = false
+
+    fun initializePasswordsFromSettings() {
+        // Passwords are now loaded from SharedPreferences via Settings
+        // No default passwords are provided
+        _passwords.value = emptyList()
     }
 
     fun connectToNetwork(
@@ -64,10 +82,17 @@ class ConnectionManager(
     ) {
         if (_connectingNetworks.value.contains(network.bssid)) return // Already connecting to this network
 
-        viewModelScope.launch {
-            // Add this network to connecting set
+        // Cancel any existing connection job
+        currentConnectionJob?.cancel()
+        
+        currentConnectionJob = viewModelScope.launch {
+            // Add this network to connecting set and initialize progress data
             _connectingNetworks.value = _connectingNetworks.value + network.bssid
             _isConnecting.value = true // Keep for backward compatibility
+            _connectingNetworkName.value = network.ssid
+            _currentPassword.value = null
+            _currentAttempt.value = 0
+            _totalAttempts.value = 0
             _connectionProgress.value = "Checking network signal strength..."
 
             try {
@@ -97,13 +122,20 @@ class ConnectionManager(
                 var connected = false
                 val maxRetries = _maxRetries.value
                 val timeoutSeconds = _connectionTimeoutSeconds.value
+                _totalAttempts.value = storedPasswords.size * maxRetries
 
+                var attemptCount = 0
                 for ((index, password) in storedPasswords.withIndex()) {
-                    if (connected) break
+                    if (connected || !isActive) break // Check for cancellation
 
+                    _currentPassword.value = password
                     _connectionProgress.value = "Trying password ${index + 1}/${storedPasswords.size} for ${network.ssid}..."
 
                     for (retry in 1..maxRetries) {
+                        if (!isActive) break // Check for cancellation
+                        
+                        attemptCount++
+                        _currentAttempt.value = attemptCount
                         _connectionProgress.value = "Password ${index + 1}/${storedPasswords.size}, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
 
                         val success = attemptConnectionWithRetry(network, password, timeoutSeconds)
@@ -150,7 +182,11 @@ class ConnectionManager(
                 _connectionStatus.value = "Connection error: ${e.message}"
                 _connectionProgress.value = "Connection failed: ${e.message}"
             } finally {
-                // Remove this network from connecting set
+                // Clear progress data and remove this network from connecting set
+                _currentPassword.value = null
+                _currentAttempt.value = 0
+                _totalAttempts.value = 0
+                _connectingNetworkName.value = null
                 _connectingNetworks.value = _connectingNetworks.value - network.bssid
                 _isConnecting.value = _connectingNetworks.value.isNotEmpty() // Update global state
                 delay(3000)
@@ -161,16 +197,23 @@ class ConnectionManager(
 
     fun connectWithManualPassword(network: WifiNetwork, password: String) {
         viewModelScope.launch {
-            // Add this network to connecting set
+            // Add this network to connecting set and initialize progress data
             _connectingNetworks.value = _connectingNetworks.value + network.bssid
             _isConnecting.value = true
+            _connectingNetworkName.value = network.ssid
+            _currentPassword.value = password
+            _currentAttempt.value = 0
             _connectionProgress.value = "Checking signal strength..."
 
             val rssiThreshold = _rssiThresholdForConnection.value
             if (network.rssi < rssiThreshold) {
                 _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
                 _connectionProgress.value = "Connection aborted - weak signal"
-                // Remove from connecting set
+                // Clear progress data and remove from connecting set
+                _currentPassword.value = null
+                _currentAttempt.value = 0
+                _totalAttempts.value = 0
+                _connectingNetworkName.value = null
                 _connectingNetworks.value = _connectingNetworks.value - network.bssid
                 _isConnecting.value = _connectingNetworks.value.isNotEmpty()
                 delay(2000)
@@ -180,9 +223,11 @@ class ConnectionManager(
 
             val maxRetries = _maxRetries.value
             val timeoutSeconds = _connectionTimeoutSeconds.value
+            _totalAttempts.value = maxRetries
             var connected = false
 
             for (retry in 1..maxRetries) {
+                _currentAttempt.value = retry
                 _connectionProgress.value = "Trying manual password, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
 
                 val success = attemptConnectionWithRetry(network, password, timeoutSeconds)
@@ -216,7 +261,11 @@ class ConnectionManager(
                 }
             }
 
-            // Remove from connecting set
+            // Clear progress data and remove from connecting set
+            _currentPassword.value = null
+            _currentAttempt.value = 0
+            _totalAttempts.value = 0
+            _connectingNetworkName.value = null
             _connectingNetworks.value = _connectingNetworks.value - network.bssid
             _isConnecting.value = _connectingNetworks.value.isNotEmpty()
             delay(2000)
@@ -226,54 +275,158 @@ class ConnectionManager(
 
     private suspend fun attemptConnectionWithRetry(network: WifiNetwork, password: String, timeoutSeconds: Int): Boolean {
         return try {
-            if (isTestMode || isEmulator()) {
+            if (isEmulator()) {
+                // Emulator fallback - use mock data for testing
                 val connectionDelay = (timeoutSeconds * 1000 * 0.7).toLong()
                 delay(connectionDelay)
 
-                // Find the actual mock network to get the real password
                 val mockNetwork = generateMockNetworks().find { it.bssid == network.bssid }
-
-                if (mockNetwork != null) {
-                    // Network exists in our mock data
-                    if (mockNetwork.password != null) {
-                        // Secured network - check password EXACTLY
-                        println("DEBUG: Trying password '$password' for ${network.ssid} (correct: '${mockNetwork.password}')")
-                        if (password == mockNetwork.password) {
-                            println("DEBUG: ✅ Exact password match!")
-                            return true // Exact password match
-                        }
-
-                        // Check some universal demo passwords for testing convenience
-                        val universalDemoPasswords = listOf("test", "demo", "password", "admin")
-                        if (universalDemoPasswords.contains(password.lowercase())) {
-                            println("DEBUG: ✅ Universal demo password accepted")
-                            return true // Universal demo password
-                        }
-
-                        // Wrong password - be strict
-                        println("DEBUG: ❌ Wrong password: '$password' != '${mockNetwork.password}'")
-                        return false
-                    } else {
-                        // Open network - should always succeed
+                if (mockNetwork != null && mockNetwork.password != null) {
+                    val isCorrectPassword = password == mockNetwork.password || 
+                           listOf("test", "demo", "password", "admin").contains(password.lowercase())
+                    
+                    if (isCorrectPassword) {
+                        // Simulate successful connection and immediate disconnection
+                        _connectionProgress.value = "✅ Successfully connected to ${network.ssid}"
+                        delay(1000)
+                        _connectionProgress.value = "Disconnecting and saving password..."
+                        delay(500)
+                        saveWorkingPassword(network, password)
+                        _connectionProgress.value = "✅ Password validated and saved for ${network.ssid}"
                         return true
                     }
-                } else {
-                    // Network not in mock data - simulate realistic failure rate
-                    // Only succeed with very common passwords
-                    val commonPasswords = listOf("password", "12345678", "admin", "test")
-                    return commonPasswords.contains(password.lowercase()) &&
-                            password.length >= 8 // Minimum security requirement
                 }
+                return network.security.contains("Open", ignoreCase = true)
             } else {
                 // Real device implementation
+                _connectionProgress.value = "Checking permissions and location services..."
+                
+                // Check for missing permissions first
+                val missingPermissions = wifiScanner.getMissingPermissions()
+                if (missingPermissions.isNotEmpty()) {
+                    _connectionProgress.value = "❌ Missing permissions: ${missingPermissions.joinToString(", ")}"
+                    _connectionStatus.value = "❌ Required permissions not granted. Please enable: ${missingPermissions.joinToString(", ")}"
+                    return false
+                }
+                
+                // Check if location is enabled (required for Android 10+)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
+                    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
+                    val isLocationEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
+                                          locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
+                    
+                    if (!isLocationEnabled) {
+                        _connectionProgress.value = "❌ Location services must be enabled for Wi-Fi connections on Android 10+"
+                        _connectionStatus.value = "❌ Please enable location services in device settings"
+                        return false
+                    }
+                }
+                
+                _connectionProgress.value = "Attempting connection to ${network.ssid}..."
+                
+                // Check if we already have a working password for this network
+                val existingPassword = getWorkingPassword(network)
+                if (existingPassword != null && existingPassword == password) {
+                    _connectionProgress.value = "ℹ️ Using previously validated password for ${network.ssid}"
+                    _connectionStatus.value = "✅ Password already validated for ${network.ssid}"
+                    return true
+                } else if (existingPassword != null && password != existingPassword) {
+                    // Clear old password if we're trying a different one
+                    clearWorkingPassword(network)
+                }
+
+                // Ensure no fallback or default passwords interfere
+                if (isDefaultOrFallbackPassword(password)) {
+                    _connectionProgress.value = "⚠️ Avoiding common/default password for security"
+                    _connectionStatus.value = "❌ Please use the actual network password, not a default one"
+                    return false
+                }
+                
+                // Use WifiScanner to attempt connection
                 wifiScanner.connectToNetwork(network, password)
-                delay(timeoutSeconds * 1000L)
-                // TODO: Actually check connection status from WifiScanner
-                false // For now, return false to force manual implementation
+                
+                // Wait for connection attempt with timeout
+                var elapsedTime = 0
+                val checkInterval = 500L // Check every 500ms
+                val maxWaitTime = timeoutSeconds * 1000L
+                
+                while (elapsedTime < maxWaitTime) {
+                    delay(checkInterval)
+                    elapsedTime += checkInterval.toInt()
+                    
+                    // Update progress
+                    val remainingTime = (maxWaitTime - elapsedTime) / 1000
+                    _connectionProgress.value = "Connecting to ${network.ssid}... (${remainingTime}s remaining)"
+                    
+                    // Check if connection was successful
+                    val currentNetwork = wifiScanner.getCurrentWifiNetwork()
+                    val isConnected = currentNetwork?.bssid == network.bssid
+                    
+                    if (isConnected) {
+                        _connectionProgress.value = "✅ Successfully connected to ${network.ssid}"
+                        
+                        // Post-validation behavior: immediately disconnect and save password
+                        delay(1000) // Brief delay to confirm connection
+                        _connectionProgress.value = "Validating connection and saving password..."
+                        
+                        // Disconnect from the network immediately
+                        wifiScanner.disconnectFromNetwork()
+                        delay(1000) // Wait for disconnection to complete
+                        
+                        // Save the working password to SharedPreferences
+                        saveWorkingPassword(network, password)
+                        
+                        _connectionProgress.value = "✅ Password validated and saved for ${network.ssid}"
+                        _connectionStatus.value = "✅ Connection successful! Password saved for future reference."
+                        return true
+                    }
+                }
+                
+                // Connection timeout
+                _connectionProgress.value = "❌ Connection timeout after ${timeoutSeconds}s"
+                _connectionStatus.value = "❌ Failed to connect to ${network.ssid} - incorrect password or network issue"
+                return false
             }
+        } catch (e: SecurityException) {
+            _connectionProgress.value = "❌ Permission error: ${e.message}"
+            _connectionStatus.value = "❌ Security error: Missing required permissions"
+            false
         } catch (e: Exception) {
+            _connectionProgress.value = "❌ Connection error: ${e.message}"
+            _connectionStatus.value = "❌ Connection failed: ${e.message}"
             false
         }
+    }
+
+    private suspend fun saveWorkingPassword(network: WifiNetwork, password: String) {
+        try {
+            // Save to a separate SharedPreferences for working passwords
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            
+            // Use network BSSID as key for more precise identification
+            workingPasswordsPrefs.edit()
+                .putString(network.bssid, password)
+                .putString("${network.bssid}_ssid", network.ssid) // Store SSID for reference
+                .putLong("${network.bssid}_timestamp", System.currentTimeMillis())
+                .apply()
+                
+            _connectionProgress.value = "✅ Working password saved for future use"
+        } catch (e: Exception) {
+            _connectionProgress.value = "Warning: Could not save working password: ${e.message}"
+        }
+    }
+
+    fun getWorkingPassword(network: WifiNetwork): String? {
+        return try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            workingPasswordsPrefs.getString(network.bssid, null)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    fun hasWorkingPassword(network: WifiNetwork): Boolean {
+        return getWorkingPassword(network) != null
     }
 
     private suspend fun updatePinnedNetworkPassword(network: WifiNetwork, password: String) {
@@ -308,7 +461,25 @@ class ConnectionManager(
     }
 
     fun clearConnectionProgress() {
+        // Cancel the current connection job
+        currentConnectionJob?.cancel()
+        currentConnectionJob = null
+        
+        // Clear all connection state immediately
         _connectionProgress.value = null
+        _currentPassword.value = null
+        _currentAttempt.value = 0
+        _totalAttempts.value = 0
+        _connectingNetworkName.value = null
+        _connectingNetworks.value = emptySet()
+        _isConnecting.value = false
+        
+        // Set status to indicate cancellation
+        _connectionStatus.value = "Connection cancelled by user"
+    }
+
+    fun cancelConnection() {
+        clearConnectionProgress()
     }
 
     fun setMaxRetries(retries: Int) {
@@ -333,6 +504,10 @@ class ConnectionManager(
         _passwords.value = _passwords.value.filter { it != password }
     }
 
+    fun updatePasswordsFromSettings(passwords: List<String>) {
+        _passwords.value = passwords
+    }
+
     private fun isEmulator(): Boolean {
         return android.os.Build.FINGERPRINT.startsWith("generic") ||
                 android.os.Build.FINGERPRINT.startsWith("unknown") ||
@@ -353,5 +528,65 @@ class ConnectionManager(
             WifiNetwork("SecureNet_5G", "66:77:88:99:aa:bb", -65, 149, "WPA3", 31.7767, 35.2345, System.currentTimeMillis(), "supersecure2024"),
             WifiNetwork("DemoWiFi", "77:88:99:aa:bb:cc", -50, 40, "WPA2", null, null, System.currentTimeMillis(), "demo12345")
         )
+    }
+
+    // Enhanced helper functions for improved connection handling
+
+    fun clearWorkingPassword(network: WifiNetwork) {
+        try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            workingPasswordsPrefs.edit()
+                .remove(network.bssid)
+                .remove("${network.bssid}_ssid")
+                .remove("${network.bssid}_timestamp")
+                .apply()
+        } catch (e: Exception) {
+            println("DEBUG: Failed to clear working password: ${e.message}")
+        }
+    }
+
+    /**
+     * Check if password is a common default or fallback password that should be avoided
+     */
+    private fun isDefaultOrFallbackPassword(password: String): Boolean {
+        val commonDefaults = listOf(
+            "password", "123456", "admin", "guest", "default", "wifi", 
+            "12345678", "qwerty", "letmein", "welcome", "changeme",
+            "router", "netgear", "linksys", "dlink", "tplink"
+        )
+        return commonDefaults.contains(password.lowercase())
+    }
+
+    /**
+     * Get all working passwords for debugging/management purposes
+     */
+    fun getAllWorkingPasswords(): Map<String, String> {
+        return try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            val allEntries = workingPasswordsPrefs.all
+            val passwords = mutableMapOf<String, String>()
+            
+            allEntries.forEach { (key, value) ->
+                if (!key.contains("_ssid") && !key.contains("_timestamp") && value is String) {
+                    passwords[key] = value
+                }
+            }
+            
+            passwords
+        } catch (e: Exception) {
+            emptyMap()
+        }
+    }
+
+    /**
+     * Clear all working passwords (for reset/cleanup purposes)
+     */
+    fun clearAllWorkingPasswords() {
+        try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            workingPasswordsPrefs.edit().clear().apply()
+        } catch (e: Exception) {
+            println("DEBUG: Failed to clear all working passwords: ${e.message}")
+        }
     }
 }
