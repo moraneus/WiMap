@@ -59,6 +59,7 @@ class MainActivity : ComponentActivity() {
         // Main app state
         val wifiNetworks by viewModel.wifiNetworks.collectAsState()
         val isScanning by viewModel.isScanning.collectAsState()
+        val hasEverScanned by viewModel.hasEverScanned.collectAsState()
         val connectionStatus by viewModel.connectionStatus.collectAsState()
         val uploadStatus by viewModel.uploadStatus.collectAsState()
         val showPasswordDialog by viewModel.showPasswordDialog.collectAsState()
@@ -88,10 +89,13 @@ class MainActivity : ComponentActivity() {
         val ssidFilter by viewModel.ssidFilter.collectAsState()
         val securityFilter by viewModel.securityFilter.collectAsState()
         val rssiThreshold by viewModel.rssiThreshold.collectAsState()
+        val bssidFilter by viewModel.bssidFilter.collectAsState()
         val passwords by viewModel.passwords.collectAsState()
         val maxRetries by viewModel.maxRetries.collectAsState()
         val connectionTimeoutSeconds by viewModel.connectionTimeoutSeconds.collectAsState()
         val rssiThresholdForConnection by viewModel.rssiThresholdForConnection.collectAsState()
+        val hideNetworksUnseenForHours by viewModel.hideNetworksUnseenForHours.collectAsState()
+        val availableSecurityTypes = viewModel.availableSecurityTypes
 
         // Navigation actions
         val requestPermissionsAction by viewModel.requestPermissionsAction.collectAsState()
@@ -139,6 +143,7 @@ class MainActivity : ComponentActivity() {
                 MainScreen(
                     wifiNetworks = wifiNetworks,
                     isScanning = isScanning,
+                    hasEverScanned = hasEverScanned,
                     connectionStatus = connectionStatus,
                     uploadStatus = uploadStatus,
                     showPasswordDialog = showPasswordDialog,
@@ -201,6 +206,9 @@ class MainActivity : ComponentActivity() {
                     onSecurityFilterChange = { viewModel.onSecurityFilterChange(it) },
                     rssiThreshold = rssiThreshold,
                     onRssiThresholdChange = { viewModel.onRssiThresholdChange(it) },
+                    bssidFilter = bssidFilter,
+                    onBssidFilterChange = { viewModel.onBssidFilterChange(it) },
+                    availableSecurityTypes = availableSecurityTypes,
                     passwords = passwords,
                     onAddPassword = { viewModel.onAddPassword(it) },
                     onRemovePassword = { viewModel.onRemovePassword(it) },
@@ -210,6 +218,9 @@ class MainActivity : ComponentActivity() {
                     onConnectionTimeoutChange = { viewModel.setConnectionTimeoutSeconds(it) },
                     rssiThresholdForConnection = rssiThresholdForConnection,
                     onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
+                    hideNetworksUnseenForHours = hideNetworksUnseenForHours,
+                    onHideNetworksUnseenForHoursChange = { viewModel.setHideNetworksUnseenForHours(it) },
+                    onClearAllData = { viewModel.clearAllData() },
                     onBack = { navController.popBackStack() }
                 )
             }

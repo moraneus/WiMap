@@ -21,4 +21,5 @@ interface WifiRepository {
     fun getTotalAttempts(): Flow<Int>
     fun getConnectingNetworkName(): Flow<String?>
     suspend fun updatePasswordsFromSettings(passwords: List<String>)
+    suspend fun removeStaleNetworks(hideNetworksUnseenForHours: Int)
 }

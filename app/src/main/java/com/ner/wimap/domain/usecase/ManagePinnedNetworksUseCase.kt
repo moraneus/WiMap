@@ -31,4 +31,7 @@ class ManagePinnedNetworksUseCase @Inject constructor(
         password: String?, 
         photoUri: String?
     ): kotlin.Result<Unit> = pinnedNetworkRepository.updateNetworkData(network, comment, password, photoUri)
+    
+    suspend fun clearAllPinnedNetworks(): kotlin.Result<Unit> = 
+        pinnedNetworkRepository.clearAllPinnedNetworks()
 }

@@ -8,6 +8,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.runtime.*
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.FileProvider
+import com.ner.wimap.utils.PermissionUtils
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -48,7 +49,15 @@ fun rememberCameraLauncher(
         }
     }
     
-    return {
+    return launch@{
+        // Check camera permissions first
+        if (!PermissionUtils.hasAllCameraPermissions(context)) {
+            val missingPermissions = PermissionUtils.getMissingCameraPermissions(context)
+            val permissionNames = missingPermissions.map { PermissionUtils.getPermissionDisplayName(it) }
+            onError("Missing camera permissions: ${permissionNames.joinToString(", ")}. Please grant these permissions in app settings.")
+            return@launch
+        }
+        
         try {
             val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
             val imageFileName = "WIFI_PHOTO_$timeStamp.jpg"

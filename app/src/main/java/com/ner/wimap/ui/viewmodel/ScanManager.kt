@@ -162,6 +162,33 @@ class ScanManager(
         _wifiNetworks.value = deduplicatedNetworks
     }
 
+    /**
+     * Removes networks that haven't been seen for the specified duration
+     */
+    fun removeStaleNetworks(hideNetworksUnseenForHours: Int) {
+        val currentTime = System.currentTimeMillis()
+        val thresholdTime = currentTime - (hideNetworksUnseenForHours * 60 * 60 * 1000L) // Convert hours to milliseconds
+        
+        val keysToRemove = mutableListOf<String>()
+        
+        networkMap.forEach { (key, network) ->
+            if (network.timestamp < thresholdTime) {
+                keysToRemove.add(key)
+            }
+        }
+        
+        // Remove stale networks
+        keysToRemove.forEach { key ->
+            networkMap.remove(key)
+        }
+        
+        // Update the StateFlow if any networks were removed
+        if (keysToRemove.isNotEmpty()) {
+            val updatedNetworks = networkMap.values.toList().sortedByDescending { it.rssi }
+            _wifiNetworks.value = updatedNetworks
+        }
+    }
+
     fun exportToCsv(context: Context): String {
         val timestamp = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US).format(Date())
         val filename = "wifi_scan_$timestamp.csv"

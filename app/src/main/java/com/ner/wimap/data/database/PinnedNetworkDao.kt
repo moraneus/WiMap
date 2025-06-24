@@ -26,4 +26,7 @@ interface PinnedNetworkDao {
 
     @Query("SELECT COUNT(*) FROM pinned_networks WHERE bssid = :bssid")
     suspend fun isPinned(bssid: String): Int
+
+    @Query("DELETE FROM pinned_networks")
+    suspend fun deleteAllPinnedNetworks(): Int
 }

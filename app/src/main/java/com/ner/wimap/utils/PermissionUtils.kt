@@ -60,6 +60,42 @@ object PermissionUtils {
     }
     
     /**
+     * Get all required permissions for camera operations
+     */
+    fun getRequiredCameraPermissions(): List<String> {
+        val permissions = mutableListOf(
+            Manifest.permission.CAMERA
+        )
+        
+        // Add READ_MEDIA_IMAGES permission for Android 13+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
+        } else {
+            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        
+        return permissions
+    }
+    
+    /**
+     * Check if all required camera permissions are granted
+     */
+    fun hasAllCameraPermissions(context: Context): Boolean {
+        return getRequiredCameraPermissions().all { permission ->
+            ContextCompat.checkSelfPermission(context, permission) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+    
+    /**
+     * Get list of missing camera permissions
+     */
+    fun getMissingCameraPermissions(context: Context): List<String> {
+        return getRequiredCameraPermissions().filter { permission ->
+            ContextCompat.checkSelfPermission(context, permission) != PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    /**
      * Get user-friendly permission names for display
      */
     fun getPermissionDisplayName(permission: String): String {
@@ -68,6 +104,9 @@ object PermissionUtils {
             Manifest.permission.ACCESS_WIFI_STATE -> "Wi-Fi State Access"
             Manifest.permission.CHANGE_WIFI_STATE -> "Wi-Fi State Control"
             Manifest.permission.NEARBY_WIFI_DEVICES -> "Nearby Wi-Fi Devices"
+            Manifest.permission.CAMERA -> "Camera"
+            Manifest.permission.READ_EXTERNAL_STORAGE -> "Storage Access"
+            Manifest.permission.READ_MEDIA_IMAGES -> "Media Images Access"
             else -> permission.substringAfterLast(".")
         }
     }
@@ -85,6 +124,12 @@ object PermissionUtils {
                 "Required to connect to Wi-Fi networks"
             Manifest.permission.NEARBY_WIFI_DEVICES -> 
                 "Required to discover nearby Wi-Fi devices on Android 13+"
+            Manifest.permission.CAMERA -> 
+                "Required to take photos of Wi-Fi network locations"
+            Manifest.permission.READ_EXTERNAL_STORAGE -> 
+                "Required to access saved photos"
+            Manifest.permission.READ_MEDIA_IMAGES -> 
+                "Required to access saved photos on Android 13+"
             else -> "Required for Wi-Fi operations"
         }
     }

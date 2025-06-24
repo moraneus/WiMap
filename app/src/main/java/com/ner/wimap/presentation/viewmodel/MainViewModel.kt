@@ -16,6 +16,7 @@ import com.ner.wimap.ui.viewmodel.ExportFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import javax.inject.Inject
 
 @HiltViewModel
@@ -64,18 +65,36 @@ class MainViewModel @Inject constructor(
     private val _ssidFilter = MutableStateFlow("")
     val ssidFilter: StateFlow<String> = _ssidFilter.asStateFlow()
 
-    private val _securityFilter = MutableStateFlow("")
-    val securityFilter: StateFlow<String> = _securityFilter.asStateFlow()
+    private val _securityFilter = MutableStateFlow(emptySet<String>())
+    val securityFilter: StateFlow<Set<String>> = _securityFilter.asStateFlow()
 
     private val _rssiThreshold = MutableStateFlow("-70")
     val rssiThreshold: StateFlow<String> = _rssiThreshold.asStateFlow()
 
+    private val _bssidFilter = MutableStateFlow("")
+    val bssidFilter: StateFlow<String> = _bssidFilter.asStateFlow()
+
     // Use case flows
-    val wifiNetworks = scanWifiNetworksUseCase.getWifiNetworks()
+    private val rawWifiNetworks = scanWifiNetworksUseCase.getWifiNetworks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
+    // Filtered networks based on current filter settings
+    val wifiNetworks = combine(
+        rawWifiNetworks,
+        _ssidFilter,
+        _securityFilter,
+        _rssiThreshold,
+        _bssidFilter
+    ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter ->
+        applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     val isScanning = scanWifiNetworksUseCase.isScanning()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+
+    // Track if a scan has ever been started
+    private val _hasEverScanned = MutableStateFlow(false)
+    val hasEverScanned: StateFlow<Boolean> = _hasEverScanned.asStateFlow()
 
     val connectionStatus = connectToNetworkUseCase.getConnectionStatus()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
@@ -119,6 +138,12 @@ class MainViewModel @Inject constructor(
     fun startScan() {
         viewModelScope.launch {
             try {
+                // Clear previous results before starting a fresh scan
+                scanWifiNetworksUseCase.clearNetworks()
+                
+                // Mark that a scan has been started
+                _hasEverScanned.value = true
+                
                 val result = scanWifiNetworksUseCase.startScan()
                 if (result.isFailure) {
                     val exception = result.exceptionOrNull()
@@ -301,14 +326,22 @@ class MainViewModel @Inject constructor(
 
     fun onSsidFilterChange(newFilter: String) {
         _ssidFilter.value = newFilter
+        saveFiltersToPreferences()
     }
 
-    fun onSecurityFilterChange(newFilter: String) {
+    fun onSecurityFilterChange(newFilter: Set<String>) {
         _securityFilter.value = newFilter
+        saveFiltersToPreferences()
     }
 
     fun onRssiThresholdChange(newThreshold: String) {
         _rssiThreshold.value = newThreshold
+        saveFiltersToPreferences()
+    }
+
+    fun onBssidFilterChange(newFilter: String) {
+        _bssidFilter.value = newFilter
+        saveFiltersToPreferences()
     }
 
     // Firebase functions (to be moved to a separate use case)
@@ -341,11 +374,6 @@ class MainViewModel @Inject constructor(
     private val _passwords = MutableStateFlow<List<String>>(emptyList())
     val passwords: StateFlow<List<String>> = _passwords.asStateFlow()
 
-    init {
-        // Load passwords from SharedPreferences on initialization
-        loadPasswordsFromPreferences()
-    }
-
     private val _maxRetries = MutableStateFlow(3)
     val maxRetries: StateFlow<Int> = _maxRetries.asStateFlow()
 
@@ -354,6 +382,24 @@ class MainViewModel @Inject constructor(
 
     private val _rssiThresholdForConnection = MutableStateFlow(-70)
     val rssiThresholdForConnection: StateFlow<Int> = _rssiThresholdForConnection.asStateFlow()
+
+    private val _hideNetworksUnseenForHours = MutableStateFlow(24)
+    val hideNetworksUnseenForHours: StateFlow<Int> = _hideNetworksUnseenForHours.asStateFlow()
+
+    init {
+        // Load passwords from SharedPreferences on initialization
+        loadPasswordsFromPreferences()
+        
+        // Load filters from SharedPreferences
+        loadFiltersFromPreferences()
+        
+        // Load hide networks setting from SharedPreferences
+        val savedHideNetworksHours = sharedPreferences.getInt("hide_networks_unseen_for_hours", 24)
+        _hideNetworksUnseenForHours.value = savedHideNetworksHours
+        
+        // Start periodic cleanup of stale networks
+        startPeriodicNetworkCleanup()
+    }
 
     // SharedPreferences methods
     private fun loadPasswordsFromPreferences() {
@@ -412,6 +458,55 @@ class MainViewModel @Inject constructor(
         _rssiThresholdForConnection.value = threshold
     }
 
+    fun setHideNetworksUnseenForHours(hours: Int) {
+        _hideNetworksUnseenForHours.value = hours
+        // Save to SharedPreferences
+        sharedPreferences.edit()
+            .putInt("hide_networks_unseen_for_hours", hours)
+            .apply()
+    }
+
+    // Clear all data function
+    fun clearAllData() {
+        viewModelScope.launch {
+            try {
+                // Clear all SharedPreferences
+                sharedPreferences.edit().clear().apply()
+                
+                // Clear working passwords SharedPreferences
+                val workingPasswordsPrefs = getApplication<Application>().getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+                workingPasswordsPrefs.edit().clear().apply()
+                
+                // Clear all pinned networks from database
+                managePinnedNetworksUseCase.clearAllPinnedNetworks()
+                
+                // Clear current networks list
+                scanWifiNetworksUseCase.clearNetworks()
+                
+                // Reset all state flows to default values
+                _passwords.value = emptyList()
+                _ssidFilter.value = ""
+                _securityFilter.value = emptySet()
+                _rssiThreshold.value = "-70"
+                _bssidFilter.value = ""
+                _maxRetries.value = 3
+                _connectionTimeoutSeconds.value = 10
+                _rssiThresholdForConnection.value = -70
+                _hideNetworksUnseenForHours.value = 24
+                _isBackgroundScanningEnabled.value = false
+                _backgroundScanIntervalMinutes.value = 15
+                _isAutoUploadEnabled.value = true
+                
+                // Update ConnectionManager with empty passwords
+                connectToNetworkUseCase.updatePasswordsFromSettings(emptyList())
+                
+            } catch (e: Exception) {
+                // Handle error if needed
+                _uploadStatus.value = "Error clearing data: ${e.message}"
+            }
+        }
+    }
+
     // Legacy functions for backward compatibility
     fun shareCsv(context: Context) {
         exportWifiNetworks(context, ExportFormat.CSV, ExportAction.SHARE_ONLY)
@@ -420,4 +515,99 @@ class MainViewModel @Inject constructor(
     fun sharePinnedNetwork(context: Context, network: PinnedNetwork) {
         exportPinnedNetwork(context, network, ExportFormat.CSV, ExportAction.SHARE_ONLY)
     }
+
+    // Periodic network cleanup
+    private fun startPeriodicNetworkCleanup() {
+        viewModelScope.launch {
+            while (true) {
+                delay(30 * 60 * 1000L) // Run every 30 minutes
+                try {
+                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForHours.value)
+                } catch (e: Exception) {
+                    // Silently handle cleanup errors
+                }
+            }
+        }
+    }
+
+    // Filter persistence
+    private fun saveFiltersToPreferences() {
+        sharedPreferences.edit()
+            .putString("ssid_filter", _ssidFilter.value)
+            .putStringSet("security_filter", _securityFilter.value)
+            .putString("rssi_threshold", _rssiThreshold.value)
+            .putString("bssid_filter", _bssidFilter.value)
+            .apply()
+    }
+
+    private fun loadFiltersFromPreferences() {
+        _ssidFilter.value = sharedPreferences.getString("ssid_filter", "") ?: ""
+        _securityFilter.value = sharedPreferences.getStringSet("security_filter", emptySet()) ?: emptySet()
+        _rssiThreshold.value = sharedPreferences.getString("rssi_threshold", "-70") ?: "-70"
+        _bssidFilter.value = sharedPreferences.getString("bssid_filter", "") ?: ""
+    }
+
+    // Filtering logic
+    private fun applyFilters(
+        networks: List<WifiNetwork>,
+        ssidFilter: String,
+        securityFilter: Set<String>,
+        rssiThreshold: String,
+        bssidFilter: String
+    ): List<WifiNetwork> {
+        return networks.filter { network ->
+            // SSID Filter - partial match (case insensitive)
+            val ssidMatch = if (ssidFilter.isBlank()) {
+                true
+            } else {
+                network.ssid.contains(ssidFilter, ignoreCase = true)
+            }
+
+            // Security Filter - multi-select match
+            val securityMatch = if (securityFilter.isEmpty()) {
+                true
+            } else {
+                securityFilter.any { filterType ->
+                    network.security.contains(filterType, ignoreCase = true)
+                }
+            }
+
+            // RSSI Threshold Filter
+            val rssiMatch = try {
+                val threshold = rssiThreshold.toIntOrNull() ?: -70
+                network.rssi >= threshold
+            } catch (e: Exception) {
+                true // If parsing fails, don't filter
+            }
+
+            // BSSID Filter - supports comma-separated list and partial matches
+            val bssidMatch = if (bssidFilter.isBlank()) {
+                true
+            } else {
+                val bssidFilters = bssidFilter.split(",").map { it.trim() }
+                bssidFilters.any { filter ->
+                    if (filter.isNotBlank()) {
+                        network.bssid.contains(filter, ignoreCase = true)
+                    } else {
+                        true
+                    }
+                }
+            }
+
+            ssidMatch && securityMatch && rssiMatch && bssidMatch
+        }
+    }
+
+    // Available security types for filtering
+    val availableSecurityTypes = listOf(
+        "WPA3",
+        "WPA2", 
+        "WPA",
+        "WEP",
+        "OPEN",
+        "OWE",
+        "SAE",
+        "PSK",
+        "EAP"
+    )
 }

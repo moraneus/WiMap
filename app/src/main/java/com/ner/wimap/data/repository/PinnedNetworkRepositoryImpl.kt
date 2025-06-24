@@ -93,4 +93,13 @@ class PinnedNetworkRepositoryImpl @Inject constructor(
             kotlin.Result.failure(e)
         }
     }
+    
+    override suspend fun clearAllPinnedNetworks(): kotlin.Result<Unit> {
+        return try {
+            pinnedNetworkDao.deleteAllPinnedNetworks()
+            kotlin.Result.success(Unit)
+        } catch (e: Exception) {
+            kotlin.Result.failure(e)
+        }
+    }
 }

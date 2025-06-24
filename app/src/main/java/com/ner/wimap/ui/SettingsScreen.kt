@@ -1,7 +1,9 @@
 package com.ner.wimap.ui
 
+import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -14,6 +16,13 @@ import androidx.compose.material.icons.filled.FilterList
 import androidx.compose.material.icons.filled.Security
 import androidx.compose.material.icons.filled.Password
 import androidx.compose.material.icons.filled.Construction
+import androidx.compose.material.icons.filled.DeleteSweep
+import androidx.compose.material.icons.filled.Warning
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Info
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,18 +31,24 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.Dialog
 
 @Composable
 fun SettingsScreen(
     ssidFilter: String,
     onSsidFilterChange: (String) -> Unit,
-    securityFilter: String,
-    onSecurityFilterChange: (String) -> Unit,
+    securityFilter: Set<String>,
+    onSecurityFilterChange: (Set<String>) -> Unit,
     rssiThreshold: String,
     onRssiThresholdChange: (String) -> Unit,
+    bssidFilter: String = "",
+    onBssidFilterChange: (String) -> Unit = {},
+    availableSecurityTypes: List<String> = emptyList(),
     passwords: List<String>,
     onAddPassword: (String) -> Unit,
     onRemovePassword: (String) -> Unit,
@@ -43,6 +58,9 @@ fun SettingsScreen(
     onConnectionTimeoutChange: (Int) -> Unit,
     rssiThresholdForConnection: Int,
     onRssiThresholdForConnectionChange: (Int) -> Unit,
+    hideNetworksUnseenForHours: Int,
+    onHideNetworksUnseenForHoursChange: (Int) -> Unit,
+    onClearAllData: () -> Unit,
     onBack: () -> Unit
 ) {
     var newPassword by remember { mutableStateOf("") }
@@ -52,54 +70,8 @@ fun SettingsScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        // Custom compact top bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .background(Color(0xFF667eea))
-                .padding(top = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            Color.White.copy(alpha = 0.2f),
-                            RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-
-                Text(
-                    "Settings",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.White
-                )
-            }
-        }
+        // Modern Material 3 Settings Top Bar
+        ModernSettingsTopBar(onBack = onBack)
 
         // Content
         LazyColumn(
@@ -128,18 +100,23 @@ fun SettingsScreen(
                                 placeholder = "Enter network name to filter"
                             )
 
-                            ModernTextField(
-                                value = securityFilter,
-                                onValueChange = onSecurityFilterChange,
-                                label = "Security Type Filter",
-                                placeholder = "e.g., WPA2, WPA3, OPEN"
+                            // BSSID Filter with info icon
+                            BssidFilterSection(
+                                value = bssidFilter,
+                                onValueChange = onBssidFilterChange
                             )
 
-                            ModernTextField(
-                                value = rssiThreshold,
-                                onValueChange = onRssiThresholdChange,
-                                label = "Min RSSI Threshold (dBm)",
-                                placeholder = "e.g., -70"
+                            // Modern expandable multi-select Security Filter
+                            ModernSecurityFilterSection(
+                                selectedTypes = securityFilter,
+                                availableTypes = availableSecurityTypes,
+                                onSelectionChange = onSecurityFilterChange
+                            )
+
+                            // RSSI Threshold Slider (matching connection style)
+                            RssiThresholdSliderSection(
+                                rssiThreshold = rssiThreshold,
+                                onRssiThresholdChange = onRssiThresholdChange
                             )
                         }
                     }
@@ -309,6 +286,46 @@ fun SettingsScreen(
                                     }
                                 }
                             }
+                        }
+                    }
+                )
+            }
+
+            // Network Management Section
+            item {
+                ModernSettingsCategoryCard(
+                    icon = Icons.Default.FilterList,
+                    title = "Network Management",
+                    subtitle = "Automatic network cleanup settings",
+                    gradientColors = listOf(Color(0xFF667eea), Color(0xFF764ba2)),
+                    content = {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Hide networks unseen for X seconds (30s to 1 hour)
+                            HideUnseenNetworksSection(
+                                hideNetworksUnseenForHours = hideNetworksUnseenForHours,
+                                onHideNetworksUnseenForHoursChange = onHideNetworksUnseenForHoursChange
+                            )
+                        }
+                    }
+                )
+            }
+
+            // Data Management Section
+            item {
+                ModernSettingsCategoryCard(
+                    icon = Icons.Default.DeleteSweep,
+                    title = "Data Management",
+                    subtitle = "Clear all stored data and settings",
+                    gradientColors = listOf(Color(0xFFE74C3C), Color(0xFFC0392B)),
+                    content = {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            ClearAllDataSection(onClearAllData = onClearAllData)
                         }
                     }
                 )
@@ -493,6 +510,139 @@ fun ModernPasswordItem(
 }
 
 @Composable
+fun ClearAllDataSection(onClearAllData: () -> Unit) {
+    var showConfirmDialog by remember { mutableStateOf(false) }
+
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        // Warning text
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Warning,
+                contentDescription = null,
+                tint = Color(0xFFF39C12),
+                modifier = Modifier.size(24.dp)
+            )
+            Text(
+                text = "This action will permanently delete all your data",
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontWeight = FontWeight.Medium
+                ),
+                color = Color(0xFF2C3E50)
+            )
+        }
+
+        // Description
+        Text(
+            text = "• All saved passwords\n• All pinned networks\n• Connection history\n• App settings and preferences",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF7F8C8D),
+            modifier = Modifier.padding(start = 36.dp)
+        )
+
+        // Clear All button
+        Button(
+            onClick = { showConfirmDialog = true },
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp),
+            colors = ButtonDefaults.buttonColors(
+                containerColor = Color(0xFFE74C3C)
+            ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.DeleteSweep,
+                    contentDescription = null,
+                    tint = Color.White,
+                    modifier = Modifier.size(24.dp)
+                )
+                Text(
+                    text = "Clear All Data",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color.White
+                )
+            }
+        }
+    }
+
+    // Confirmation dialog
+    if (showConfirmDialog) {
+        AlertDialog(
+            onDismissRequest = { showConfirmDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Warning,
+                    contentDescription = null,
+                    tint = Color(0xFFE74C3C),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "Clear All Data",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xFF2C3E50)
+                )
+            },
+            text = {
+                Text(
+                    text = "This will erase all saved data (passwords, pinned networks, etc.). Continue?",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = Color(0xFF7F8C8D)
+                )
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        showConfirmDialog = false
+                        onClearAllData()
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Color(0xFFE74C3C)
+                    ),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Erase All",
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            },
+            dismissButton = {
+                TextButton(
+                    onClick = { showConfirmDialog = false },
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Text(
+                        text = "Cancel",
+                        color = Color(0xFF7F8C8D),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White
+        )
+    }
+}
+
+@Composable
 fun EmptyPasswordsState() {
     Column(
         modifier = Modifier
@@ -518,6 +668,805 @@ fun EmptyPasswordsState() {
             text = "Add passwords above to store them securely",
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFFBDC3C7)
+        )
+    }
+}
+
+@Composable
+fun SecurityFilterSection(
+    selectedTypes: Set<String>,
+    availableTypes: List<String>,
+    onSelectionChange: (Set<String>) -> Unit
+) {
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Security Type Filter",
+            style = MaterialTheme.typography.labelMedium.copy(
+                fontWeight = FontWeight.Medium
+            ),
+            color = Color(0xFF7F8C8D)
+        )
+        
+        if (availableTypes.isEmpty()) {
+            Text(
+                text = "No security types available",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFFBDC3C7),
+                modifier = Modifier.padding(8.dp)
+            )
+        } else {
+            // Multi-select chips
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(max = 200.dp)
+                    .border(
+                        1.dp,
+                        Color(0xFFE0E6ED),
+                        RoundedCornerShape(16.dp)
+                    )
+                    .padding(12.dp),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                items(availableTypes) { securityType ->
+                    SecurityTypeChip(
+                        securityType = securityType,
+                        isSelected = selectedTypes.contains(securityType),
+                        onToggle = { isSelected ->
+                            val newSelection = if (isSelected) {
+                                selectedTypes + securityType
+                            } else {
+                                selectedTypes - securityType
+                            }
+                            onSelectionChange(newSelection)
+                        }
+                    )
+                }
+            }
+        }
+        
+        // Show selected count
+        if (selectedTypes.isNotEmpty()) {
+            Text(
+                text = "${selectedTypes.size} security type(s) selected: ${selectedTypes.joinToString(", ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF3498DB)
+            )
+        } else {
+            Text(
+                text = "All security types will be shown",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF7F8C8D)
+            )
+        }
+    }
+}
+
+@Composable
+fun SecurityTypeChip(
+    securityType: String,
+    isSelected: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .clickable { onToggle(!isSelected) }
+            .background(
+                if (isSelected) Color(0xFF3498DB).copy(alpha = 0.1f) else Color.Transparent
+            )
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = onToggle,
+            colors = CheckboxDefaults.colors(
+                checkedColor = Color(0xFF3498DB),
+                uncheckedColor = Color(0xFF7F8C8D)
+            )
+        )
+        
+        Text(
+            text = securityType,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            ),
+            color = if (isSelected) Color(0xFF3498DB) else Color(0xFF2C3E50),
+            modifier = Modifier.weight(1f)
+        )
+        
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Selected",
+                tint = Color(0xFF3498DB),
+                modifier = Modifier.size(16.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun BssidFilterSection(
+    value: String,
+    onValueChange: (String) -> Unit
+) {
+    var showInfoDialog by remember { mutableStateOf(false) }
+    
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text(
+                text = "BSSID Filter",
+                style = MaterialTheme.typography.labelMedium.copy(
+                    fontWeight = FontWeight.Medium
+                ),
+                color = Color(0xFF7F8C8D),
+                modifier = Modifier.weight(1f)
+            )
+            
+            IconButton(
+                onClick = { showInfoDialog = true },
+                modifier = Modifier.size(24.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "BSSID Filter Info",
+                    tint = Color(0xFF3498DB),
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+        }
+        
+        OutlinedTextField(
+            value = value,
+            onValueChange = onValueChange,
+            placeholder = {
+                Text(
+                    "Enter BSSID(s) separated by commas",
+                    color = Color(0xFFBDC3C7)
+                )
+            },
+            shape = RoundedCornerShape(16.dp),
+            colors = OutlinedTextFieldDefaults.colors(
+                focusedBorderColor = Color(0xFF3498DB),
+                unfocusedBorderColor = Color(0xFFE0E6ED),
+                focusedLabelColor = Color(0xFF3498DB),
+                unfocusedLabelColor = Color(0xFF7F8C8D)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+    }
+    
+    // Info Dialog
+    if (showInfoDialog) {
+        AlertDialog(
+            onDismissRequest = { showInfoDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = null,
+                    tint = Color(0xFF3498DB),
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = {
+                Text(
+                    text = "BSSID Filter Usage",
+                    style = MaterialTheme.typography.titleLarge.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xFF2C3E50)
+                )
+            },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Enter one or more BSSIDs (MAC addresses), separated by commas.",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Color(0xFF2C3E50)
+                    )
+                    Text(
+                        text = "Example:",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = Color(0xFF2C3E50)
+                    )
+                    Text(
+                        text = "00:11:22:33:44:55, 66:77:88:99:AA:BB",
+                        style = MaterialTheme.typography.bodyMedium.copy(
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = Color(0xFF3498DB)
+                    )
+                    Text(
+                        text = "• Partial matches are supported\n• Case insensitive\n• Only networks matching any of the specified BSSIDs will be shown",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF7F8C8D)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = { showInfoDialog = false }
+                ) {
+                    Text(
+                        text = "Got it",
+                        color = Color(0xFF3498DB),
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            },
+            shape = RoundedCornerShape(24.dp),
+            containerColor = Color.White
+        )
+    }
+}
+
+@Composable
+fun ModernSecurityFilterSection(
+    selectedTypes: Set<String>,
+    availableTypes: List<String>,
+    onSelectionChange: (Set<String>) -> Unit
+) {
+    var isExpanded by remember { mutableStateOf(false) }
+    
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        // Header with expand/collapse
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { isExpanded = !isExpanded },
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = if (selectedTypes.isNotEmpty()) 
+                    Color(0xFF3498DB).copy(alpha = 0.1f) 
+                else 
+                    Color(0xFFF8F9FA)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Security Type Filter",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = Color(0xFF2C3E50)
+                    )
+                    Text(
+                        text = if (selectedTypes.isEmpty()) {
+                            "All security types"
+                        } else {
+                            "${selectedTypes.size} type(s) selected"
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (selectedTypes.isNotEmpty()) Color(0xFF3498DB) else Color(0xFF7F8C8D)
+                    )
+                }
+                
+                Icon(
+                    imageVector = if (isExpanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = if (isExpanded) "Collapse" else "Expand",
+                    tint = Color(0xFF3498DB),
+                    modifier = Modifier.size(24.dp)
+                )
+            }
+        }
+        
+        // Expandable content
+        if (isExpanded && availableTypes.isNotEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(containerColor = Color.White),
+                elevation = CardDefaults.cardElevation(defaultElevation = 4.dp)
+            ) {
+                LazyColumn(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .heightIn(max = 250.dp)
+                        .padding(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    items(availableTypes) { securityType ->
+                        ModernSecurityTypeChip(
+                            securityType = securityType,
+                            isSelected = selectedTypes.contains(securityType),
+                            onToggle = { isSelected ->
+                                val newSelection = if (isSelected) {
+                                    selectedTypes + securityType
+                                } else {
+                                    selectedTypes - securityType
+                                }
+                                onSelectionChange(newSelection)
+                            }
+                        )
+                    }
+                }
+            }
+        }
+        
+        // Selected types summary
+        if (selectedTypes.isNotEmpty()) {
+            Text(
+                text = "Selected: ${selectedTypes.joinToString(", ")}",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF3498DB),
+                modifier = Modifier.padding(horizontal = 4.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun ModernSecurityTypeChip(
+    securityType: String,
+    isSelected: Boolean,
+    onToggle: (Boolean) -> Unit
+) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .clickable { onToggle(!isSelected) }
+            .background(
+                if (isSelected) Color(0xFF3498DB).copy(alpha = 0.1f) else Color.Transparent
+            )
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Checkbox(
+            checked = isSelected,
+            onCheckedChange = onToggle,
+            colors = CheckboxDefaults.colors(
+                checkedColor = Color(0xFF3498DB),
+                uncheckedColor = Color(0xFF7F8C8D),
+                checkmarkColor = Color.White
+            )
+        )
+        
+        Text(
+            text = securityType,
+            style = MaterialTheme.typography.bodyMedium.copy(
+                fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
+            ),
+            color = if (isSelected) Color(0xFF3498DB) else Color(0xFF2C3E50),
+            modifier = Modifier.weight(1f)
+        )
+        
+        if (isSelected) {
+            Icon(
+                imageVector = Icons.Default.Check,
+                contentDescription = "Selected",
+                tint = Color(0xFF3498DB),
+                modifier = Modifier.size(18.dp)
+            )
+        }
+    }
+}
+
+@Composable
+fun RssiThresholdSliderSection(
+    rssiThreshold: String,
+    onRssiThresholdChange: (String) -> Unit
+) {
+    val currentRssi = rssiThreshold.toIntOrNull() ?: -70
+    
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        Text(
+            text = "Min RSSI Threshold: ${currentRssi}dBm",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Color(0xFF2C3E50)
+        )
+        
+        Slider(
+            value = currentRssi.toFloat(),
+            onValueChange = { newValue ->
+                onRssiThresholdChange(newValue.toInt().toString())
+            },
+            valueRange = -100f..0f,
+            steps = 99, // 1 dBm steps
+            colors = SliderDefaults.colors(
+                thumbColor = Color(0xFF667eea),
+                activeTrackColor = Color(0xFF764ba2),
+                inactiveTrackColor = Color(0xFFE0E6ED)
+            ),
+            modifier = Modifier.fillMaxWidth()
+        )
+        
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = "-100dBm",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF7F8C8D)
+            )
+            Text(
+                text = "0dBm",
+                style = MaterialTheme.typography.bodySmall,
+                color = Color(0xFF7F8C8D)
+            )
+        }
+        
+        Text(
+            text = "Networks with signal strength below this threshold will be filtered out",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF7F8C8D)
+        )
+    }
+}
+
+@Composable
+fun HideUnseenNetworksSection(
+    hideNetworksUnseenForHours: Int,
+    onHideNetworksUnseenForHoursChange: (Int) -> Unit
+) {
+    // Handle the conversion from the legacy hours system to seconds
+    // If the value is negative, it's already in seconds (our new encoding)
+    // If positive, it's in hours and needs conversion
+    val currentSeconds = if (hideNetworksUnseenForHours < 0) {
+        // Already stored as seconds (negative encoding)
+        (-hideNetworksUnseenForHours).coerceIn(30, 600)
+    } else if (hideNetworksUnseenForHours == 0) {
+        // Default to 120 seconds (2 minutes)
+        120
+    } else {
+        // Convert from hours to seconds, but clamp to our new range
+        (hideNetworksUnseenForHours * 3600).coerceIn(30, 600)
+    }
+    
+    Column(
+        modifier = Modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // Title with current value prominently displayed
+        Text(
+            text = "Hide networks not seen in the last: ${currentSeconds} seconds",
+            style = MaterialTheme.typography.titleSmall.copy(
+                fontWeight = FontWeight.SemiBold
+            ),
+            color = Color(0xFF2C3E50)
+        )
+        
+        // Enhanced slider with tick marks
+        Column(
+            modifier = Modifier.fillMaxWidth(),
+            verticalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            Slider(
+                value = currentSeconds.toFloat(),
+                onValueChange = { newSeconds ->
+                    // Round to nearest 10-second increment
+                    val roundedSeconds = (newSeconds / 10).toInt() * 10
+                    // Store as negative value to indicate it's in seconds
+                    onHideNetworksUnseenForHoursChange(-roundedSeconds)
+                },
+                valueRange = 30f..600f, // 30 seconds to 10 minutes
+                steps = 56, // (600-30)/10 - 1 = 56 steps for 10-second intervals
+                colors = SliderDefaults.colors(
+                    thumbColor = Color(0xFF764ba2),
+                    activeTrackColor = Color(0xFF667eea),
+                    inactiveTrackColor = Color(0xFFE0E6ED)
+                ),
+                modifier = Modifier.fillMaxWidth()
+            )
+            
+            // Tick marks and labels
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween
+            ) {
+                // Major tick labels
+                listOf(30, 60, 120, 180, 300, 600).forEach { seconds ->
+                    Text(
+                        text = formatSecondsCompact(seconds),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = if (currentSeconds == seconds) Color(0xFF3498DB) else Color(0xFF7F8C8D),
+                        fontWeight = if (currentSeconds == seconds) FontWeight.SemiBold else FontWeight.Normal
+                    )
+                }
+            }
+        }
+        
+        // Visual tick marks
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(8.dp)
+                .padding(horizontal = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            // Create tick marks for every 30 seconds
+            for (i in 0..19) { // 20 major ticks from 30s to 600s
+                val tickSeconds = 30 + (i * 30)
+                Box(
+                    modifier = Modifier
+                        .width(2.dp)
+                        .height(if (tickSeconds % 60 == 0) 8.dp else 4.dp) // Taller ticks for minutes
+                        .background(
+                            color = if (currentSeconds >= tickSeconds) Color(0xFF667eea) else Color(0xFFE0E6ED),
+                            shape = RoundedCornerShape(1.dp)
+                        )
+                )
+            }
+        }
+        
+        // Current selection highlight
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = Color(0xFF3498DB).copy(alpha = 0.1f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.FilterList,
+                    contentDescription = null,
+                    tint = Color(0xFF3498DB),
+                    modifier = Modifier.size(20.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Current Setting",
+                        style = MaterialTheme.typography.labelMedium.copy(
+                            fontWeight = FontWeight.Medium
+                        ),
+                        color = Color(0xFF3498DB)
+                    )
+                    Text(
+                        text = "Networks will be hidden after ${formatSecondsDetailed(currentSeconds)} of inactivity",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF2C3E50)
+                    )
+                }
+            }
+        }
+        
+        Text(
+            text = "Networks not seen for this duration will be automatically removed from the list in real time",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF7F8C8D)
+        )
+    }
+}
+
+private fun formatDuration(seconds: Int): String {
+    return when {
+        seconds < 60 -> "${seconds}s"
+        seconds < 3600 -> {
+            val minutes = seconds / 60
+            val remainingSeconds = seconds % 60
+            if (remainingSeconds == 0) {
+                "${minutes}m"
+            } else {
+                "${minutes}m ${remainingSeconds}s"
+            }
+        }
+        else -> {
+            val hours = seconds / 3600
+            val remainingMinutes = (seconds % 3600) / 60
+            if (remainingMinutes == 0) {
+                "${hours}h"
+            } else {
+                "${hours}h ${remainingMinutes}m"
+            }
+        }
+    }
+}
+
+private fun formatSecondsCompact(seconds: Int): String {
+    return when {
+        seconds < 60 -> "${seconds}s"
+        seconds % 60 == 0 -> "${seconds / 60}m"
+        else -> {
+            val minutes = seconds / 60
+            val remainingSeconds = seconds % 60
+            "${minutes}m${remainingSeconds}s"
+        }
+    }
+}
+
+private fun formatSecondsDetailed(seconds: Int): String {
+    return when {
+        seconds < 60 -> "$seconds seconds"
+        seconds == 60 -> "1 minute"
+        seconds % 60 == 0 -> "${seconds / 60} minutes"
+        else -> {
+            val minutes = seconds / 60
+            val remainingSeconds = seconds % 60
+            "$minutes minutes and $remainingSeconds seconds"
+        }
+    }
+}
+
+@Composable
+fun ModernSettingsTopBar(onBack: () -> Unit) {
+    // Animated gradient colors
+    val infiniteTransition = rememberInfiniteTransition(label = "settings_gradient")
+    val animatedOffset by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(4000, easing = LinearEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "settings_gradient_offset"
+    )
+    
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .shadow(
+                elevation = 8.dp,
+                shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+                ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
+            ),
+        shape = RoundedCornerShape(bottomStart = 24.dp, bottomEnd = 24.dp),
+        tonalElevation = 6.dp
+    ) {
+        Box(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(
+                    brush = Brush.horizontalGradient(
+                        colors = listOf(
+                            Color(0xFF667eea).copy(alpha = 0.9f + animatedOffset * 0.1f),
+                            Color(0xFF764ba2).copy(alpha = 0.9f + animatedOffset * 0.1f),
+                            Color(0xFF667eea).copy(alpha = 0.9f + animatedOffset * 0.1f)
+                        ),
+                        startX = animatedOffset * 300f,
+                        endX = (animatedOffset + 1f) * 300f
+                    )
+                )
+                .padding(top = 24.dp) // Status bar padding
+        ) {
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(64.dp)
+                    .padding(horizontal = 20.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Back button with animation
+                ModernBackButton(onClick = onBack)
+                
+                // Settings icon with pulse animation
+                AnimatedSettingsIcon()
+                
+                // Title section
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Settings",
+                        style = MaterialTheme.typography.headlineSmall.copy(
+                            fontWeight = FontWeight.ExtraBold
+                        ),
+                        color = Color.White
+                    )
+                    Text(
+                        text = "Customize your experience",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = Color.White.copy(alpha = 0.8f)
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ModernBackButton(onClick: () -> Unit) {
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "back_button_scale"
+    )
+    
+    Surface(
+        onClick = {
+            isPressed = true
+            onClick()
+            isPressed = false
+        },
+        modifier = Modifier
+            .size(48.dp)
+            .graphicsLayer {
+                scaleX = scale
+                scaleY = scale
+            },
+        shape = RoundedCornerShape(14.dp),
+        color = Color.White.copy(alpha = 0.15f),
+        tonalElevation = 2.dp
+    ) {
+        Box(
+            contentAlignment = Alignment.Center,
+            modifier = Modifier.fillMaxSize()
+        ) {
+            Icon(
+                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                tint = Color.White,
+                modifier = Modifier.size(24.dp)
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnimatedSettingsIcon() {
+    val infiniteTransition = rememberInfiniteTransition(label = "settings_rotation")
+    val rotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(8000, easing = LinearEasing),
+            repeatMode = RepeatMode.Restart
+        ),
+        label = "settings_rotation"
+    )
+    
+    Box(
+        modifier = Modifier
+            .size(48.dp)
+            .background(
+                Color.White.copy(alpha = 0.15f),
+                RoundedCornerShape(16.dp)
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.Settings,
+            contentDescription = null,
+            tint = Color.White,
+            modifier = Modifier
+                .size(28.dp)
+                .graphicsLayer {
+                    rotationZ = rotation
+                }
         )
     }
 }

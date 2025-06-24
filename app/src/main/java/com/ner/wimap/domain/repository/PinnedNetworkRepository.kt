@@ -11,4 +11,5 @@ interface PinnedNetworkRepository {
     suspend fun deletePinnedNetwork(network: PinnedNetwork): kotlin.Result<Unit>
     suspend fun updateNetworkData(network: WifiNetwork, comment: String?, password: String?, photoUri: String?): kotlin.Result<Unit>
     suspend fun updatePinnedNetwork(network: PinnedNetwork): kotlin.Result<Unit>
+    suspend fun clearAllPinnedNetworks(): kotlin.Result<Unit>
 }

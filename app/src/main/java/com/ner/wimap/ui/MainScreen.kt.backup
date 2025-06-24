@@ -32,7 +32,6 @@ import com.ner.wimap.ui.viewmodel.ExportAction
 fun MainScreen(
     wifiNetworks: List<WifiNetwork>,
     isScanning: Boolean,
-    hasEverScanned: Boolean,
     connectionStatus: String?,
     uploadStatus: String?,
     showPasswordDialog: Boolean,
@@ -119,67 +118,50 @@ fun MainScreen(
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
         ) { innerPadding ->
-            // Show empty state animation when no networks are found
-            if (wifiNetworks.isEmpty()) {
-                // Determine the appropriate status text based on app state
-                val statusText = when {
-                    !hasEverScanned -> "Tap Start to discover nearby Wi-Fi networks."
-                    isScanning -> "Scanning..."
-                    else -> "No Wi-Fi networks found nearby."
-                }
-                
-                EmptyNetworksAnimation(
-                    statusText = statusText,
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                )
-            } else {
-                LazyColumn(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .padding(innerPadding)
-                        .padding(horizontal = 20.dp)
-                        .padding(top = 20.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    item {
-                        key("network_count_${wifiNetworks.size}") {
-                            NetworkCountHeader(
-                                networkCount = wifiNetworks.size,
-                                networksWithLocationCount = wifiNetworks.count {
-                                    it.latitude != null && it.longitude != null &&
-                                            it.latitude != 0.0 && it.longitude != 0.0
-                                }
-                            )
+            LazyColumn(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(innerPadding)
+                .padding(horizontal = 20.dp)
+                .padding(top = 20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            item {
+                key("network_count_${wifiNetworks.size}") {
+                    NetworkCountHeader(
+                        networkCount = wifiNetworks.size,
+                        networksWithLocationCount = wifiNetworks.count {
+                            it.latitude != null && it.longitude != null &&
+                                    it.latitude != 0.0 && it.longitude != 0.0
                         }
-                    }
-
-                    items(
-                        items = wifiNetworks,
-                        key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
-                    ) { network ->
-                        WifiNetworkCard(
-                            network = network,
-                            onConnectClicked = { onConnect(network) },
-                            pinnedNetworks = pinnedNetworks,
-                            onPinNetwork = onPinNetwork,
-                            onUnpinNetwork = onUnpinNetwork,
-                            isConnecting = connectingNetworks.contains(network.bssid),
-                            successfulPasswords = successfulPasswords,
-                            onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
-                                onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
-                            }
-                        )
-                    }
-
-                    item {
-                        key("bottom_spacer") {
-                            Spacer(modifier = Modifier.height(100.dp))
-                        }
-                    }
+                    )
                 }
             }
+
+            items(
+                items = wifiNetworks,
+                key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
+            ) { network ->
+                WifiNetworkCard(
+                    network = network,
+                    onConnectClicked = { onConnect(network) },
+                    pinnedNetworks = pinnedNetworks,
+                    onPinNetwork = onPinNetwork,
+                    onUnpinNetwork = onUnpinNetwork,
+                    isConnecting = connectingNetworks.contains(network.bssid),
+                    successfulPasswords = successfulPasswords,
+                    onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
+                        onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
+                    }
+                )
+            }
+
+            item {
+                key("bottom_spacer") {
+                    Spacer(modifier = Modifier.height(100.dp))
+                }
+            }
+        }
         }
 
         // Sticky Dialogs - positioned directly below the top app bar
