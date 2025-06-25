@@ -122,6 +122,8 @@ class ConnectionManager(
                 var connected = false
                 val maxRetries = _maxRetries.value
                 val timeoutSeconds = _connectionTimeoutSeconds.value
+                
+                // Calculate total attempts: each password gets exactly maxRetries attempts
                 _totalAttempts.value = storedPasswords.size * maxRetries
 
                 var attemptCount = 0
@@ -131,6 +133,7 @@ class ConnectionManager(
                     _currentPassword.value = password
                     _connectionProgress.value = "Trying password ${index + 1}/${storedPasswords.size} for ${network.ssid}..."
 
+                    // Each password gets exactly maxRetries attempts, no more, no less
                     for (retry in 1..maxRetries) {
                         if (!isActive) break // Check for cancellation
                         
@@ -161,6 +164,7 @@ class ConnectionManager(
                             delay(1000)
                             break
                         } else {
+                            // Only show retry message if we have more attempts left for this password
                             if (retry < maxRetries) {
                                 _connectionProgress.value = "❌ Wrong password '$password', retrying in 2s..."
                                 delay(2000)
@@ -170,6 +174,9 @@ class ConnectionManager(
                             }
                         }
                     }
+                    
+                    // If connected, break out of password loop
+                    if (connected) break
                 }
 
                 if (!connected) {

@@ -405,18 +405,11 @@ class MainViewModel @Inject constructor(
     val hideNetworksUnseenForHours: StateFlow<Int> = _hideNetworksUnseenForHours.asStateFlow()
 
     init {
-        // Load passwords from SharedPreferences on initialization
+        // Load all settings from SharedPreferences on initialization
         loadPasswordsFromPreferences()
-        
-        // Load filters from SharedPreferences
         loadFiltersFromPreferences()
-        
-        // Load hide networks setting from SharedPreferences
-        val savedHideNetworksHours = sharedPreferences.getInt("hide_networks_unseen_for_hours", 24)
-        // Load sorting preferences
+        loadConnectionSettingsFromPreferences()
         loadSortingFromPreferences()
-        
-        _hideNetworksUnseenForHours.value = savedHideNetworksHours
         
         // Start periodic cleanup of stale networks
         startPeriodicNetworkCleanup()
@@ -468,23 +461,47 @@ class MainViewModel @Inject constructor(
     }
 
     fun setMaxRetries(retries: Int) {
-        _maxRetries.value = retries
+        _maxRetries.value = retries.coerceIn(1, 10)
+        saveConnectionSettingsToPreferences()
+        // Update ConnectionManager with new settings
+        viewModelScope.launch {
+            connectToNetworkUseCase.updateConnectionSettings(
+                maxRetries = _maxRetries.value,
+                timeoutSeconds = _connectionTimeoutSeconds.value,
+                rssiThreshold = _rssiThresholdForConnection.value
+            )
+        }
     }
 
     fun setConnectionTimeoutSeconds(timeout: Int) {
-        _connectionTimeoutSeconds.value = timeout
+        _connectionTimeoutSeconds.value = timeout.coerceIn(5, 60)
+        saveConnectionSettingsToPreferences()
+        // Update ConnectionManager with new settings
+        viewModelScope.launch {
+            connectToNetworkUseCase.updateConnectionSettings(
+                maxRetries = _maxRetries.value,
+                timeoutSeconds = _connectionTimeoutSeconds.value,
+                rssiThreshold = _rssiThresholdForConnection.value
+            )
+        }
     }
 
     fun setRssiThresholdForConnection(threshold: Int) {
-        _rssiThresholdForConnection.value = threshold
+        _rssiThresholdForConnection.value = threshold.coerceIn(-100, -30)
+        saveConnectionSettingsToPreferences()
+        // Update ConnectionManager with new settings
+        viewModelScope.launch {
+            connectToNetworkUseCase.updateConnectionSettings(
+                maxRetries = _maxRetries.value,
+                timeoutSeconds = _connectionTimeoutSeconds.value,
+                rssiThreshold = _rssiThresholdForConnection.value
+            )
+        }
     }
 
     fun setHideNetworksUnseenForHours(hours: Int) {
         _hideNetworksUnseenForHours.value = hours
-        // Save to SharedPreferences
-        sharedPreferences.edit()
-            .putInt("hide_networks_unseen_for_hours", hours)
-            .apply()
+        saveConnectionSettingsToPreferences()
     }
 
     // Clear all data function
@@ -660,5 +677,31 @@ class MainViewModel @Inject constructor(
         } catch (e: IllegalArgumentException) {
             SortingMode.LAST_SEEN
         }
+    }
+
+    // Connection settings persistence
+    private fun loadConnectionSettingsFromPreferences() {
+        _maxRetries.value = sharedPreferences.getInt("max_retries", 3).coerceIn(1, 10)
+        _connectionTimeoutSeconds.value = sharedPreferences.getInt("connection_timeout_seconds", 10).coerceIn(5, 60)
+        _rssiThresholdForConnection.value = sharedPreferences.getInt("rssi_threshold_for_connection", -70).coerceIn(-100, -30)
+        _hideNetworksUnseenForHours.value = sharedPreferences.getInt("hide_networks_unseen_for_hours", 24)
+        
+        // Update ConnectionManager with loaded settings
+        viewModelScope.launch {
+            connectToNetworkUseCase.updateConnectionSettings(
+                maxRetries = _maxRetries.value,
+                timeoutSeconds = _connectionTimeoutSeconds.value,
+                rssiThreshold = _rssiThresholdForConnection.value
+            )
+        }
+    }
+
+    private fun saveConnectionSettingsToPreferences() {
+        sharedPreferences.edit()
+            .putInt("max_retries", _maxRetries.value)
+            .putInt("connection_timeout_seconds", _connectionTimeoutSeconds.value)
+            .putInt("rssi_threshold_for_connection", _rssiThresholdForConnection.value)
+            .putInt("hide_networks_unseen_for_hours", _hideNetworksUnseenForHours.value)
+            .apply()
     }
 }

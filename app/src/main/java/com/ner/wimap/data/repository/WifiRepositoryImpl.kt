@@ -76,6 +76,12 @@ class WifiRepositoryImpl @Inject constructor(
         connectionManager.updatePasswordsFromSettings(passwords)
     }
 
+    override suspend fun updateConnectionSettings(maxRetries: Int, timeoutSeconds: Int, rssiThreshold: Int) {
+        connectionManager.setMaxRetries(maxRetries)
+        connectionManager.setConnectionTimeoutSeconds(timeoutSeconds)
+        connectionManager.setRssiThresholdForConnection(rssiThreshold)
+    }
+
     override fun getConnectingNetworkName(): Flow<String?> = connectionManager.connectingNetworkName
 
     override suspend fun removeStaleNetworks(hideNetworksUnseenForHours: Int) {

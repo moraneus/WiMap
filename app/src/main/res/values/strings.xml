@@ -96,7 +96,6 @@
     <string name="configure_connection_behavior">Configure automatic connection behavior</string>
     <string name="max_retries_format">Max Retries: %1$d</string>
     <string name="number_of_attempts_per_password">Number of attempts per password</string>
-    <string name="connection_timeout_format">Connection Timeout: %1$ds</string>
     <string name="seconds_to_wait_per_attempt">Seconds to wait per connection attempt</string>
     <string name="min_rssi_for_connection_format">Min RSSI for Connection: %1$ddBm</string>
     <string name="dont_attempt_weak_signal">Don\'t attempt connection if signal is weaker</string>
@@ -136,8 +135,6 @@
     <string name="password_failed_after_retries_format" formatted="false">❌ Password \'%1$s\' failed after %2$d attempts</string>
     <string name="all_passwords_failed_format">❌ All stored passwords failed for %1$s</string>
     <string name="all_passwords_failed_manual_required">All passwords failed - manual entry required</string>
-    <string name="connection_error_format">Connection error: %1$s</string>
-    <string name="connection_failed_format">Connection failed: %1$s</string>
     <string name="checking_signal_strength_manual">Checking signal strength…</string>
     <string name="trying_manual_password_format" formatted="false">Trying manual password, attempt %1$d/%2$d (timeout: %3$ds)</string>
     <string name="connected_manual_password_format">✅ Connected to %1$s with manual password!</string>
@@ -230,7 +227,6 @@
     <!-- Sticky Dialog Messages -->
     <string name="discovering_networks">Discovering WiFi networks in your area...</string>
     <string name="connecting_to_network">Connecting to Network</string>
-    <string name="attempting_connection_format">Attempting connection with password (%1$d/%2$d)</string>
     <string name="connecting_to_format">Connecting to %1$s...</string>
     <string name="breaking_password_format">Breaking Password for %1$s</string>
     <string name="password_attempt_format_short">Password %1$d/%2$d - Attempt %3$d/%4$d</string>
@@ -315,4 +311,58 @@
     <string name="debug_failed_update_pinned_format">DEBUG: Failed to update pinned network password: %1$s</string>
     <string name="debug_failed_update_firebase_format">DEBUG: Failed to update Firebase with password: %1$s</string>
     <string name="debug_error_update_firebase_format">DEBUG: Error updating Firebase with password: %1$s</string>
+    
+    <!-- Settings Screen Additional Strings -->
+    <string name="data_management">Data Management</string>
+    <string name="clear_all_stored_data">Clear all stored data and settings</string>
+    <string name="network_management">Network Management</string>
+    <string name="automatic_network_cleanup">Automatic network cleanup settings</string>
+    <string name="this_action_will_delete">This action will permanently delete all your data</string>
+    <string name="data_deletion_details">• All saved passwords\n• All pinned networks\n• Connection history\n• App settings and preferences</string>
+    <string name="clear_all_data">Clear All Data</string>
+    <string name="clear_all_data_confirmation">This will erase all saved data (passwords, pinned networks, etc.). Continue?</string>
+    <string name="erase_all">Erase All</string>
+    <string name="bssid_filter">BSSID Filter</string>
+    <string name="enter_bssid_filter">Enter BSSID(s) separated by commas</string>
+    <string name="bssid_filter_usage">BSSID Filter Usage</string>
+    <string name="bssid_filter_description">Enter one or more BSSIDs (MAC addresses), separated by commas.</string>
+    <string name="bssid_filter_example">00:11:22:33:44:55, 66:77:88:99:AA:BB</string>
+    <string name="bssid_filter_notes">• Partial matches are supported\n• Case insensitive\n• Only networks matching any of the specified BSSIDs will be shown</string>
+    <string name="got_it">Got it</string>
+    <string name="all_security_types">All security types</string>
+    <string name="types_selected_format">%1$d type(s) selected</string>
+    <string name="selected_format">Selected: %1$s</string>
+    <string name="expand">Expand</string>
+    <string name="collapse">Collapse</string>
+    <string name="selected">Selected</string>
+    <string name="hide_networks_unseen_format">Hide networks not seen in the last: %1$d seconds</string>
+    <string name="current_setting">Current Setting</string>
+    <string name="networks_hidden_after_format">Networks will be hidden after %1$s of inactivity</string>
+    <string name="networks_removed_automatically">Networks not seen for this duration will be automatically removed from the list in real time</string>
+    <string name="error_clearing_data_format">Error clearing data: %1$s</string>
+    <string name="connection_cancelled_by_user">Connection cancelled by user</string>
+    <string name="working_password_saved">✅ Working password saved for future use</string>
+    <string name="could_not_save_working_password_format">Warning: Could not save working password: %1$s</string>
+    <string name="password_already_validated_format">✅ Password already validated for %1$s</string>
+    <string name="using_previously_validated_password_format">ℹ️ Using previously validated password for %1$s</string>
+    <string name="avoiding_common_default_password">⚠️ Avoiding common/default password for security</string>
+    <string name="use_actual_network_password">❌ Please use the actual network password, not a default one</string>
+    <string name="password_validated_and_saved_format">✅ Password validated and saved for %1$s</string>
+    <string name="connection_successful_password_saved">✅ Connection successful! Password saved for future reference.</string>
+    <string name="connection_timeout_format">❌ Connection timeout after %1$ds</string>
+    <string name="failed_to_connect_incorrect_password_format">❌ Failed to connect to %1$s - incorrect password or network issue</string>
+    <string name="permission_error_format">❌ Permission error: %1$s</string>
+    <string name="security_error_missing_permissions">❌ Security error: Missing required permissions</string>
+    <string name="connection_error_format">❌ Connection error: %1$s</string>
+    <string name="connection_failed_format">❌ Connection failed: %1$s</string>
+    <string name="missing_permissions_format">❌ Missing permissions: %1$s</string>
+    <string name="required_permissions_not_granted_format">❌ Required permissions not granted. Please enable: %1$s</string>
+    <string name="location_services_required_android10">❌ Location services must be enabled for Wi-Fi connections on Android 10+</string>
+    <string name="enable_location_services">❌ Please enable location services in device settings</string>
+    <string name="attempting_connection_format">Attempting connection to %1$s…</string>
+    <string name="connecting_with_remaining_time_format">Connecting to %1$s… (%2$ds remaining)</string>
+    <string name="successfully_connected_format">✅ Successfully connected to %1$s</string>
+    <string name="validating_connection_saving">Validating connection and saving password…</string>
+    <string name="checking_permissions_location">Checking permissions and location services…</string>
+    <string name="disconnecting_saving_password">Disconnecting and saving password…</string>
 </resources>

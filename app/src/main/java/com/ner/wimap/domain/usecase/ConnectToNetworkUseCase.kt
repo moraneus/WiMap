@@ -29,4 +29,7 @@ class ConnectToNetworkUseCase @Inject constructor(
     fun getConnectingNetworkName(): Flow<String?> = wifiRepository.getConnectingNetworkName()
 
     suspend fun updatePasswordsFromSettings(passwords: List<String>) = wifiRepository.updatePasswordsFromSettings(passwords)
+    
+    suspend fun updateConnectionSettings(maxRetries: Int, timeoutSeconds: Int, rssiThreshold: Int) = 
+        wifiRepository.updateConnectionSettings(maxRetries, timeoutSeconds, rssiThreshold)
 }
