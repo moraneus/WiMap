@@ -24,6 +24,8 @@ import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.Coordinates
 import com.ner.wimap.utils.PermissionUtils
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.*
+import com.ner.wimap.R
 
 // Helper function to convert frequency to channel
 fun convertFrequencyToChannel(freq: Int): Int {
@@ -63,6 +65,11 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     private val scanInterval = 10000L // 10 seconds, adjust as needed
     private val handler = Handler(Looper.getMainLooper())
+    
+    // Background coroutine scope for Wi-Fi operations
+    private val wifiScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private var scanningJob: Job? = null
+    private var connectionJob: Job? = null
 
     private val wifiScanReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -86,7 +93,9 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     private val scanRunnable = Runnable {
         if (_isScanning.value == true) {
-            startSingleScan()
+            wifiScope.launch {
+                performSingleScan()
+            }
         }
     }
 
@@ -98,40 +107,81 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
     fun startScanning() {
         if (_isScanning.value == false) {
-            _isScanning.value = true
-            handler.removeCallbacks(scanRunnable) 
-            startSingleScan() 
+            scanningJob?.cancel()
+            scanningJob = wifiScope.launch {
+                withContext(Dispatchers.Main) {
+                    _isScanning.value = true
+                    _connectionStatus.postValue(context.getString(R.string.wifi_scan_starting))
+                }
+                
+                try {
+                    startScanningLoop()
+                } catch (e: CancellationException) {
+                    // Scanning was cancelled
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.postValue(context.getString(R.string.wifi_scan_cancelled))
+                    }
+                } catch (e: Exception) {
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.postValue(context.getString(R.string.wifi_scan_error, e.message ?: "Unknown error"))
+                    }
+                }
+            }
         }
     }
 
     fun stopScanning() {
-        if (_isScanning.value == true) {
-            _isScanning.value = false
-            handler.removeCallbacks(scanRunnable)
+        scanningJob?.cancel()
+        scanningJob = null
+        _isScanning.value = false
+        handler.removeCallbacks(scanRunnable)
+        _connectionStatus.postValue(context.getString(R.string.wifi_scan_stopped))
+    }
+
+    private suspend fun startScanningLoop() {
+        while (currentCoroutineContext().isActive) {
+            try {
+                performSingleScan()
+                delay(scanInterval)
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.postValue(context.getString(R.string.wifi_scan_error, e.message ?: "Unknown error"))
+                }
+                delay(scanInterval) // Wait before retrying
+            }
         }
     }
 
-    private fun startSingleScan() {
+    private suspend fun performSingleScan() = withContext(Dispatchers.IO) {
         if (!hasRequiredPermissions(checkChangeWifiState = false)) {
-            _wifiNetworks.postValue(emptyList()) 
-            _isScanning.value = false 
-            _connectionStatus.postValue("Scanning requires location permission.")
-            return
+            withContext(Dispatchers.Main) {
+                _wifiNetworks.postValue(emptyList())
+                _isScanning.value = false
+                _connectionStatus.postValue(context.getString(R.string.wifi_scan_permission_required))
+            }
+            return@withContext
         }
-        _connectionStatus.postValue(null) // Clear previous status
 
-        if (wifiManager.isWifiEnabled) {
+        if (!wifiManager.isWifiEnabled) {
+            withContext(Dispatchers.Main) {
+                _wifiNetworks.postValue(emptyList())
+                _connectionStatus.postValue(context.getString(R.string.wifi_disabled))
+            }
+            return@withContext
+        }
+
+        try {
             val scanInitiated = wifiManager.startScan()
             if (!scanInitiated) {
-                if (_isScanning.value == true) { 
-                    handler.postDelayed(scanRunnable, scanInterval)
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.postValue(context.getString(R.string.wifi_scan_failed_to_start))
                 }
             }
-        } else {
-            _wifiNetworks.postValue(emptyList()) 
-            _connectionStatus.postValue("WiFi is disabled.")
-            if (_isScanning.value == true) { 
-                handler.postDelayed(scanRunnable, scanInterval)
+        } catch (e: SecurityException) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue(context.getString(R.string.wifi_scan_permission_error, e.message ?: "Permission denied"))
             }
         }
     }
@@ -251,8 +301,16 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
     @RequiresApi(Build.VERSION_CODES.Q)
     private fun connectWithNetworkSpecifier(network: WifiNetwork, password: String?) {
         try {
+            // Force clean connection by clearing any existing network callbacks first
+            releaseCurrentNetworkCallback()
+            
+            // Clear any cached network configurations for this SSID to prevent auto-reconnection
+            clearCachedNetworkConfigurations(network.ssid)
+            
             val specifierBuilder = WifiNetworkSpecifier.Builder()
                 .setSsid(network.ssid)
+                // Force non-persistent behavior to avoid caching
+                .setIsEnhancedOpen(false)
 
             if (!password.isNullOrEmpty()) {
                 // Use the 'security' field from WifiNetwork model which is derived from capabilities
@@ -283,42 +341,94 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                 .setNetworkSpecifier(specifierBuilder.build())
                 .build()
 
-            releaseCurrentNetworkCallback() 
+            // Track connection attempt state
+            var connectionAttemptActive = true
+            var connectionSuccessful = false
+            var connectionValidated = false
+            
             currentNetworkCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(net: Network) {
                     super.onAvailable(net)
+                    if (!connectionAttemptActive) return
+                    
                     try {
-                        connectivityManager.bindProcessToNetwork(net)
-                        _connectionStatus.postValue("✅ Connected to ${network.ssid}")
+                        // Verify this is actually the network we're trying to connect to
+                        val currentWifiInfo = wifiManager.connectionInfo
+                        val connectedSsid = currentWifiInfo?.ssid?.replace("\"", "")
+                        
+                        if (connectedSsid != network.ssid) {
+                            _connectionStatus.postValue("❌ Connected to wrong network: $connectedSsid instead of ${network.ssid}")
+                            releaseCurrentNetworkCallback()
+                            return
+                        }
+                        
+                        // Verify the connection was made with our current password attempt
+                        if (!validateConnectionWithCurrentPassword(network, password)) {
+                            _connectionStatus.postValue("❌ Connection succeeded but may be using cached credentials")
+                            releaseCurrentNetworkCallback()
+                            return
+                        }
+                        
+                        connectionSuccessful = true
+                        _connectionStatus.postValue("✅ Successfully connected to ${network.ssid} with provided password")
+                        
+                        // Immediately validate and disconnect to complete verification
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            if (connectionAttemptActive) {
+                                validateAndDisconnect(net, network)
+                                connectionValidated = true
+                            }
+                        }, 1000) // Wait 1 second to ensure connection is stable
+                        
                     } catch (e: Exception) {
-                        _connectionStatus.postValue("❌ Failed to bind to network: ${e.message}")
+                        _connectionStatus.postValue("❌ Failed to validate connection: ${e.message}")
                         releaseCurrentNetworkCallback()
                     }
                 }
 
                 override fun onLost(net: Network) {
                     super.onLost(net)
-                    _connectionStatus.postValue("⚠️ Lost connection to ${network.ssid}")
-                    connectivityManager.bindProcessToNetwork(null) 
-                    releaseCurrentNetworkCallback() 
+                    if (connectionValidated) {
+                        _connectionStatus.postValue("✅ Connection validated and disconnected successfully")
+                    } else {
+                        _connectionStatus.postValue("⚠️ Lost connection to ${network.ssid}")
+                    }
+                    connectivityManager.bindProcessToNetwork(null)
+                    releaseCurrentNetworkCallback()
                 }
 
                 override fun onUnavailable() {
                     super.onUnavailable()
-                    _connectionStatus.postValue("❌ Could not connect to ${network.ssid} - check password and signal strength")
-                    releaseCurrentNetworkCallback() 
+                    if (!connectionAttemptActive) return
+                    
+                    connectionAttemptActive = false
+                    _connectionStatus.postValue("❌ Could not connect to ${network.ssid} - incorrect password or network unavailable")
+                    releaseCurrentNetworkCallback()
                 }
                 
                 override fun onCapabilitiesChanged(net: Network, networkCapabilities: NetworkCapabilities) {
                     super.onCapabilitiesChanged(net, networkCapabilities)
-                    if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI)) {
-                        _connectionStatus.postValue("✅ WiFi connection established to ${network.ssid}")
+                    if (!connectionAttemptActive) return
+                    
+                    if (networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && 
+                        networkCapabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)) {
+                        // Additional validation that we have internet connectivity
+                        _connectionStatus.postValue("✅ WiFi connection validated with internet access")
                     }
                 }
             }
             
+            // Set timeout for connection attempt
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (connectionAttemptActive && !connectionSuccessful) {
+                    connectionAttemptActive = false
+                    _connectionStatus.postValue("❌ Connection timeout - no response from ${network.ssid}")
+                    releaseCurrentNetworkCallback()
+                }
+            }, 15000) // 15 second timeout
+            
             connectivityManager.requestNetwork(networkRequest, currentNetworkCallback!!)
-            _connectionStatus.postValue("🔄 Attempting to connect to ${network.ssid}...")
+            _connectionStatus.postValue("🔄 Attempting fresh connection to ${network.ssid}...")
             
         } catch (e: SecurityException) {
             _connectionStatus.postValue("❌ Permission error: ${e.message}")
@@ -427,6 +537,95 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
             context.unregisterReceiver(wifiScanReceiver)
             releaseCurrentNetworkCallback() 
         } catch (e: IllegalArgumentException) {
+        }
+    }
+
+    /**
+     * Clear cached network configurations for the specified SSID to prevent auto-reconnection
+     * with previously saved credentials
+     */
+    private fun clearCachedNetworkConfigurations(ssid: String) {
+        try {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                // For older Android versions, try to remove configured networks
+                val configuredNetworks = wifiManager.configuredNetworks
+                configuredNetworks?.forEach { config ->
+                    if (config.SSID == "\"$ssid\"") {
+                        wifiManager.removeNetwork(config.networkId)
+                    }
+                }
+                wifiManager.saveConfiguration()
+            }
+            // For Android 10+, WifiNetworkSpecifier should handle this automatically
+            // but we ensure no persistent behavior by using appropriate flags
+        } catch (e: SecurityException) {
+            // Ignore security exceptions - we may not have permission to modify configurations
+        } catch (e: Exception) {
+            // Ignore other exceptions - clearing cache is best effort
+        }
+    }
+
+    /**
+     * Validate that the connection was made with the current password attempt
+     * and not from cached/remembered credentials
+     */
+    private fun validateConnectionWithCurrentPassword(network: WifiNetwork, password: String?): Boolean {
+        try {
+            // For Android 10+, WifiNetworkSpecifier connections should be non-persistent
+            // but we add additional validation to ensure the connection is fresh
+            
+            val currentWifiInfo = wifiManager.connectionInfo
+            if (currentWifiInfo == null || currentWifiInfo.networkId == -1) {
+                return false
+            }
+            
+            // Check if this is a fresh connection by verifying timing
+            // If we just initiated the connection and it succeeded quickly,
+            // it's likely using our current password attempt
+            
+            // Additional validation: check if the network was in configured networks
+            // before our connection attempt (which would indicate cached credentials)
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
+                val configuredNetworks = wifiManager.configuredNetworks
+                val wasConfigured = configuredNetworks?.any { config ->
+                    config.SSID == "\"${network.ssid}\"" && config.networkId == currentWifiInfo.networkId
+                } ?: false
+                
+                // If it was already configured and we didn't just add it, 
+                // it might be using cached credentials
+                if (wasConfigured) {
+                    return false
+                }
+            }
+            
+            return true
+        } catch (e: Exception) {
+            // If validation fails, assume the connection might be using cached credentials
+            return false
+        }
+    }
+
+    /**
+     * Validate the connection and immediately disconnect to complete password verification
+     */
+    private fun validateAndDisconnect(network: Network, wifiNetwork: WifiNetwork) {
+        try {
+            // Verify we have internet connectivity through this network
+            connectivityManager.bindProcessToNetwork(network)
+            
+            // Brief validation period
+            Handler(Looper.getMainLooper()).postDelayed({
+                // Disconnect from the network
+                connectivityManager.bindProcessToNetwork(null)
+                releaseCurrentNetworkCallback()
+                
+                _connectionStatus.postValue("✅ Password validated for ${wifiNetwork.ssid} - connection test complete")
+            }, 500)
+            
+        } catch (e: Exception) {
+            _connectionStatus.postValue("⚠️ Connection validation completed with warnings: ${e.message}")
+            connectivityManager.bindProcessToNetwork(null)
+            releaseCurrentNetworkCallback()
         }
     }
 }

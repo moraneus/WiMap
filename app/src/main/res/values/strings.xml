@@ -365,4 +365,14 @@
     <string name="validating_connection_saving">Validating connection and saving password…</string>
     <string name="checking_permissions_location">Checking permissions and location services…</string>
     <string name="disconnecting_saving_password">Disconnecting and saving password…</string>
+    
+    <!-- WiFi Scanner Messages -->
+    <string name="wifi_scan_starting">WiFi scan starting…</string>
+    <string name="wifi_scan_cancelled">WiFi scan cancelled</string>
+    <string name="wifi_scan_error">WiFi scan error: %1$s</string>
+    <string name="wifi_scan_stopped">WiFi scan stopped</string>
+    <string name="wifi_scan_permission_required">WiFi scan permission required</string>
+    <string name="wifi_disabled">WiFi is disabled</string>
+    <string name="wifi_scan_failed_to_start">WiFi scan failed to start</string>
+    <string name="wifi_scan_permission_error">WiFi scan permission error: %1$s</string>
 </resources>

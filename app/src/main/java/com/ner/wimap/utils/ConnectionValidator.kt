@@ -92,4 +92,137 @@ object ConnectionValidator {
         val macPattern = Regex("^([0-9A-Fa-f]{2}[:-]){5}([0-9A-Fa-f]{2})$|^[0-9A-Fa-f]{12}$")
         return macPattern.matches(password)
     }
+
+    /**
+     * Enhanced validation for connection attempts to prevent cached credential interference
+     */
+    fun validateFreshConnectionAttempt(
+        network: com.ner.wimap.model.WifiNetwork,
+        password: String,
+        context: Context
+    ): ValidationResult {
+        // Check if this might be using cached credentials
+        if (isLikelyUsingCachedCredentials(network, context)) {
+            return ValidationResult(
+                false,
+                "Network may be using cached credentials. Clear WiFi settings and try again."
+            )
+        }
+
+        // Validate password is not a common default
+        if (isDefaultOrFallbackPassword(password)) {
+            return ValidationResult(
+                false,
+                "Avoiding common default password. Please use the actual network password."
+            )
+        }
+
+        // Validate password format for security type
+        if (!validatePasswordFormat(password, network.security)) {
+            return ValidationResult(
+                false,
+                "Password format invalid for ${network.security} security type."
+            )
+        }
+
+        return ValidationResult(true, "Connection attempt validated")
+    }
+
+    /**
+     * Check if a network is likely using cached credentials
+     */
+    private fun isLikelyUsingCachedCredentials(
+        network: com.ner.wimap.model.WifiNetwork,
+        context: Context
+    ): Boolean {
+        try {
+            // Check if network is in Android's configured networks
+            val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
+            
+            if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
+                val configuredNetworks = wifiManager.configuredNetworks
+                return configuredNetworks?.any { config ->
+                    config.SSID == "\"${network.ssid}\""
+                } ?: false
+            }
+            
+            // For Android 10+, we rely on other indicators
+            return false
+        } catch (e: Exception) {
+            return false
+        }
+    }
+
+    /**
+     * Validate that a connection result represents a fresh authentication
+     */
+    fun validateFreshAuthentication(
+        network: com.ner.wimap.model.WifiNetwork,
+        connectionStartTime: Long,
+        connectionEndTime: Long
+    ): ValidationResult {
+        val connectionDuration = connectionEndTime - connectionStartTime
+        
+        // If connection was too fast (< 2 seconds), it might be using cached credentials
+        if (connectionDuration < 2000) {
+            return ValidationResult(
+                false,
+                "Connection succeeded too quickly - may be using cached credentials"
+            )
+        }
+        
+        // If connection took reasonable time, it's likely a fresh authentication
+        return ValidationResult(true, "Fresh authentication validated")
+    }
+
+    /**
+     * Enhanced connection result validation
+     */
+    data class ValidationResult(
+        val isValid: Boolean,
+        val message: String
+    )
+
+    /**
+     * Comprehensive pre-connection validation
+     */
+    fun validateConnectionPrerequisites(
+        context: Context,
+        network: com.ner.wimap.model.WifiNetwork,
+        password: String?,
+        wifiScanner: com.ner.wimap.wifi.WifiScanner
+    ): ValidationResult {
+        // Check permissions and location
+        val permissionResult = validatePermissionsAndLocation(context, wifiScanner)
+        if (!permissionResult.isValid) {
+            return ValidationResult(false, permissionResult.errorMessage)
+        }
+
+        // Check signal strength
+        if (network.rssi < -85) {
+            return ValidationResult(
+                false,
+                "Signal too weak (${network.rssi}dBm). Move closer to the network."
+            )
+        }
+
+        // Validate password if provided
+        if (!password.isNullOrEmpty()) {
+            if (isDefaultOrFallbackPassword(password)) {
+                return ValidationResult(
+                    false,
+                    "Please use the actual network password, not a default one."
+                )
+            }
+
+            if (!validatePasswordFormat(password, network.security)) {
+                return ValidationResult(
+                    false,
+                    "Password format invalid for ${network.security} security."
+                )
+            }
+        }
+
+        return ValidationResult(true, "All prerequisites validated")
+    }
 }

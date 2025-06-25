@@ -305,7 +305,7 @@ class ConnectionManager(
                 }
                 return network.security.contains("Open", ignoreCase = true)
             } else {
-                // Real device implementation
+                // Real device implementation with enhanced validation
                 _connectionProgress.value = "Checking permissions and location services..."
                 
                 // Check for missing permissions first
@@ -329,19 +329,9 @@ class ConnectionManager(
                     }
                 }
                 
-                _connectionProgress.value = "Attempting connection to ${network.ssid}..."
+                // Enhanced validation: Clear any existing working password to force fresh validation
+                clearWorkingPassword(network)
                 
-                // Check if we already have a working password for this network
-                val existingPassword = getWorkingPassword(network)
-                if (existingPassword != null && existingPassword == password) {
-                    _connectionProgress.value = "ℹ️ Using previously validated password for ${network.ssid}"
-                    _connectionStatus.value = "✅ Password already validated for ${network.ssid}"
-                    return true
-                } else if (existingPassword != null && password != existingPassword) {
-                    // Clear old password if we're trying a different one
-                    clearWorkingPassword(network)
-                }
-
                 // Ensure no fallback or default passwords interfere
                 if (isDefaultOrFallbackPassword(password)) {
                     _connectionProgress.value = "⚠️ Avoiding common/default password for security"
@@ -349,50 +339,73 @@ class ConnectionManager(
                     return false
                 }
                 
-                // Use WifiScanner to attempt connection
+                _connectionProgress.value = "Initiating fresh connection attempt to ${network.ssid}..."
+                
+                // Create a connection result tracker
+                var connectionResult: Boolean? = null
+                var connectionError: String? = null
+                
+                // Set up a listener for connection status updates from WifiScanner
+                val originalStatus = wifiScanner.connectionStatus.value
+                
+                // Use WifiScanner to attempt connection with enhanced validation
                 wifiScanner.connectToNetwork(network, password)
                 
-                // Wait for connection attempt with timeout
+                // Wait for connection attempt with enhanced monitoring
                 var elapsedTime = 0
                 val checkInterval = 500L // Check every 500ms
                 val maxWaitTime = timeoutSeconds * 1000L
                 
-                while (elapsedTime < maxWaitTime) {
+                while (elapsedTime < maxWaitTime && connectionResult == null) {
                     delay(checkInterval)
                     elapsedTime += checkInterval.toInt()
                     
                     // Update progress
                     val remainingTime = (maxWaitTime - elapsedTime) / 1000
-                    _connectionProgress.value = "Connecting to ${network.ssid}... (${remainingTime}s remaining)"
+                    _connectionProgress.value = "Validating password with ${network.ssid}... (${remainingTime}s remaining)"
                     
-                    // Check if connection was successful
-                    val currentNetwork = wifiScanner.getCurrentWifiNetwork()
-                    val isConnected = currentNetwork?.bssid == network.bssid
-                    
-                    if (isConnected) {
-                        _connectionProgress.value = "✅ Successfully connected to ${network.ssid}"
-                        
-                        // Post-validation behavior: immediately disconnect and save password
-                        delay(1000) // Brief delay to confirm connection
-                        _connectionProgress.value = "Validating connection and saving password..."
-                        
-                        // Disconnect from the network immediately
-                        wifiScanner.disconnectFromNetwork()
-                        delay(1000) // Wait for disconnection to complete
-                        
+                    // Check the WifiScanner's connection status for results
+                    val currentStatus = wifiScanner.connectionStatus.value
+                    if (currentStatus != originalStatus && currentStatus != null) {
+                        when {
+                            currentStatus.contains("✅ Password validated") -> {
+                                connectionResult = true
+                                _connectionProgress.value = "✅ Password validation successful!"
+                            }
+                            currentStatus.contains("❌") -> {
+                                connectionResult = false
+                                connectionError = currentStatus
+                                _connectionProgress.value = "❌ Password validation failed"
+                            }
+                            currentStatus.contains("Connection validated and disconnected") -> {
+                                connectionResult = true
+                                _connectionProgress.value = "✅ Connection validated successfully!"
+                            }
+                        }
+                    }
+                }
+                
+                // Handle the connection result
+                when (connectionResult) {
+                    true -> {
                         // Save the working password to SharedPreferences
                         saveWorkingPassword(network, password)
-                        
                         _connectionProgress.value = "✅ Password validated and saved for ${network.ssid}"
                         _connectionStatus.value = "✅ Connection successful! Password saved for future reference."
                         return true
                     }
+                    false -> {
+                        _connectionProgress.value = connectionError ?: "❌ Connection failed"
+                        _connectionStatus.value = connectionError ?: "❌ Failed to connect to ${network.ssid} - incorrect password"
+                        return false
+                    }
+                    null -> {
+                        // Connection timeout
+                        _connectionProgress.value = "❌ Connection timeout after ${timeoutSeconds}s"
+                        _connectionStatus.value = "❌ Connection timeout - no response from ${network.ssid}"
+                        return false
+                    }
                 }
-                
-                // Connection timeout
-                _connectionProgress.value = "❌ Connection timeout after ${timeoutSeconds}s"
-                _connectionStatus.value = "❌ Failed to connect to ${network.ssid} - incorrect password or network issue"
-                return false
             }
         } catch (e: SecurityException) {
             _connectionProgress.value = "❌ Permission error: ${e.message}"
