@@ -31,6 +31,8 @@ import com.google.android.gms.maps.model.*
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.ui.theme.WiMapTheme
 import com.ner.wimap.ui.components.InfoChip
+import com.ner.wimap.ui.components.UnifiedTopAppBar
+import com.ner.wimap.ui.components.UnifiedTopBarActionButton
 import com.ner.wimap.ui.getSignalColor
 import java.text.SimpleDateFormat
 import java.util.*
@@ -144,86 +146,30 @@ fun WiFiMapsScreen(
     Column(
         modifier = Modifier.fillMaxSize()
     ) {
-        // Custom top bar
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .background(Color(0xFF667eea))
-                .padding(top = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            Color.White.copy(alpha = 0.2f),
-                            RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Default.Map,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-
+        // Unified top bar
+        UnifiedTopAppBar(
+            title = "Map View",
+            icon = Icons.Default.Map,
+            onBack = onBack,
+            actions = {
+                // Networks count
                 Text(
-                    "WiFi Networks Map",
-                    style = MaterialTheme.typography.titleLarge.copy(
+                    "${networksWithLocation.size}/${networks.size}",
+                    style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
                     color = Color.White,
-                    modifier = Modifier.weight(1f)
+                    modifier = Modifier.padding(end = 8.dp)
                 )
-
-                // Networks count and list toggle
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        "${networksWithLocation.size}/${networks.size}",
-                        style = MaterialTheme.typography.titleMedium.copy(
-                            fontWeight = FontWeight.Bold
-                        ),
-                        color = Color.White
-                    )
-
-                    IconButton(
-                        onClick = { showNetworksList = !showNetworksList },
-                        modifier = Modifier
-                            .size(36.dp)
-                            .background(
-                                Color.White.copy(alpha = 0.2f),
-                                RoundedCornerShape(8.dp)
-                            )
-                    ) {
-                        Icon(
-                            if (showNetworksList) Icons.Default.Map else Icons.Default.List,
-                            contentDescription = if (showNetworksList) "Show Map" else "Show List",
-                            tint = Color.White,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-                }
+                
+                // List/Map toggle button
+                UnifiedTopBarActionButton(
+                    icon = if (showNetworksList) Icons.Default.Map else Icons.Default.List,
+                    contentDescription = if (showNetworksList) "Show Map" else "Show List",
+                    onClick = { showNetworksList = !showNetworksList }
+                )
             }
-        }
+        )
 
         if (showNetworksList) {
             // Networks list view

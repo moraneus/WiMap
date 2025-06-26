@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -29,10 +30,12 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.layout.ContentScale
 import coil.compose.rememberAsyncImagePainter
 import android.net.Uri
+import com.ner.wimap.R
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.components.InfoChip
 import com.ner.wimap.ui.components.DetailRow
 import com.ner.wimap.ui.components.ExportFormatDialog
+import com.ner.wimap.ui.components.UnifiedTopAppBar
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
 import com.ner.wimap.ui.viewmodel.ExportFormat
@@ -60,54 +63,12 @@ fun PinnedNetworksScreen(
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        // Custom compact top bar - same as main screen
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(80.dp)
-                .background(Color(0xFF667eea)) // Same color as main screen
-                .padding(top = 24.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .padding(horizontal = 16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                IconButton(
-                    onClick = onBack,
-                    modifier = Modifier
-                        .size(36.dp)
-                        .background(
-                            Color.White.copy(alpha = 0.2f),
-                            RoundedCornerShape(8.dp)
-                        )
-                ) {
-                    Icon(
-                        Icons.AutoMirrored.Filled.ArrowBack,
-                        contentDescription = "Back",
-                        tint = Color.White,
-                        modifier = Modifier.size(20.dp)
-                    )
-                }
-
-                Icon(
-                    imageVector = Icons.Default.PushPin,
-                    contentDescription = null,
-                    tint = Color.White,
-                    modifier = Modifier.size(22.dp)
-                )
-
-                Text(
-                    "Pinned Networks",
-                    style = MaterialTheme.typography.titleLarge.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.White
-                )
-            }
-        }
+        // Unified Material 3 top bar
+        UnifiedTopAppBar(
+            title = stringResource(R.string.title_pinned_networks),
+            icon = Icons.Default.PushPin,
+            onBack = onBack
+        )
 
         // Content
         LazyColumn(
