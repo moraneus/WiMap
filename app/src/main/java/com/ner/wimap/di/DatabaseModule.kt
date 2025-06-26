@@ -4,6 +4,7 @@ import android.content.Context
 import androidx.room.Room
 import com.ner.wimap.data.database.AppDatabase
 import com.ner.wimap.data.database.PinnedNetworkDao
+import com.ner.wimap.data.database.TemporaryNetworkDataDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -18,15 +19,16 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideAppDatabase(@ApplicationContext context: Context): AppDatabase {
-        return Room.databaseBuilder(
-            context,
-            AppDatabase::class.java,
-            "wimap_database"
-        ).build()
+        return AppDatabase.getDatabase(context)
     }
     
     @Provides
     fun providePinnedNetworkDao(database: AppDatabase): PinnedNetworkDao {
         return database.pinnedNetworkDao()
+    }
+    
+    @Provides
+    fun provideTemporaryNetworkDataDao(database: AppDatabase): TemporaryNetworkDataDao {
+        return database.temporaryNetworkDataDao()
     }
 }

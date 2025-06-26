@@ -214,7 +214,7 @@ fun WifiNetworkCard(
     }    }
 
 @Composable
-private fun NetworkHeader(
+internal fun NetworkHeader(
     network: WifiNetwork,
     isPinned: Boolean,
     isOpenNetwork: Boolean,
@@ -323,7 +323,7 @@ private fun NetworkHeader(
 }
 
 @Composable
-private fun NetworkPhoto(
+internal fun NetworkPhoto(
     photoUri: Uri?,
     onPhotoClick: () -> Unit
 ) {

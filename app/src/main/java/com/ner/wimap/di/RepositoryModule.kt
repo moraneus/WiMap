@@ -2,9 +2,11 @@ package com.ner.wimap.di
 
 import com.ner.wimap.data.repository.ExportRepositoryImpl
 import com.ner.wimap.data.repository.PinnedNetworkRepositoryImpl
+import com.ner.wimap.data.repository.TemporaryNetworkDataRepositoryImpl
 import com.ner.wimap.data.repository.WifiRepositoryImpl
 import com.ner.wimap.domain.repository.ExportRepository
 import com.ner.wimap.domain.repository.PinnedNetworkRepository
+import com.ner.wimap.domain.repository.TemporaryNetworkDataRepository
 import com.ner.wimap.domain.repository.WifiRepository
 import dagger.Binds
 import dagger.Module
@@ -33,4 +35,10 @@ abstract class RepositoryModule {
     abstract fun bindExportRepository(
         exportRepositoryImpl: ExportRepositoryImpl
     ): ExportRepository
+    
+    @Binds
+    @Singleton
+    abstract fun bindTemporaryNetworkDataRepository(
+        temporaryNetworkDataRepositoryImpl: TemporaryNetworkDataRepositoryImpl
+    ): TemporaryNetworkDataRepository
 }

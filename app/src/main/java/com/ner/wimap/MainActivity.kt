@@ -185,12 +185,17 @@ class MainActivity : ComponentActivity() {
                     onClearNetworks = { viewModel.clearNetworks() },
                     onOpenPinnedNetworks = { navController.navigate("pinned_networks") },
                     onPinNetwork = { network, comment, password, photoUri ->
-                        viewModel.pinNetwork(network, comment, password, photoUri)
+                        // Use the new temporary data system for pinning
+                        viewModel.pinNetworkWithTemporaryData(network.bssid, true)
                     },
-                    onUnpinNetwork = { bssid -> viewModel.unpinNetwork(bssid) },
+                    onUnpinNetwork = { bssid -> 
+                        // Use the new temporary data system for unpinning
+                        viewModel.pinNetworkWithTemporaryData(bssid, false)
+                    },
                     onClearConnectionProgress = { viewModel.clearConnectionProgress() },
                     onUpdateNetworkData = { network, comment, password, photoUri ->
-                        viewModel.updateNetworkData(network, comment, password, photoUri)
+                        // Use temporary network data for all networks (pinned and unpinned)
+                        viewModel.updateTemporaryNetworkData(network.bssid, network.ssid, comment, password, photoUri)
                     },
                     onOpenMaps = {
                         // Open Google Maps activity with current networks

@@ -9,6 +9,7 @@ import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.domain.usecase.ConnectToNetworkUseCase
 import com.ner.wimap.domain.usecase.ExportNetworksUseCase
 import com.ner.wimap.domain.usecase.ManagePinnedNetworksUseCase
+import com.ner.wimap.domain.usecase.ManageTemporaryNetworkDataUseCase
 import com.ner.wimap.domain.usecase.ScanWifiNetworksUseCase
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.ui.viewmodel.ExportAction
@@ -32,6 +33,7 @@ class MainViewModel @Inject constructor(
     private val scanWifiNetworksUseCase: ScanWifiNetworksUseCase,
     private val connectToNetworkUseCase: ConnectToNetworkUseCase,
     private val managePinnedNetworksUseCase: ManagePinnedNetworksUseCase,
+    private val manageTemporaryNetworkDataUseCase: ManageTemporaryNetworkDataUseCase,
     private val exportNetworksUseCase: ExportNetworksUseCase
 ) : AndroidViewModel(application) {
 
@@ -89,9 +91,30 @@ class MainViewModel @Inject constructor(
     private val rawWifiNetworks = scanWifiNetworksUseCase.getWifiNetworks()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
+    // Enhanced networks with temporary data
+    private val enhancedNetworks = combine(
+        rawWifiNetworks,
+        manageTemporaryNetworkDataUseCase.getAllTemporaryData()
+    ) { networks, temporaryDataList ->
+        val temporaryDataMap = temporaryDataList.associateBy { it.bssid }
+        networks.map { network ->
+            val temporaryData = temporaryDataMap[network.bssid]
+            if (temporaryData != null) {
+                network.copy(
+                    comment = temporaryData.comment,
+                    password = temporaryData.savedPassword,
+                    photoPath = temporaryData.photoPath,
+                    isPinned = temporaryData.isPinned
+                )
+            } else {
+                network
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+
     // Filtered networks based on current filter settings
     private val filteredNetworks = combine(
-        rawWifiNetworks,
+        enhancedNetworks,
         _ssidFilter,
         _securityFilter,
         _rssiThreshold,
@@ -260,6 +283,47 @@ class MainViewModel @Inject constructor(
     fun updateNetworkData(network: WifiNetwork, comment: String?, password: String?, photoUri: String?) {
         viewModelScope.launch {
             managePinnedNetworksUseCase.updateNetworkData(network, comment, password, photoUri)
+        }
+    }
+
+    // Temporary network data functions
+    fun updateTemporaryNetworkData(bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?) {
+        viewModelScope.launch {
+            manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                bssid = bssid,
+                ssid = ssid,
+                comment = comment ?: "",
+                password = password,
+                photoPath = photoPath,
+                isPinned = null // Don't change pin status when just updating data
+            )
+        }
+    }
+
+    fun pinNetworkWithTemporaryData(bssid: String, isPinned: Boolean) {
+        viewModelScope.launch {
+            // Update the pin status in temporary data
+            val existingData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(bssid)
+            if (existingData != null) {
+                manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                    bssid = bssid,
+                    ssid = existingData.ssid,
+                    comment = existingData.comment,
+                    password = existingData.savedPassword,
+                    photoPath = existingData.photoPath,
+                    isPinned = isPinned
+                )
+            }
+            
+            // Also update the pinned networks table if pinning
+            if (isPinned) {
+                val network = wifiNetworks.value.find { it.bssid == bssid }
+                if (network != null) {
+                    pinNetwork(network, existingData?.comment, existingData?.savedPassword, existingData?.photoPath)
+                }
+            } else {
+                unpinNetwork(bssid)
+            }
         }
     }
 
@@ -517,6 +581,9 @@ class MainViewModel @Inject constructor(
                 
                 // Clear all pinned networks from database
                 managePinnedNetworksUseCase.clearAllPinnedNetworks()
+                
+                // Clear all temporary network data from database
+                manageTemporaryNetworkDataUseCase.clearAllTemporaryData()
                 
                 // Clear current networks list
                 scanWifiNetworksUseCase.clearNetworks()

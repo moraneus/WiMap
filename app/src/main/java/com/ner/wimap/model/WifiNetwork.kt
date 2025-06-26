@@ -13,5 +13,8 @@ data class WifiNetwork(
     val peakRssi: Int = rssi, // Track the strongest RSSI seen for this network
     val peakRssiLatitude: Double? = latitude, // GPS coordinates where peak RSSI was observed
     val peakRssiLongitude: Double? = longitude,
-    val lastSeenTimestamp: Long = timestamp // Track when this network was last seen
+    val lastSeenTimestamp: Long = timestamp, // Track when this network was last seen
+    val comment: String = "", // User-added comment
+    val photoPath: String? = null, // Path to attached photo
+    val isPinned: Boolean = false // Pin status
 )
