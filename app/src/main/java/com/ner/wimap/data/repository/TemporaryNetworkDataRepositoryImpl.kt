@@ -1,5 +1,6 @@
 package com.ner.wimap.data.repository
 
+import android.util.Log
 import com.ner.wimap.data.database.TemporaryNetworkData
 import com.ner.wimap.data.database.TemporaryNetworkDataDao
 import com.ner.wimap.domain.repository.TemporaryNetworkDataRepository
@@ -12,12 +13,18 @@ class TemporaryNetworkDataRepositoryImpl @Inject constructor(
     private val temporaryNetworkDataDao: TemporaryNetworkDataDao
 ) : TemporaryNetworkDataRepository {
 
+    companion object {
+        private const val TAG = "TemporaryNetworkDataRepo"
+    }
+
     override fun getAllTemporaryData(): Flow<List<TemporaryNetworkData>> {
         return temporaryNetworkDataDao.getAllTemporaryData()
     }
 
     override suspend fun getTemporaryDataByBssid(bssid: String): TemporaryNetworkData? {
-        return temporaryNetworkDataDao.getTemporaryDataByBssid(bssid)
+        val data = temporaryNetworkDataDao.getTemporaryDataByBssid(bssid)
+        Log.d(TAG, "Retrieved temporary data for BSSID $bssid: ${data != null}")
+        return data
     }
 
     override fun getTemporaryDataByBssidFlow(bssid: String): Flow<TemporaryNetworkData?> {
@@ -32,6 +39,8 @@ class TemporaryNetworkDataRepositoryImpl @Inject constructor(
         photoPath: String?,
         isPinned: Boolean
     ) {
+        Log.d(TAG, "Saving temporary data for BSSID $bssid: comment='$comment', hasPassword=${password != null}, hasPhoto=${photoPath != null}, isPinned=$isPinned")
+        
         val existingData = temporaryNetworkDataDao.getTemporaryDataByBssid(bssid)
         val temporaryData = existingData?.copy(
             ssid = ssid, // Keep ssid updated
@@ -49,7 +58,9 @@ class TemporaryNetworkDataRepositoryImpl @Inject constructor(
             isPinned = isPinned,
             lastUpdated = System.currentTimeMillis()
         )
+        
         temporaryNetworkDataDao.insertOrUpdateTemporaryData(temporaryData)
+        Log.d(TAG, "Successfully saved temporary data for BSSID $bssid")
     }
 
     override suspend fun pinNetwork(bssid: String, isPinned: Boolean) {

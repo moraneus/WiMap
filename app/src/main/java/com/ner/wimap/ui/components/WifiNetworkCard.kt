@@ -47,22 +47,47 @@ fun WifiNetworkCard(
     successfulPasswords: Map<String, String> = emptyMap(),
     onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit = { _, _, _, _ -> }
 ) {
-    val isPinnedInitially = pinnedNetworks.any { it.bssid == network.bssid }
+    val isPinnedInitially = network.isPinned || pinnedNetworks.any { it.bssid == network.bssid }
     val pinnedNetwork = pinnedNetworks.find { it.bssid == network.bssid }
-    var isPinned by remember(network.bssid) { mutableStateOf(isPinnedInitially) }
+    var isPinned by remember(network.bssid, network.isPinned) { mutableStateOf(isPinnedInitially) }
+    
+    // Update pin status when network data changes
+    LaunchedEffect(network.isPinned) {
+        isPinned = network.isPinned
+    }
     var showDetails by remember { mutableStateOf(false) }
-    var comment by remember(pinnedNetwork?.bssid) { mutableStateOf(pinnedNetwork?.comment ?: "") }
-    var savedPassword by remember(pinnedNetwork?.bssid) { mutableStateOf(pinnedNetwork?.savedPassword ?: "") }
+    
+    // Initialize from network data (which includes temporary data merged from database)
+    var comment by remember(network.bssid, network.comment) { mutableStateOf(network.comment) }
+    var savedPassword by remember(network.bssid, network.password) { mutableStateOf(network.password ?: "") }
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showCommentDialog by remember { mutableStateOf(false) }
     var showImageViewer by remember { mutableStateOf(false) }
-    var photoUri by remember(pinnedNetwork?.bssid) { mutableStateOf<Uri?>(pinnedNetwork?.photoUri?.let { Uri.parse(it) }) }
+    var photoUri by remember(network.bssid, network.photoPath) { 
+        mutableStateOf<Uri?>(network.photoPath?.let { Uri.parse(it) }) 
+    }
 
-    // Update local state when pinnedNetwork changes
+    // Update local state when network data changes (includes temporary data)
+    LaunchedEffect(network.comment, network.password, network.photoPath) {
+        comment = network.comment
+        savedPassword = network.password ?: ""
+        photoUri = network.photoPath?.let { Uri.parse(it) }
+    }
+    
+    // Also update from pinned network data for backward compatibility
     LaunchedEffect(pinnedNetwork) {
-        comment = pinnedNetwork?.comment ?: ""
-        savedPassword = pinnedNetwork?.savedPassword ?: ""
-        photoUri = pinnedNetwork?.photoUri?.let { Uri.parse(it) }
+        if (pinnedNetwork != null) {
+            // Only update if the network data doesn't already have this info
+            if (comment.isEmpty() && !pinnedNetwork.comment.isNullOrEmpty()) {
+                comment = pinnedNetwork.comment!!
+            }
+            if (savedPassword.isEmpty() && !pinnedNetwork.savedPassword.isNullOrEmpty()) {
+                savedPassword = pinnedNetwork.savedPassword!!
+            }
+            if (photoUri == null && !pinnedNetwork.photoUri.isNullOrEmpty()) {
+                photoUri = Uri.parse(pinnedNetwork.photoUri!!)
+            }
+        }
     }
 
     val context = LocalContext.current
@@ -211,7 +236,8 @@ fun WifiNetworkCard(
                 onDismiss = { showImageViewer = false }
             )
         }
-    }    }
+    }
+}
 
 @Composable
 internal fun NetworkHeader(

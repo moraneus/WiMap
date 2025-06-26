@@ -288,6 +288,7 @@ class MainViewModel @Inject constructor(
 
     // Temporary network data functions
     fun updateTemporaryNetworkData(bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?) {
+        android.util.Log.d("MainViewModel", "Updating temporary network data for BSSID $bssid: comment='$comment', hasPassword=${password != null}, hasPhoto=${photoPath != null}")
         viewModelScope.launch {
             manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
                 bssid = bssid,
