@@ -133,7 +133,7 @@ fun SettingsScreen(
                 ModernSettingsCategoryCard(
                     icon = Icons.Default.Construction,
                     title = "Connection Settings",
-                    subtitle = "Configure automatic connection behavior",
+                    subtitle = "Configure connection behavior and manage WiFi passwords",
                     gradientColors = listOf(Color(0xFFf093fb), Color(0xFFf5576c)),
                     content = {
                         Column(
@@ -216,6 +216,79 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF7F8C8D)
                                 )
+                            }
+
+                            // Divider between connection settings and password management
+                            Divider(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
+                            )
+
+                            // Password Management within Connection Settings
+                            Text(
+                                text = "WiFi Password Management",
+                                style = MaterialTheme.typography.titleMedium.copy(
+                                    fontWeight = FontWeight.SemiBold
+                                ),
+                                color = Color(0xFF2C3E50)
+                            )
+                            
+                            // Add password section
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                ModernTextField(
+                                    value = newPassword,
+                                    onValueChange = { newPassword = it },
+                                    label = "New Password",
+                                    placeholder = "Enter password to save",
+                                    modifier = Modifier.weight(1f)
+                                    // No visualTransformation - show clear text
+                                )
+
+                                FloatingActionButton(
+                                    onClick = {
+                                        if (newPassword.isNotBlank()) {
+                                            onAddPassword(newPassword)
+                                            newPassword = ""
+                                        }
+                                    },
+                                    modifier = Modifier.size(48.dp),
+                                    containerColor = Color(0xFF27AE60),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Icon(
+                                        Icons.Default.Add,
+                                        contentDescription = "Add Password",
+                                        tint = Color.White,
+                                        modifier = Modifier.size(24.dp)
+                                    )
+                                }
+                            }
+
+                            // Passwords list
+                            if (passwords.isEmpty()) {
+                                EmptyPasswordsState()
+                            } else {
+                                Column(
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Text(
+                                        text = "Saved Passwords (${passwords.size})",
+                                        style = MaterialTheme.typography.titleSmall.copy(
+                                            fontWeight = FontWeight.SemiBold
+                                        ),
+                                        color = Color(0xFF2C3E50)
+                                    )
+                                    passwords.forEach { pwd ->
+                                        ModernPasswordItem(
+                                            password = pwd,
+                                            onRemove = { onRemovePassword(pwd) }
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -311,79 +384,6 @@ fun SettingsScreen(
                 )
             }
 
-            // Password Management Section
-            item {
-                ModernSettingsCategoryCard(
-                    icon = Icons.Default.Security,
-                    title = "Password Management",
-                    subtitle = "Store and manage WiFi passwords",
-                    gradientColors = listOf(Color(0xFF4ECDC4), Color(0xFF44A08D)),
-                    content = {
-                        Column(
-                            modifier = Modifier.padding(24.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Add password section
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.spacedBy(12.dp)
-                            ) {
-                                ModernTextField(
-                                    value = newPassword,
-                                    onValueChange = { newPassword = it },
-                                    label = "New Password",
-                                    placeholder = "Enter password to save",
-                                    modifier = Modifier.weight(1f)
-                                    // No visualTransformation - show clear text
-                                )
-
-                                FloatingActionButton(
-                                    onClick = {
-                                        if (newPassword.isNotBlank()) {
-                                            onAddPassword(newPassword)
-                                            newPassword = ""
-                                        }
-                                    },
-                                    modifier = Modifier.size(48.dp),
-                                    containerColor = Color(0xFF27AE60),
-                                    shape = RoundedCornerShape(12.dp)
-                                ) {
-                                    Icon(
-                                        Icons.Default.Add,
-                                        contentDescription = "Add Password",
-                                        tint = Color.White,
-                                        modifier = Modifier.size(24.dp)
-                                    )
-                                }
-                            }
-
-                            // Passwords list
-                            if (passwords.isEmpty()) {
-                                EmptyPasswordsState()
-                            } else {
-                                Column(
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Text(
-                                        text = "Saved Passwords (${passwords.size})",
-                                        style = MaterialTheme.typography.titleSmall.copy(
-                                            fontWeight = FontWeight.SemiBold
-                                        ),
-                                        color = Color(0xFF2C3E50)
-                                    )
-                                    passwords.forEach { pwd ->
-                                        ModernPasswordItem(
-                                            password = pwd,
-                                            onRemove = { onRemovePassword(pwd) }
-                                        )
-                                    }
-                                }
-                            }
-                        }
-                    }
-                )
-            }
 
             // Network Management Section
             item {
