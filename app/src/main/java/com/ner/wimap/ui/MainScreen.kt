@@ -175,9 +175,14 @@ fun MainScreen(
                             )
                         }
                     }
+                    // Separate online and offline networks
+                    val onlineNetworks = wifiNetworks.filter { !it.isOffline }
+                    val offlineNetworks = wifiNetworks.filter { it.isOffline }
+                    
+                    // Online networks section
                     items(
-                        items = wifiNetworks,
-                        key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
+                        items = onlineNetworks,
+                        key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
                     ) { network ->
                         // Check if this network is currently pinned
                         val isCurrentlyPinned = pinnedNetworks.any { it.bssid == network.bssid }
@@ -205,6 +210,49 @@ fun MainScreen(
                             isPinned = isCurrentlyPinned, // Explicitly pass the current pin status
                             successfulPasswords = successfulPasswords
                         )
+                    }
+                    
+                    // Offline networks section (if any exist)
+                    if (offlineNetworks.isNotEmpty()) {
+                        item {
+                            key("offline_separator") {
+                                OfflineNetworksSeparator(
+                                    offlineCount = offlineNetworks.size
+                                )
+                            }
+                        }
+                        
+                        items(
+                            items = offlineNetworks,
+                            key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}_offline" }
+                        ) { network ->
+                            // Check if this network is currently pinned
+                            val isCurrentlyPinned = pinnedNetworks.any { it.bssid == network.bssid }
+                            
+                            EnhancedWifiNetworkCard(
+                                network = network,
+                                isConnecting = false, // Never show connecting for offline networks
+                                connectionStatus = null,
+                                onPinClick = { bssid, pin -> 
+                                    if (pin) {
+                                        onPinNetwork(network, null, null, null)
+                                    } else {
+                                        onUnpinNetwork(bssid)
+                                    }
+                                },
+                                onConnectClick = { /* Disabled for offline networks */ },
+                                onCancelConnectionClick = onClearConnectionProgress,
+                                onMoreInfoClick = { /* No-op for now */ },
+                                onUpdateData = { bssid, ssid, comment, password, photoPath ->
+                                    onUpdateNetworkData(network, comment, password, photoPath)
+                                },
+                                onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                                    onUpdateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
+                                },
+                                isPinned = isCurrentlyPinned, // Explicitly pass the current pin status
+                                successfulPasswords = successfulPasswords
+                            )
+                        }
                     }
 
                     item {
@@ -730,6 +778,66 @@ private fun TermsOfUseDialog(
         containerColor = MaterialTheme.colorScheme.surface,
         tonalElevation = 6.dp
     )
+}
+
+@Composable
+private fun OfflineNetworksSeparator(
+    offlineCount: Int
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(vertical = 8.dp),
+        shape = RoundedCornerShape(12.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = Color(0xFFF5F5F5)
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.SignalWifiOff,
+                contentDescription = "Offline Networks",
+                tint = Color(0xFF9E9E9E),
+                modifier = Modifier.size(24.dp)
+            )
+            Column(
+                modifier = Modifier.weight(1f)
+            ) {
+                Text(
+                    text = "Out of Range Networks",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.SemiBold
+                    ),
+                    color = Color(0xFF757575)
+                )
+                Text(
+                    text = "Networks not seen recently - still editable",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = Color(0xFF9E9E9E)
+                )
+            }
+            Surface(
+                shape = CircleShape,
+                color = Color(0xFFE0E0E0)
+            ) {
+                Text(
+                    text = "$offlineCount",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = Color(0xFF757575),
+                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                )
+            }
+        }
+    }
 }
 
 object BuildConfig {

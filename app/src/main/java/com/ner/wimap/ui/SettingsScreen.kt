@@ -1155,13 +1155,20 @@ fun HideUnseenNetworksSection(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Title with current value prominently displayed - shorter and clearer text
+        // Title with current value prominently displayed - updated text for offline behavior
         Text(
-            text = "Clear unseen networks after: ${formatSeconds(currentSeconds)}",
+            text = "Move unseen networks offline after: ${formatSeconds(currentSeconds)}",
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.SemiBold
             ),
             color = Color(0xFF2C3E50)
+        )
+        
+        // Add explanation for the new behavior
+        Text(
+            text = "Networks not seen for this duration will be moved to the 'Out of Range' section. They remain editable but cannot be connected to until they reappear.",
+            style = MaterialTheme.typography.bodySmall,
+            color = Color(0xFF7F8C8D)
         )
         
         // Enhanced slider with tick marks

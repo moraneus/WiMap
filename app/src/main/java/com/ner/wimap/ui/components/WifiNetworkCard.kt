@@ -302,14 +302,14 @@ internal fun NetworkHeader(
                 style = MaterialTheme.typography.titleMedium.copy(
                     fontWeight = FontWeight.Bold
                 ),
-                color = Color(0xFF2C3E50),
+                color = if (network.isOffline) Color(0xFF6B6B6B) else Color(0xFF2C3E50), // Muted text for offline
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
             Icon(
                 imageVector = getSignalIcon(network.rssi),
                 contentDescription = "Signal Strength",
-                tint = getSignalColor(network.rssi),
+                tint = if (network.isOffline) Color(0xFF9E9E9E) else getSignalColor(network.rssi), // Muted signal for offline
                 modifier = Modifier.size(16.dp)
             )
 
@@ -341,7 +341,7 @@ internal fun NetworkHeader(
                 Icon(
                     imageVector = Icons.Default.PushPin,
                     contentDescription = "Pinned",
-                    tint = Color(0xFF667eea), // Use main app color
+                    tint = if (network.isOffline) Color(0xFF8B7355) else Color(0xFF667eea), // Muted color for offline pinned
                     modifier = Modifier.size(14.dp)
                 )
             }
@@ -354,13 +354,14 @@ internal fun NetworkHeader(
                     .size(40.dp)
                     .background(
                         when {
+                            network.isOffline -> Color(0xFFBDC3C7) // Grey for offline networks
                             isConnecting -> Color(0xFFBDC3C7)
                             hasValidPassword -> Color(0xFF27AE60) // Green when password is known
                             else -> Color(0xFFE74C3C) // Red when password is unknown
                         },
                         CircleShape
                     )
-                    .clickable(enabled = !isConnecting && !hasValidPassword) { onConnectClicked() },
+                    .clickable(enabled = !isConnecting && !hasValidPassword && !network.isOffline) { onConnectClicked() },
                 contentAlignment = Alignment.Center
             ) {
                 if (isConnecting) {
@@ -368,6 +369,14 @@ internal fun NetworkHeader(
                         color = Color.White,
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(16.dp)
+                    )
+                } else if (network.isOffline) {
+                    // Show offline icon for offline networks
+                    Icon(
+                        imageVector = Icons.Default.SignalWifiOff,
+                        contentDescription = "Network Offline",
+                        tint = Color.White,
+                        modifier = Modifier.size(20.dp)
                     )
                 } else {
                     // Dynamic icon based on password status

@@ -5,6 +5,7 @@ import android.content.Intent
 import android.graphics.*
 import android.graphics.pdf.PdfDocument
 import android.os.Environment
+import android.widget.Toast
 import androidx.core.content.FileProvider
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
@@ -221,26 +222,31 @@ class ExportManager(
         networkName: String? = null
     ) {
         val itemName = networkName ?: "WiFi networks"
+        val fileName = file.name
+        val directory = file.parent ?: "unknown location"
 
         when (action) {
             ExportAction.SAVE_ONLY -> {
-                _exportStatus.value = "✅ Saved $itemName to: ${file.absolutePath}"
-                showFileLocationNotification(context, file)
+                val message = "✅ $itemName saved as $fileName"
+                _exportStatus.value = "$message\n📁 Location: $directory"
+                showFileLocationNotification(context, file, itemName)
             }
             ExportAction.SHARE_ONLY -> {
                 shareFile(context, file, format, itemName)
                 _exportStatus.value = "📤 Sharing $itemName..."
             }
             ExportAction.SAVE_AND_SHARE -> {
-                _exportStatus.value = "✅ Saved $itemName to: ${file.absolutePath}"
+                val message = "✅ $itemName saved as $fileName"
+                _exportStatus.value = "$message\n📁 Location: $directory"
                 shareFile(context, file, format, itemName)
             }
         }
     }
 
-    private fun showFileLocationNotification(context: Context, file: File) {
-        // You can implement a more sophisticated notification here
-        // For now, we'll just update the status
+    private fun showFileLocationNotification(context: Context, file: File, itemName: String) {
+        // Show toast with file save location
+        val message = "$itemName saved to ${file.name}"
+        Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         Log.d(TAG, "File saved to: ${file.absolutePath}")
     }
 
@@ -270,10 +276,12 @@ class ExportManager(
             }
 
             context.startActivity(Intent.createChooser(shareIntent, "Share $itemName"))
+            Toast.makeText(context, "Sharing $itemName...", Toast.LENGTH_SHORT).show()
             Log.d(TAG, "Share intent launched successfully")
         } catch (e: Exception) {
             Log.e(TAG, "Failed to share file", e)
             _errorMessage.value = "Failed to share file: ${e.message}"
+            Toast.makeText(context, "Failed to share: ${e.message}", Toast.LENGTH_LONG).show()
         }
     }
 
@@ -283,16 +291,18 @@ class ExportManager(
     private fun exportToCsv(networks: List<WifiNetwork>, file: File) {
         try {
             Log.d(TAG, "Starting CSV export to ${file.absolutePath}")
+            Log.d(TAG, "Exporting ${networks.size} networks (including offline networks)")
             file.parentFile?.mkdirs()
 
             FileWriter(file).use { writer ->
                 PrintWriter(writer).use { csvWriter ->
-                    csvWriter.println("SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Frequency,Timestamp,HasPassword,Comment")
+                    csvWriter.println("SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Frequency,Timestamp,HasPassword,IsOffline,Comment")
 
                     networks.forEach { network ->
                         val hasPassword = if (!network.password.isNullOrEmpty()) "Yes" else "No"
                         val frequency = if (network.channel <= 14) "2.4 GHz" else "5 GHz"
                         val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(network.timestamp))
+                        val isOffline = if (network.isOffline) "Yes" else "No"
 
                         csvWriter.println(
                             "\"${network.ssid.replace("\"", "\"\"")}\"," +
@@ -305,6 +315,7 @@ class ExportManager(
                                     "\"$frequency\"," +
                                     "\"$timestamp\"," +
                                     "$hasPassword," +
+                                    "$isOffline," +
                                     "\"WiFi Network found by WiMap\""
                         )
                     }
@@ -321,6 +332,7 @@ class ExportManager(
     private fun exportToGoogleMaps(networks: List<WifiNetwork>, file: File) {
         try {
             Log.d(TAG, "Starting KML export to ${file.absolutePath}")
+            Log.d(TAG, "Exporting ${networks.size} networks (including offline networks)")
             file.parentFile?.mkdirs()
 
             val kmlContent = buildString {
@@ -352,11 +364,19 @@ class ExportManager(
                 appendLine("      </IconStyle>")
                 appendLine("    </Style>")
 
+                appendLine("    <Style id=\"offlineNetwork\">")
+                appendLine("      <IconStyle>")
+                appendLine("        <color>ff888888</color>")
+                appendLine("        <Icon><href>http://maps.google.com/mapfiles/kml/shapes/wifi.png</href></Icon>")
+                appendLine("      </IconStyle>")
+                appendLine("    </Style>")
+
                 networks.forEach { network ->
                     if (network.latitude != null && network.longitude != null &&
                         network.latitude != 0.0 && network.longitude != 0.0) {
 
                         val style = when {
+                            network.isOffline -> "offlineNetwork"
                             !network.password.isNullOrEmpty() -> "knownPassword"
                             network.security.contains("Open", ignoreCase = true) -> "openNetwork"
                             else -> "securedNetwork"
@@ -380,6 +400,11 @@ class ExportManager(
                         appendLine("        <b>Discovered:</b> ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(network.timestamp))}<br/>")
                         if (!network.password.isNullOrEmpty()) {
                             appendLine("        <b>Password Known:</b> Yes<br/>")
+                        }
+                        if (network.isOffline) {
+                            appendLine("        <b>Status:</b> Offline (not currently visible)<br/>")
+                        } else {
+                            appendLine("        <b>Status:</b> Online<br/>")
                         }
                         appendLine("        <br/><i>Discovered by WiMap</i>")
                         appendLine("      ]]></description>")
@@ -406,6 +431,7 @@ class ExportManager(
     private fun exportToPdf(networks: List<WifiNetwork>, file: File, context: Context) {
         try {
             Log.d(TAG, "Starting PDF export to ${file.absolutePath}")
+            Log.d(TAG, "Exporting ${networks.size} networks (including offline networks)")
             file.parentFile?.mkdirs()
 
             val pdfDocument = PdfDocument()
@@ -457,7 +483,13 @@ class ExportManager(
             val openNetworks = networks.size - securedNetworks
             val networksWithPasswords = networks.count { !it.password.isNullOrEmpty() }
             val networksWithGPS = networks.count { it.latitude != null && it.longitude != null && it.latitude != 0.0 && it.longitude != 0.0 }
+            val offlineNetworks = networks.count { it.isOffline }
+            val onlineNetworks = networks.size - offlineNetworks
 
+            canvas.drawText("• Online Networks: $onlineNetworks", leftMargin + 20f, yPosition, bodyPaint)
+            yPosition += 15f
+            canvas.drawText("• Offline Networks: $offlineNetworks", leftMargin + 20f, yPosition, bodyPaint)
+            yPosition += 15f
             canvas.drawText("• Secured Networks: $securedNetworks", leftMargin + 20f, yPosition, bodyPaint)
             yPosition += 15f
             canvas.drawText("• Open Networks: $openNetworks", leftMargin + 20f, yPosition, bodyPaint)
@@ -484,7 +516,12 @@ class ExportManager(
 
                 networkCount++
 
-                canvas.drawText("${networkCount}. ${network.ssid}", leftMargin, yPosition, headerPaint)
+                val networkTitle = if (network.isOffline) {
+                    "${networkCount}. ${network.ssid} [OFFLINE]"
+                } else {
+                    "${networkCount}. ${network.ssid}"
+                }
+                canvas.drawText(networkTitle, leftMargin, yPosition, headerPaint)
                 yPosition += 20f
 
                 canvas.drawText("BSSID: ${network.bssid}", leftMargin + 20f, yPosition, bodyPaint)
@@ -514,6 +551,10 @@ class ExportManager(
                     canvas.drawText("Password: Available", leftMargin + 20f, yPosition, bodyPaint)
                     yPosition += 15f
                 }
+
+                val status = if (network.isOffline) "Offline (not currently visible)" else "Online"
+                canvas.drawText("Status: $status", leftMargin + 20f, yPosition, bodyPaint)
+                yPosition += 15f
 
                 val discoveryTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(network.timestamp))
                 canvas.drawText("Discovered: $discoveryTime", leftMargin + 20f, yPosition, smallPaint)

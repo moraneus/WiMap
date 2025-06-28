@@ -241,6 +241,12 @@ class MainViewModel @Inject constructor(
     fun stopScan() {
         viewModelScope.launch {
             scanWifiNetworksUseCase.stopScan()
+            // Check for stale networks after scan completes
+            try {
+                scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
+            } catch (e: Exception) {
+                // Silently handle cleanup errors
+            }
         }
     }
 
@@ -805,7 +811,7 @@ class MainViewModel @Inject constructor(
     private fun startPeriodicNetworkCleanup() {
         viewModelScope.launch {
             while (true) {
-                delay(30 * 60 * 1000L) // Run every 30 minutes
+                delay(30 * 1000L) // Run every 30 seconds for more responsive offline detection
                 try {
                     scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
                 } catch (e: Exception) {

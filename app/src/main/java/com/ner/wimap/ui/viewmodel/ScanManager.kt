@@ -139,18 +139,37 @@ class ScanManager(
             val existingNetwork = networkMap[key]
             
             if (existingNetwork == null) {
-                // New network - add it
-                networkMap[key] = newNetwork
+                // New network - add it (always online when first detected)
+                android.util.Log.d("ScanManager", "New network detected: ${newNetwork.ssid} at ${System.currentTimeMillis()}")
+                networkMap[key] = newNetwork.copy(isOffline = false)
             } else {
                 // Existing network - update with logic
                 val updatedNetwork = if (newNetwork.rssi > existingNetwork.rssi) {
                     // New RSSI is stronger - update everything including coordinates
-                    newNetwork
+                    // If this was an offline network, restore it to online
+                    if (existingNetwork.isOffline) {
+                        android.util.Log.d("ScanManager", "Network ${newNetwork.ssid} is back online - restoring to main list")
+                    }
+                    newNetwork.copy(
+                        comment = existingNetwork.comment, // Preserve user data
+                        photoPath = existingNetwork.photoPath,
+                        isPinned = existingNetwork.isPinned,
+                        isOffline = false // Always online when detected in scan
+                    )
                 } else {
                     // Keep existing coordinates (where RSSI was strongest) but update other data
+                    // If this was an offline network, restore it to online
+                    if (existingNetwork.isOffline) {
+                        android.util.Log.d("ScanManager", "Network ${newNetwork.ssid} is back online - restoring to main list")
+                    }
+                    android.util.Log.d("ScanManager", "Updating existing network: ${newNetwork.ssid}, lastSeen: ${newNetwork.lastSeenTimestamp}")
                     newNetwork.copy(
                         latitude = existingNetwork.latitude,
-                        longitude = existingNetwork.longitude
+                        longitude = existingNetwork.longitude,
+                        comment = existingNetwork.comment, // Preserve user data
+                        photoPath = existingNetwork.photoPath,
+                        isPinned = existingNetwork.isPinned,
+                        isOffline = false // Always online when detected in scan
                     )
                 }
                 networkMap[key] = updatedNetwork
@@ -163,29 +182,38 @@ class ScanManager(
     }
 
     /**
-     * Removes networks that haven't been seen for the specified duration
+     * Mark networks as offline that haven't been seen for the specified duration
+     * instead of removing them completely
      */
     fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) {
         val currentTime = System.currentTimeMillis()
         val thresholdTime = currentTime - (hideNetworksUnseenForSeconds * 1000L) // Convert seconds to milliseconds
         
-        val keysToRemove = mutableListOf<String>()
+        android.util.Log.d("ScanManager", "Checking for stale networks. Threshold: ${hideNetworksUnseenForSeconds}s, Current time: $currentTime, Threshold time: $thresholdTime")
         
+        var hasChanges = false
+        
+        // Mark stale networks as offline instead of removing them
         networkMap.forEach { (key, network) ->
-            if (network.timestamp < thresholdTime) {
-                keysToRemove.add(key)
+            val timeSinceLastSeen = (currentTime - network.lastSeenTimestamp) / 1000
+            android.util.Log.d("ScanManager", "Network ${network.ssid}: last seen ${timeSinceLastSeen}s ago, isOffline: ${network.isOffline}")
+            
+            if (network.lastSeenTimestamp < thresholdTime && !network.isOffline) {
+                // Mark as offline
+                val offlineNetwork = network.copy(isOffline = true)
+                networkMap[key] = offlineNetwork
+                hasChanges = true
+                android.util.Log.d("ScanManager", "✅ Marked network ${network.ssid} as offline (last seen ${timeSinceLastSeen} seconds ago)")
             }
         }
         
-        // Remove stale networks
-        keysToRemove.forEach { key ->
-            networkMap.remove(key)
-        }
+        android.util.Log.d("ScanManager", "Stale network check complete. Changes made: $hasChanges")
         
-        // Update the StateFlow if any networks were removed
-        if (keysToRemove.isNotEmpty()) {
+        // Update the StateFlow if any networks were marked as offline
+        if (hasChanges) {
             val updatedNetworks = networkMap.values.toList().sortedByDescending { it.rssi }
             _wifiNetworks.value = updatedNetworks
+            android.util.Log.d("ScanManager", "Updated network list with ${updatedNetworks.count { it.isOffline }} offline networks")
         }
     }
 

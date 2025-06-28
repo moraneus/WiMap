@@ -16,5 +16,6 @@ data class WifiNetwork(
     val lastSeenTimestamp: Long = timestamp, // Track when this network was last seen
     val comment: String = "", // User-added comment
     val photoPath: String? = null, // Path to attached photo
-    val isPinned: Boolean = false // Pin status
+    val isPinned: Boolean = false, // Pin status
+    val isOffline: Boolean = false // Network is out of range/timed out
 )

@@ -16,6 +16,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -130,21 +131,34 @@ fun EnhancedWifiNetworkCard(
             .fillMaxSize()
             .shadow(
                 elevation = when {
+                    network.isOffline && actuallyPinned -> 8.dp // Reduced but still elevated for pinned offline
+                    network.isOffline -> 2.dp // Reduced elevation for offline
                     actuallyPinned -> 12.dp
                     hasAttachedData -> 6.dp
                     else -> 4.dp
                 }, 
                 shape = RoundedCornerShape(16.dp)
+            )
+            .then(
+                when {
+                    network.isOffline && actuallyPinned -> Modifier.alpha(0.75f) // Less faded for pinned offline
+                    network.isOffline -> Modifier.alpha(0.6f) // More faded for regular offline
+                    else -> Modifier
+                }
             ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
+                network.isOffline && actuallyPinned -> Color(0xFFF0E6D2) // Muted orange for pinned offline
+                network.isOffline -> Color(0xFFF5F5F5) // Greyed out for offline
                 actuallyPinned -> Color(0xFFFFF3E0) // Orange tint for pinned
                 hasAttachedData -> Color(0xFFF0F8FF) // Light blue tint for attached data
                 else -> Color.White
             }
         ),
         border = when {
+            network.isOffline && actuallyPinned -> BorderStroke(2.dp, Color(0xFF8B7355)) // Muted pin border for offline pinned
+            network.isOffline -> BorderStroke(1.dp, Color(0xFFE0E0E0)) // Grey border for offline
             actuallyPinned -> BorderStroke(2.dp, Color(0xFF667eea)) // Blue border for pinned
             hasAttachedData -> BorderStroke(1.dp, Color(0xFF87CEEB)) // Light blue border for attached data
             else -> null
@@ -167,7 +181,7 @@ fun EnhancedWifiNetworkCard(
             Text(
                 text = network.bssid,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF7F8C8D),
+                color = if (network.isOffline) Color(0xFFB0B0B0) else Color(0xFF7F8C8D), // More muted for offline
                 maxLines = 1,
                 modifier = Modifier.padding(top = 4.dp)
             )
