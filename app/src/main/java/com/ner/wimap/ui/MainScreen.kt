@@ -40,6 +40,8 @@ fun MainScreen(
     networkForPasswordInput: WifiNetwork?,
     showPermissionRationaleDialog: Boolean,
     permissionsRationaleMessage: String?,
+    showEmptyPasswordListDialog: Boolean,
+    networkForEmptyPasswordDialog: WifiNetwork?,
     isBackgroundScanningEnabled: Boolean,
     backgroundScanIntervalMinutes: Int,
     isAutoUploadEnabled: Boolean,
@@ -61,6 +63,8 @@ fun MainScreen(
     onDismissPermissionRationaleDialog: () -> Unit,
     onRationalePermissionsRequest: () -> Unit,
     onRationaleOpenSettings: () -> Unit,
+    onDismissEmptyPasswordListDialog: () -> Unit,
+    onOpenPasswordManagement: () -> Unit,
     onToggleBackgroundScanning: (Boolean) -> Unit,
     onSetBackgroundScanInterval: (Int) -> Unit,
     onToggleAutoUpload: (Boolean) -> Unit,
@@ -267,6 +271,17 @@ fun MainScreen(
                 onGrantPermissions = onRationalePermissionsRequest,
                 onOpenSettings = onRationaleOpenSettings,
                 onDismiss = onDismissPermissionRationaleDialog
+            )
+        }
+    }
+
+    // Empty Password List Dialog
+    if (showEmptyPasswordListDialog && networkForEmptyPasswordDialog != null) {
+        key("empty_password_dialog_${networkForEmptyPasswordDialog.bssid}") {
+            EmptyPasswordListDialog(
+                networkName = networkForEmptyPasswordDialog.ssid,
+                onOpenSettings = onOpenPasswordManagement,
+                onDismiss = onDismissEmptyPasswordListDialog
             )
         }
     }

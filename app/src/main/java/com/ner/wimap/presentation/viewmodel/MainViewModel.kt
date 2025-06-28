@@ -50,6 +50,12 @@ class MainViewModel @Inject constructor(
     private val _permissionsRationaleMessage = MutableStateFlow<String?>(null)
     val permissionsRationaleMessage: StateFlow<String?> = _permissionsRationaleMessage.asStateFlow()
 
+    private val _showEmptyPasswordListDialog = MutableStateFlow(false)
+    val showEmptyPasswordListDialog: StateFlow<Boolean> = _showEmptyPasswordListDialog.asStateFlow()
+
+    private val _networkForEmptyPasswordDialog = MutableStateFlow<WifiNetwork?>(null)
+    val networkForEmptyPasswordDialog: StateFlow<WifiNetwork?> = _networkForEmptyPasswordDialog.asStateFlow()
+
     // Permission actions
     private val _requestPermissionsAction = MutableStateFlow<List<String>?>(null)
     val requestPermissionsAction: StateFlow<List<String>?> = _requestPermissionsAction.asStateFlow()
@@ -243,6 +249,17 @@ class MainViewModel @Inject constructor(
 
     // Connection functions
     fun connectToNetwork(network: WifiNetwork) {
+        // Check if network is secured and password list is empty
+        val isOpenNetwork = network.security.contains("Open", ignoreCase = true) ||
+                           network.security.contains("OPEN", ignoreCase = true)
+        
+        if (!isOpenNetwork && _passwords.value.isEmpty()) {
+            // Show empty password list dialog instead of attempting connection
+            _networkForEmptyPasswordDialog.value = network
+            _showEmptyPasswordListDialog.value = true
+            return
+        }
+        
         viewModelScope.launch {
             val result = connectToNetworkUseCase.connectToNetwork(network)
             if (result.isFailure) {
@@ -474,6 +491,11 @@ class MainViewModel @Inject constructor(
 
     fun dismissPermissionRationaleDialog() {
         _showPermissionRationaleDialog.value = false
+    }
+
+    fun dismissEmptyPasswordListDialog() {
+        _showEmptyPasswordListDialog.value = false
+        _networkForEmptyPasswordDialog.value = null
     }
 
     fun onUserApprovesRationaleRequest() {

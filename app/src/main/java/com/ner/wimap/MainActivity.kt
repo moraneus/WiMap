@@ -66,6 +66,8 @@ class MainActivity : ComponentActivity() {
         val networkForPasswordInput by viewModel.networkForPasswordInput.collectAsState()
         val showPermissionRationaleDialog by viewModel.showPermissionRationaleDialog.collectAsState()
         val permissionsRationaleMessage by viewModel.permissionsRationaleMessage.collectAsState()
+        val showEmptyPasswordListDialog by viewModel.showEmptyPasswordListDialog.collectAsState()
+        val networkForEmptyPasswordDialog by viewModel.networkForEmptyPasswordDialog.collectAsState()
         val isBackgroundScanningEnabled by viewModel.isBackgroundScanningEnabled.collectAsState()
         val backgroundScanIntervalMinutes by viewModel.backgroundScanIntervalMinutes.collectAsState()
         val isAutoUploadEnabled by viewModel.isAutoUploadEnabled.collectAsState()
@@ -151,6 +153,8 @@ class MainActivity : ComponentActivity() {
                     networkForPasswordInput = networkForPasswordInput,
                     showPermissionRationaleDialog = showPermissionRationaleDialog,
                     permissionsRationaleMessage = permissionsRationaleMessage,
+                    showEmptyPasswordListDialog = showEmptyPasswordListDialog,
+                    networkForEmptyPasswordDialog = networkForEmptyPasswordDialog,
                     isBackgroundScanningEnabled = isBackgroundScanningEnabled,
                     backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
                     isAutoUploadEnabled = isAutoUploadEnabled,
@@ -172,6 +176,11 @@ class MainActivity : ComponentActivity() {
                     onDismissPermissionRationaleDialog = { viewModel.dismissPermissionRationaleDialog() },
                     onRationalePermissionsRequest = { viewModel.onUserApprovesRationaleRequest() },
                     onRationaleOpenSettings = { viewModel.onUserRequestsOpenSettings() },
+                    onDismissEmptyPasswordListDialog = { viewModel.dismissEmptyPasswordListDialog() },
+                    onOpenPasswordManagement = { 
+                        viewModel.dismissEmptyPasswordListDialog()
+                        navController.navigate("settings") 
+                    },
                     onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(enabled) },
                     onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
                     onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
