@@ -379,4 +379,166 @@
     <string name="wifi_disabled">WiFi is disabled</string>
     <string name="wifi_scan_failed_to_start">WiFi scan failed to start</string>
     <string name="wifi_scan_permission_error">WiFi scan permission error: %1$s</string>
+    
+    <!-- Additional Settings Screen Strings -->
+    <string name="settings_wifi_filters_title">WiFi Scan Filters</string>
+    <string name="settings_wifi_filters_subtitle">Customize your scanning preferences</string>
+    <string name="settings_connection_title">Connection Settings</string>
+    <string name="settings_connection_subtitle">Configure connection behavior and manage WiFi passwords</string>
+    <string name="settings_background_title">Background Scanning</string>
+    <string name="settings_background_subtitle">Automatic WiFi scanning when app is in background</string>
+    <string name="settings_network_mgmt_title">Network Management</string>
+    <string name="settings_network_mgmt_subtitle">Automatic network cleanup settings</string>
+    <string name="settings_data_mgmt_title">Data Management</string>
+    <string name="settings_data_mgmt_subtitle">Clear all stored data and settings</string>
+    <string name="settings_wifi_password_mgmt">WiFi Password Management</string>
+    
+    <!-- Settings Form Labels -->
+    <string name="settings_max_retries_format">Max Retries: %1$d</string>
+    <string name="settings_connection_timeout_format">Connection Timeout: %1$ds</string>
+    <string name="settings_min_rssi_format">Min RSSI for Connection: %1$ddBm</string>
+    <string name="settings_scan_interval_format">Scan Interval: %1$d minutes</string>
+    <string name="settings_password_length_format">(%1$d chars)</string>
+    <string name="settings_time_range_5min">5 min</string>
+    <string name="settings_time_range_60min">60 min</string>
+    
+    <!-- Background Scanning -->
+    <string name="settings_enable_background_scanning">Enable Background Scanning</string>
+    <string name="settings_background_scanning_description">Continue scanning for WiFi networks when app is in background</string>
+    <string name="settings_scan_interval_description">How often to automatically scan for new WiFi networks when the app is running in the background. Shorter intervals find networks faster but use more battery.</string>
+    
+    <!-- Data Management -->
+    <string name="settings_data_deletion_warning">This action will permanently delete all your data</string>
+    <string name="settings_data_deletion_details">• All saved passwords\n• All pinned networks\n• Connection history\n• App settings and preferences</string>
+    <string name="settings_clear_confirmation_message">This will erase all saved data (passwords, pinned networks, etc.). Continue?</string>
+    <string name="settings_erase_all">Erase All</string>
+    
+    <!-- BSSID Filter -->
+    <string name="settings_bssid_filter_title">BSSID Filter</string>
+    <string name="settings_bssid_filter_placeholder">Enter BSSID(s) separated by commas</string>
+    <string name="settings_bssid_filter_usage_title">BSSID Filter Usage</string>
+    <string name="settings_bssid_filter_description">Enter one or more BSSIDs (MAC addresses), separated by commas.</string>
+    <string name="settings_bssid_filter_example_label">Example:</string>
+    <string name="settings_bssid_filter_example">00:11:22:33:44:55, 66:77:88:99:AA:BB</string>
+    <string name="settings_bssid_filter_notes">• Partial matches are supported\n• Case insensitive\n• Only networks matching any of the specified BSSIDs will be shown</string>
+    
+    <!-- Security Filter -->
+    <string name="settings_security_filter_title">Security Type Filter</string>
+    <string name="settings_security_all_types">All security types</string>
+    <string name="settings_security_types_selected_format">%1$d type(s) selected</string>
+    
+    <!-- Network Management -->
+    <string name="settings_move_offline_format">Move unseen networks offline after: %1$s</string>
+    <string name="settings_offline_networks_description">Networks not seen for this duration will be moved to the \'Out of Range\' section. They remain editable but cannot be connected to until they reappear.</string>
+    <string name="settings_auto_remove_description">Networks not seen for this duration will be automatically removed from the list</string>
+    
+    <!-- Main Screen Strings -->
+    <string name="main_start_scan_prompt">Tap Start to discover nearby Wi-Fi networks.</string>
+    <string name="main_scanning_status">Scanning...</string>
+    <string name="main_networks_found_title">Networks Found</string>
+    <string name="main_networks_with_gps_format">%1$d with GPS location</string>
+    
+    <!-- Navigation Labels -->
+    <string name="nav_share">Share</string>
+    <string name="nav_clear">Clear</string>
+    <string name="nav_maps">Maps</string>
+    <string name="nav_more">More</string>
+    
+    <!-- About Dialog -->
+    <string name="about_dialog_title">About WiMap</string>
+    <string name="about_app_description">WiMap is a comprehensive WiFi network scanner and mapping application designed to help you discover, analyze, and manage wireless networks in your area.</string>
+    <string name="about_key_features">Key Features:</string>
+    <string name="about_features_list">• Real-time WiFi network scanning\n• GPS location mapping\n• Network security analysis\n• Export and sharing capabilities\n• Pinned network management\n• Background scanning support</string>
+    <string name="about_version">Version 1.0</string>
+    <string name="about_ok_button">OK</string>
+    
+    <!-- Terms of Use Dialog -->
+    <string name="terms_dialog_title">Terms of Use</string>
+    <string name="terms_legal_notice">Legal Usage Notice</string>
+    <string name="terms_preamble">This application is intended for legitimate network analysis and educational purposes only. By using WiMap, you agree to the following terms:</string>
+    <string name="terms_prohibited_title">Prohibited Activities:</string>
+    <string name="terms_prohibited_list">• Unauthorized access to networks you do not own\n• Attempting to crack or bypass network security\n• Using this app for illegal surveillance or hacking\n• Violating local privacy and cybersecurity laws\n• Commercial exploitation without permission</string>
+    <string name="terms_data_collection_title">Data Collection:</string>
+    <string name="terms_data_collection_text">Network scan data, including SSIDs, signal strengths, and GPS coordinates, may be transmitted to our servers for statistical analysis and service improvement. This data helps us understand WiFi coverage patterns and enhance the application\'s functionality.</string>
+    <string name="terms_responsibility_title">User Responsibility:</string>
+    <string name="terms_responsibility_text">Users are solely responsible for ensuring their use of this application complies with all applicable local, state, and federal laws. The developers assume no liability for misuse of this application.</string>
+    <string name="terms_understand_button">I Understand</string>
+    
+    <!-- Offline Networks -->
+    <string name="offline_networks_title">Out of Range Networks</string>
+    <string name="offline_networks_subtitle">Networks not seen recently - still editable</string>
+    
+    <!-- Pinned Networks Screen -->
+    <string name="pinned_networks_help_text">Long press on any network for more options</string>
+    <string name="pinned_action_share">Share Network</string>
+    <string name="pinned_action_export">Export as...</string>
+    <string name="pinned_action_delete">Delete Network</string>
+    <string name="pinned_date_format">Pinned on %1$s</string>
+    <string name="empty_pinned_networks_title">No Pinned Networks</string>
+    <string name="empty_pinned_networks_message">Pin networks from the main screen to access them quickly here</string>
+    <string name="show_details">Show Details</string>
+    <string name="hide_details">Hide Details</string>
+    
+    <!-- Permission Dialog -->
+    <string name="permission_dialog_title">Permissions Required</string>
+    <string name="permission_required_header">Required Permissions:</string>
+    <string name="permission_location_title">Location Access</string>
+    <string name="permission_location_description">Required to scan WiFi networks and get GPS coordinates</string>
+    <string name="permission_wifi_title">WiFi Access</string>
+    <string name="permission_wifi_description">Required to discover and analyze wireless networks</string>
+    <string name="permission_camera_title">Camera Access</string>
+    <string name="permission_camera_description">Optional - to capture photos of network locations</string>
+    <string name="permission_allow_button">Allow</string>
+    <string name="permission_open_settings_button">Open App Settings</string>
+    
+    <!-- Empty Password Dialog -->
+    <string name="empty_password_dialog_title">No passwords found!</string>
+    <string name="empty_password_network_format">Network: %1$s</string>
+    <string name="empty_password_message">You need to add at least one password in Settings before attempting to connect to networks.</string>
+    <string name="empty_password_go_settings">Go to Settings</string>
+    <string name="empty_password_close">Close</string>
+    
+    <!-- Export Dialog -->
+    <string name="export_dialog_title">Export WiFi Networks</string>
+    <string name="export_format_prompt">Select the format you want to export:</string>
+    <string name="export_csv_title">CSV File</string>
+    <string name="export_csv_description">Spreadsheet format for data analysis</string>
+    <string name="export_kml_title">Google Maps (KML)</string>
+    <string name="export_kml_description">View networks on Google Maps/Earth</string>
+    <string name="export_pdf_title">PDF Report</string>
+    <string name="export_pdf_description">Professional document with network details</string>
+    <string name="export_action_dialog_title">Choose Export Action</string>
+    <string name="export_action_prompt">What would you like to do with the %1$s file?</string>
+    <string name="export_save_title">Save to Device</string>
+    <string name="export_save_description">Save file to your device storage</string>
+    <string name="export_share_title">Share File</string>
+    <string name="export_share_description">Share immediately via apps</string>
+    <string name="export_save_and_share_title">Save &amp; Share</string>
+    <string name="export_save_and_share_description">Save to device and share</string>
+    <string name="export_back_button">Back</string>
+    
+    <!-- Sticky Dialog Messages -->
+    <string name="sticky_discovering_networks">Discovering networks...</string>
+    <string name="sticky_breaking_password_format">Breaking Password for %1$s</string>
+    <string name="sticky_uploading_networks">Uploading Networks</string>
+    <string name="sticky_uploading_format">Uploading network data to cloud (%1$d/%2$d)</string>
+    
+    <!-- Sorting -->
+    <string name="sort_by_format">Sort: %1$s</string>
+    <string name="sort_last_seen">Last Seen</string>
+    <string name="sort_signal_strength">Signal Strength</string>
+    <string name="sort_name_alphabetical">Name (A-Z)</string>
+    
+    <!-- Background Service -->
+    <string name="background_scanning_active">Background scanning active</string>
+    
+    <!-- App Bar -->
+    <string name="app_bar_title">WiMap</string>
+    <string name="app_bar_subtitle">WiFi Network Scanner</string>
+    
+    <!-- Network Form Placeholders -->
+    <string name="network_comment_placeholder">Add your notes about this network...</string>
+    <string name="network_password_placeholder">Enter network password...</string>
+    
+    
 </resources>

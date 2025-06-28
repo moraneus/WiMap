@@ -64,6 +64,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation(libs.androidx.activity.compose)
+    implementation("androidx.appcompat:appcompat:1.6.1")
     
     // Compose BOM
     implementation(platform(libs.androidx.compose.bom))
@@ -75,6 +76,10 @@ dependencies {
     
     // Navigation
     implementation("androidx.navigation:navigation-compose:2.7.5")
+    
+    // ViewPager2 and Foundation for swipe gestures
+    implementation("androidx.viewpager2:viewpager2:1.0.0")
+    implementation("androidx.compose.foundation:foundation:1.7.0")
     
     // ViewModel
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.7.0")

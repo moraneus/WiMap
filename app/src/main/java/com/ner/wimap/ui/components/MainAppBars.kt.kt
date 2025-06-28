@@ -8,6 +8,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -18,10 +19,12 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.ner.wimap.R
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
@@ -31,7 +34,12 @@ import com.ner.wimap.ui.viewmodel.ExportAction
 fun MainTopAppBar(
     onOpenPinnedNetworks: () -> Unit,
     onOpenSettings: () -> Unit,
-    isBackgroundServiceActive: Boolean = false
+    isBackgroundServiceActive: Boolean = false,
+    showNavigationActions: Boolean = true,
+    onShowAbout: () -> Unit = {},
+    onShowTerms: () -> Unit = {},
+    currentPage: Int = 1,
+    onNavigateToPage: (Int) -> Unit = {}
 ) {
     // Animated gradient colors
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
@@ -73,59 +81,92 @@ fun MainTopAppBar(
                 )
                 .padding(top = 24.dp) // Status bar padding
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+                    .padding(horizontal = 20.dp)
             ) {
-                // Title section with animated icon
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier.weight(1f)
-                ) {
-                    AnimatedWifiIcon()
-                    Column {
-                        Text(
-                            text = "WiMap",
-                            style = MaterialTheme.typography.headlineSmall.copy(
-                                fontWeight = FontWeight.ExtraBold
-                            ),
-                            color = Color.White
-                        )
+                // Navigation dots at the very top
+                if (showNavigationActions) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .align(Alignment.TopCenter)
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
                         Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text(
-                                text = "WiFi Network Scanner",
-                                style = MaterialTheme.typography.labelMedium,
-                                color = Color.White.copy(alpha = 0.8f)
-                            )
-                            if (isBackgroundServiceActive) {
-                                BackgroundServiceIndicator()
-                            }
+                            GlowingNavigationDot(isSelected = currentPage == 0)
+                            GlowingNavigationDot(isSelected = currentPage == 1)
+                            GlowingNavigationDot(isSelected = currentPage == 2)
                         }
                     }
                 }
                 
-                // Action buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                // Main content area centered and balanced
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .align(Alignment.Center)
+                        .padding(top = 4.dp)
                 ) {
-                    ModernTopBarActionButton(
-                        icon = Icons.Default.PushPin,
-                        contentDescription = "Pinned Networks",
-                        onClick = onOpenPinnedNetworks
-                    )
-                    ModernTopBarActionButton(
-                        icon = Icons.Default.Settings,
-                        contentDescription = "Settings",
-                        onClick = onOpenSettings
-                    )
+                    // Left side - Title and icon
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        AnimatedWifiIcon()
+                        Column(
+                            verticalArrangement = Arrangement.Center
+                        ) {
+                            Text(
+                                text = "WiMap",
+                                style = MaterialTheme.typography.headlineMedium.copy(
+                                    fontWeight = FontWeight.ExtraBold
+                                ),
+                                color = Color.White
+                            )
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Text(
+                                    text = "WiFi Network Scanner",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = Color.White.copy(alpha = 0.85f)
+                                )
+                                if (isBackgroundServiceActive) {
+                                    BackgroundServiceIndicator()
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Right side - Action button
+                    if (showNavigationActions) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            OverflowMenuButton(
+                                onOpenSettings = onOpenSettings,
+                                onShowAbout = onShowAbout,
+                                onShowTerms = onShowTerms
+                            )
+                        }
+                    }
                 }
             }
         }
@@ -147,10 +188,10 @@ private fun AnimatedWifiIcon() {
     
     Box(
         modifier = Modifier
-            .size(48.dp)
+            .size(42.dp)
             .background(
                 Color.White.copy(alpha = 0.15f),
-                RoundedCornerShape(16.dp)
+                RoundedCornerShape(14.dp)
             ),
         contentAlignment = Alignment.Center
     ) {
@@ -159,7 +200,7 @@ private fun AnimatedWifiIcon() {
             contentDescription = null,
             tint = Color.White,
             modifier = Modifier
-                .size(28.dp)
+                .size(24.dp)
                 .graphicsLayer {
                     scaleX = pulseScale
                     scaleY = pulseScale
@@ -273,7 +314,10 @@ fun UnifiedTopAppBar(
     title: String,
     icon: ImageVector,
     onBack: () -> Unit,
-    actions: @Composable RowScope.() -> Unit = {}
+    actions: @Composable RowScope.() -> Unit = {},
+    currentPage: Int = 1,
+    onNavigateToPage: (Int) -> Unit = {},
+    showNavigationActions: Boolean = true
 ) {
     // Animated gradient colors - same as main screen
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
@@ -315,35 +359,75 @@ fun UnifiedTopAppBar(
                 )
                 .padding(top = 24.dp) // Status bar padding
         ) {
-            Row(
+            Box(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(64.dp)
-                    .padding(horizontal = 20.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    .padding(horizontal = 20.dp)
             ) {
-                // Back button with animation
-                AnimatedBackButton(onClick = onBack)
+                // Navigation dots at the very top
+                if (showNavigationActions) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(16.dp)
+                            .align(Alignment.TopCenter)
+                            .padding(top = 2.dp),
+                        horizontalArrangement = Arrangement.Center,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            GlowingNavigationDot(isSelected = currentPage == 0)
+                            GlowingNavigationDot(isSelected = currentPage == 1)
+                            GlowingNavigationDot(isSelected = currentPage == 2)
+                        }
+                    }
+                }
                 
-                // Screen icon with animation
-                AnimatedScreenIcon(icon = icon)
-                
-                // Title section
-                Text(
-                    text = title,
-                    style = MaterialTheme.typography.headlineSmall.copy(
-                        fontWeight = FontWeight.Bold
-                    ),
-                    color = Color.White,
-                    modifier = Modifier.weight(1f)
-                )
-                
-                // Action buttons
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(12.dp),
-                    content = actions
-                )
+                // Main content area for secondary screens
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(40.dp)
+                        .align(Alignment.Center)
+                        .padding(top = 4.dp)
+                ) {
+                    // Left side - Title and icon
+                    Row(
+                        modifier = Modifier
+                            .align(Alignment.CenterStart)
+                            .fillMaxHeight(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        AnimatedScreenIcon(icon = icon)
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.headlineLarge.copy(
+                                fontWeight = FontWeight.Bold
+                            ),
+                            color = Color.White
+                        )
+                    }
+                    
+                    // Right side - Action buttons
+                    if (actions != {}) {
+                        Box(
+                            modifier = Modifier
+                                .align(Alignment.CenterEnd)
+                                .fillMaxHeight(),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                content = actions
+                            )
+                        }
+                    }
+                }
             }
         }
     }
@@ -358,33 +442,25 @@ private fun AnimatedBackButton(onClick: () -> Unit) {
         label = "back_button_scale"
     )
     
-    Surface(
+    IconButton(
         onClick = {
             isPressed = true
             onClick()
             isPressed = false
         },
         modifier = Modifier
-            .size(44.dp)
+            .size(48.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.15f),
-        tonalElevation = 2.dp
+            }
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
-        ) {
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                contentDescription = stringResource(R.string.back),
-                tint = Color.White,
-                modifier = Modifier.size(22.dp)
-            )
-        }
+        Icon(
+            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+            contentDescription = "Back",
+            tint = Color.White,
+            modifier = Modifier.size(26.dp)
+        )
     }
 }
 
@@ -403,7 +479,7 @@ private fun AnimatedScreenIcon(icon: ImageVector) {
     
     Box(
         modifier = Modifier
-            .size(44.dp)
+            .size(38.dp)
             .background(
                 Color.White.copy(alpha = 0.15f),
                 RoundedCornerShape(12.dp)
@@ -415,7 +491,7 @@ private fun AnimatedScreenIcon(icon: ImageVector) {
             contentDescription = null,
             tint = Color.White,
             modifier = Modifier
-                .size(24.dp)
+                .size(22.dp)
                 .graphicsLayer {
                     scaleX = pulseScale
                     scaleY = pulseScale
@@ -435,40 +511,268 @@ fun UnifiedTopBarActionButton(
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.95f else 1f,
+        targetValue = if (isPressed) 0.9f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "action_button_scale"
     )
     
-    Surface(
+    IconButton(
         onClick = {
             isPressed = true
             onClick()
             isPressed = false
         },
         modifier = Modifier
-            .size(44.dp)
+            .size(48.dp)
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
-            },
-        shape = RoundedCornerShape(12.dp),
-        color = Color.White.copy(alpha = 0.15f),
-        tonalElevation = 2.dp
+            }
     ) {
-        Box(
-            contentAlignment = Alignment.Center,
-            modifier = Modifier.fillMaxSize()
+        Icon(
+            imageVector = icon,
+            contentDescription = contentDescription,
+            tint = Color.White,
+            modifier = Modifier.size(26.dp)
+        )
+    }
+}
+
+/**
+ * Modern overflow menu button with Material 3 styling
+ */
+@Composable
+private fun OverflowMenuButton(
+    onOpenSettings: () -> Unit,
+    onShowAbout: () -> Unit = {},
+    onShowTerms: () -> Unit = {}
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "overflow_button_scale"
+    )
+    
+    Box {
+        IconButton(
+            onClick = {
+                isPressed = true
+                expanded = true
+                isPressed = false
+            },
+            modifier = Modifier
+                .size(48.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
         ) {
             Icon(
-                imageVector = icon,
-                contentDescription = contentDescription,
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "More options",
                 tint = Color.White,
-                modifier = Modifier.size(22.dp)
+                modifier = Modifier.size(26.dp)
             )
+        }
+        
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(180.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF667eea).copy(alpha = 0.95f),
+                            Color(0xFF764ba2).copy(alpha = 0.95f)
+                        )
+                    )
+                )
+                .padding(4.dp),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Settings,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Settings",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = Color.White
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onOpenSettings()
+                    },
+                    modifier = Modifier
+                        .background(
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(vertical = 6.dp, horizontal = 4.dp)
+                )
+                
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Info,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "About",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = Color.White
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onShowAbout()
+                    },
+                    modifier = Modifier
+                        .background(
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(vertical = 6.dp, horizontal = 4.dp)
+                )
+                
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Outlined.Description,
+                                contentDescription = null,
+                                tint = Color.White,
+                                modifier = Modifier.size(22.dp)
+                            )
+                            Text(
+                                text = "Terms of Use",
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = FontWeight.Medium
+                                ),
+                                color = Color.White
+                            )
+                        }
+                    },
+                    onClick = {
+                        expanded = false
+                        onShowTerms()
+                    },
+                    modifier = Modifier
+                        .background(
+                            Color.White.copy(alpha = 0.1f),
+                            RoundedCornerShape(12.dp)
+                        )
+                        .padding(vertical = 6.dp, horizontal = 4.dp)
+                )
         }
     }
 }
+
+
+/**
+ * Glowing navigation dot - all selected dots are yellow and bigger
+ */
+@Composable
+private fun GlowingNavigationDot(isSelected: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "glow_animation")
+    
+    // Glow animation for any selected dot
+    val glowIntensity by infiniteTransition.animateFloat(
+        initialValue = 0.6f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1500, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "glow_intensity"
+    )
+    
+    val animatedSize by animateDpAsState(
+        targetValue = if (isSelected) 12.dp else 6.dp,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "dot_size"
+    )
+    
+    val animatedAlpha by animateFloatAsState(
+        targetValue = if (isSelected) 1f else 0.4f,
+        animationSpec = tween(300),
+        label = "dot_alpha"
+    )
+    
+    Box(
+        modifier = Modifier.size(16.dp), // Fixed container size for consistent spacing
+        contentAlignment = Alignment.Center
+    ) {
+        // Glow effect for any selected dot
+        if (isSelected) {
+            Box(
+                modifier = Modifier
+                    .size(18.dp)
+                    .background(
+                        brush = Brush.radialGradient(
+                            colors = listOf(
+                                Color(0xFFFFD700).copy(alpha = 0.3f * glowIntensity),
+                                Color(0xFFFFD700).copy(alpha = 0.1f * glowIntensity),
+                                Color.Transparent
+                            ),
+                            radius = 36f
+                        ),
+                        shape = CircleShape
+                    )
+            )
+        }
+        
+        // Main dot
+        Box(
+            modifier = Modifier
+                .size(animatedSize)
+                .alpha(animatedAlpha)
+                .background(
+                    color = if (isSelected) Color(0xFFFFD700) else Color.White,
+                    shape = CircleShape
+                )
+                .let { modifier ->
+                    if (isSelected) {
+                        modifier.shadow(
+                            elevation = 3.dp,
+                            shape = CircleShape,
+                            ambientColor = Color(0xFFFFD700).copy(alpha = 0.4f),
+                            spotColor = Color(0xFFFFD700).copy(alpha = 0.6f)
+                        )
+                    } else modifier
+                }
+        )
+    }
+}
+
 
 @Composable
 private fun BackgroundServiceIndicator() {

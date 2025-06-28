@@ -18,10 +18,16 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import kotlinx.coroutines.launch
 import com.ner.wimap.presentation.viewmodel.MainViewModel
 import com.ner.wimap.ui.MainScreen
+import com.ner.wimap.ui.MapsScreenWrapper
 import com.ner.wimap.ui.PinnedNetworksScreen
 import com.ner.wimap.ui.SettingsScreen
+import com.ner.wimap.ui.components.SwipeNavigationContainer
+import com.ner.wimap.ui.components.SwipeDestination
+import com.ner.wimap.ui.components.NavigationWrapper
+import androidx.compose.foundation.pager.rememberPagerState
 import com.ner.wimap.ui.theme.WiMapTheme
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
@@ -62,6 +68,7 @@ class MainActivity : ComponentActivity() {
         val hasEverScanned by viewModel.hasEverScanned.collectAsState()
         val connectionStatus by viewModel.connectionStatus.collectAsState()
         val uploadStatus by viewModel.uploadStatus.collectAsState()
+        
         val connectionSuccessMessage by viewModel.connectionSuccessMessage.collectAsState()
         val showPasswordDialog by viewModel.showPasswordDialog.collectAsState()
         val networkForPasswordInput by viewModel.networkForPasswordInput.collectAsState()
@@ -148,142 +155,191 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        NavHost(
-            navController = navController,
-            startDestination = "main"
-        ) {
-            composable("main") {
-                MainScreen(
-                    wifiNetworks = wifiNetworks,
-                    isScanning = isScanning,
-                    hasEverScanned = hasEverScanned,
-                    connectionStatus = connectionStatus,
-                    uploadStatus = uploadStatus,
-                    showPasswordDialog = showPasswordDialog,
-                    networkForPasswordInput = networkForPasswordInput,
-                    showPermissionRationaleDialog = showPermissionRationaleDialog,
-                    permissionsRationaleMessage = permissionsRationaleMessage,
-                    showEmptyPasswordListDialog = showEmptyPasswordListDialog,
-                    networkForEmptyPasswordDialog = networkForEmptyPasswordDialog,
-                    isBackgroundScanningEnabled = isBackgroundScanningEnabled,
-                    backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
-                    isBackgroundServiceActive = isBackgroundServiceActive,
-                    isAutoUploadEnabled = isAutoUploadEnabled,
-                    pinnedNetworks = pinnedNetworks,
-                    isConnecting = isConnecting,
-                    connectingNetworks = connectingNetworks,
-                    connectionProgress = connectionProgress,
-                    successfulPasswords = successfulPasswords,
-                    currentPassword = currentPassword,
-                    currentAttempt = currentAttempt,
-                    totalAttempts = totalAttempts,
-                    connectingNetworkName = connectingNetworkName,
-                    currentSortingMode = sortingMode,
-                    onStartScan = { viewModel.startScan() },
-                    onStopScan = { viewModel.stopScan() },
-                    onConnect = { network -> viewModel.connectToNetwork(network) },
-                    onPasswordEntered = { password -> viewModel.onPasswordEntered(password) },
-                    onDismissPasswordDialog = { viewModel.dismissPasswordDialog() },
-                    onDismissPermissionRationaleDialog = { viewModel.dismissPermissionRationaleDialog() },
-                    onRationalePermissionsRequest = { viewModel.onUserApprovesRationaleRequest() },
-                    onRationaleOpenSettings = { viewModel.onUserRequestsOpenSettings() },
-                    onDismissEmptyPasswordListDialog = { viewModel.dismissEmptyPasswordListDialog() },
-                    onOpenPasswordManagement = { 
-                        viewModel.dismissEmptyPasswordListDialog()
-                        navController.navigate("settings") 
-                    },
-                    onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
-                    onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
-                    onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
-                    onUploadScanResults = { viewModel.uploadScanResultsToFirebase() },
-                    onClearUploadStatus = { viewModel.clearUploadStatus() },
-                    onOpenSettings = { navController.navigate("settings") },
-                    onExportWithFormatAndAction = { format, action ->
-                        viewModel.exportWifiNetworks(this@MainActivity, format, action)
-                    },
-                    onShareCsv = { viewModel.shareCsv(this@MainActivity) },
-                    onClearNetworks = { viewModel.clearNetworks() },
-                    onOpenPinnedNetworks = { navController.navigate("pinned_networks") },
-                    onPinNetwork = { network, comment, password, photoUri ->
-                        // Use the new temporary data system for pinning
-                        viewModel.pinNetworkWithTemporaryData(network.bssid, true)
-                    },
-                    onUnpinNetwork = { bssid -> 
-                        // Use the new temporary data system for unpinning
-                        viewModel.pinNetworkWithTemporaryData(bssid, false)
-                    },
-                    onClearConnectionProgress = { viewModel.clearConnectionProgress() },
-                    onUpdateNetworkData = { network, comment, password, photoUri ->
-                        // Use temporary network data for all networks (pinned and unpinned)
-                        viewModel.updateTemporaryNetworkData(network.bssid, network.ssid, comment, password, photoUri)
-                    },
-                    onUpdateNetworkDataWithPhotoDeletion = { network, comment, password, photoUri, clearPhoto ->
-                        // Use temporary network data with photo deletion support
-                        viewModel.updateTemporaryNetworkDataWithPhotoDeletion(network.bssid, network.ssid, comment, password, photoUri, clearPhoto)
-                    },
-                    onOpenMaps = {
-                        // Open Google Maps activity with current networks
-                        val intent = MapsActivity.createIntent(this@MainActivity, wifiNetworks)
-                        startActivity(intent)
-                    },
-                    onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) },
-                    onClearConnectionStatus = { viewModel.clearConnectionStatus() }
-                )
-            }
-
-            composable("settings") {
-                SettingsScreen(
-                    ssidFilter = ssidFilter,
-                    onSsidFilterChange = { viewModel.onSsidFilterChange(it) },
-                    securityFilter = securityFilter,
-                    onSecurityFilterChange = { viewModel.onSecurityFilterChange(it) },
-                    rssiThreshold = rssiThreshold,
-                    onRssiThresholdChange = { viewModel.onRssiThresholdChange(it) },
-                    bssidFilter = bssidFilter,
-                    onBssidFilterChange = { viewModel.onBssidFilterChange(it) },
-                    availableSecurityTypes = availableSecurityTypes,
-                    passwords = passwords,
-                    onAddPassword = { viewModel.onAddPassword(it) },
-                    onRemovePassword = { viewModel.onRemovePassword(it) },
-                    maxRetries = maxRetries,
-                    onMaxRetriesChange = { viewModel.setMaxRetries(it) },
-                    connectionTimeoutSeconds = connectionTimeoutSeconds,
-                    onConnectionTimeoutChange = { viewModel.setConnectionTimeoutSeconds(it) },
-                    rssiThresholdForConnection = rssiThresholdForConnection,
-                    onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
-                    hideNetworksUnseenForSeconds = hideNetworksUnseenForSeconds,
-                    onHideNetworksUnseenForSecondsChange = { viewModel.setHideNetworksUnseenForSeconds(it) },
-                    isBackgroundScanningEnabled = isBackgroundScanningEnabled,
-                    onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
-                    backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
-                    onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
-                    onClearAllData = { viewModel.clearAllData() },
-                    onBack = { navController.popBackStack() }
-                )
-            }
-
-            composable("pinned_networks") {
-                PinnedNetworksScreen(
-                    pinnedNetworks = pinnedNetworks,
-                    successfulPasswords = successfulPasswords,
-                    connectingNetworks = connectingNetworks,
-                    onBack = { navController.popBackStack() },
-                    onDeletePinnedNetwork = { network ->
-                        viewModel.deletePinnedNetwork(network)
-                    },
-                    onConnectToPinnedNetwork = { network ->
-                        viewModel.connectToPinnedNetwork(network)
-                    },
-                    onSharePinnedNetwork = { network ->
-                        viewModel.sharePinnedNetwork(this@MainActivity, network)
-                    },
-                    onExportPinnedNetwork = { network, format, action ->
-                        viewModel.exportPinnedNetwork(this@MainActivity, network, format, action)
-                    },
-                    onUpdatePinnedNetworkData = { bssid, ssid, comment, password, photoPath, clearPhoto ->
-                        viewModel.updateTemporaryNetworkDataWithPhotoDeletion(bssid, ssid, comment, password, photoPath, clearPhoto)
+        // Current navigation state for handling settings screen
+        var currentScreen by remember { mutableStateOf("main") }
+        var currentPage by remember { mutableStateOf(SwipeDestination.MAIN.index) }
+        val coroutineScope = rememberCoroutineScope()
+        val pagerState = rememberPagerState(
+            initialPage = SwipeDestination.MAIN.index,
+            pageCount = { 3 }
+        )
+        
+        if (currentScreen == "settings") {
+            SettingsScreen(
+                ssidFilter = ssidFilter,
+                onSsidFilterChange = { viewModel.onSsidFilterChange(it) },
+                securityFilter = securityFilter,
+                onSecurityFilterChange = { viewModel.onSecurityFilterChange(it) },
+                rssiThreshold = rssiThreshold,
+                onRssiThresholdChange = { viewModel.onRssiThresholdChange(it) },
+                bssidFilter = bssidFilter,
+                onBssidFilterChange = { viewModel.onBssidFilterChange(it) },
+                availableSecurityTypes = availableSecurityTypes,
+                passwords = passwords,
+                onAddPassword = { viewModel.onAddPassword(it) },
+                onRemovePassword = { viewModel.onRemovePassword(it) },
+                maxRetries = maxRetries,
+                onMaxRetriesChange = { viewModel.setMaxRetries(it) },
+                connectionTimeoutSeconds = connectionTimeoutSeconds,
+                onConnectionTimeoutChange = { viewModel.setConnectionTimeoutSeconds(it) },
+                rssiThresholdForConnection = rssiThresholdForConnection,
+                onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
+                hideNetworksUnseenForSeconds = hideNetworksUnseenForSeconds,
+                onHideNetworksUnseenForSecondsChange = { viewModel.setHideNetworksUnseenForSeconds(it) },
+                isBackgroundScanningEnabled = isBackgroundScanningEnabled,
+                onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
+                backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
+                onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
+                onClearAllData = { viewModel.clearAllData() },
+                onBack = { currentScreen = "main" }
+            )
+        } else {
+            SwipeNavigationContainer(
+                initialPage = SwipeDestination.MAIN.index,
+                onPageChanged = { pageIndex ->
+                    currentPage = pageIndex
+                }
+            ) { pageIndex, _ ->
+                when (pageIndex) {
+                    SwipeDestination.PINNED.index -> {
+                        PinnedNetworksScreen(
+                            pinnedNetworks = pinnedNetworks,
+                            successfulPasswords = successfulPasswords,
+                            connectingNetworks = connectingNetworks,
+                            onBack = { 
+                                // Navigate back to main screen (center page)
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                            },
+                            onDeletePinnedNetwork = { network ->
+                                viewModel.deletePinnedNetwork(network)
+                            },
+                            onConnectToPinnedNetwork = { network ->
+                                viewModel.connectToPinnedNetwork(network)
+                            },
+                            onSharePinnedNetwork = { network ->
+                                viewModel.sharePinnedNetwork(this@MainActivity, network)
+                            },
+                            onExportPinnedNetwork = { network, format, action ->
+                                viewModel.exportPinnedNetwork(this@MainActivity, network, format, action)
+                            },
+                            onUpdatePinnedNetworkData = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                                viewModel.updateTemporaryNetworkDataWithPhotoDeletion(bssid, ssid, comment, password, photoPath, clearPhoto)
+                            },
+                            onNavigateToPage = { pageIndex ->
+                                currentPage = pageIndex
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pageIndex)
+                                }
+                            },
+                            currentPage = currentPage
+                        )
                     }
-                )
+                    SwipeDestination.MAIN.index -> {
+                        MainScreen(
+                            wifiNetworks = wifiNetworks,
+                            isScanning = isScanning,
+                            hasEverScanned = hasEverScanned,
+                            connectionStatus = connectionStatus,
+                            uploadStatus = uploadStatus,
+                            showPasswordDialog = showPasswordDialog,
+                            networkForPasswordInput = networkForPasswordInput,
+                            showPermissionRationaleDialog = showPermissionRationaleDialog,
+                            permissionsRationaleMessage = permissionsRationaleMessage,
+                            showEmptyPasswordListDialog = showEmptyPasswordListDialog,
+                            networkForEmptyPasswordDialog = networkForEmptyPasswordDialog,
+                            isBackgroundScanningEnabled = isBackgroundScanningEnabled,
+                            backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
+                            isBackgroundServiceActive = isBackgroundServiceActive,
+                            isAutoUploadEnabled = isAutoUploadEnabled,
+                            pinnedNetworks = pinnedNetworks,
+                            isConnecting = isConnecting,
+                            connectingNetworks = connectingNetworks,
+                            connectionProgress = connectionProgress,
+                            successfulPasswords = successfulPasswords,
+                            currentPassword = currentPassword,
+                            currentAttempt = currentAttempt,
+                            totalAttempts = totalAttempts,
+                            connectingNetworkName = connectingNetworkName,
+                            currentSortingMode = sortingMode,
+                            onStartScan = { viewModel.startScan() },
+                            onStopScan = { viewModel.stopScan() },
+                            onConnect = { network -> viewModel.connectToNetwork(network) },
+                            onPasswordEntered = { password -> viewModel.onPasswordEntered(password) },
+                            onDismissPasswordDialog = { viewModel.dismissPasswordDialog() },
+                            onDismissPermissionRationaleDialog = { viewModel.dismissPermissionRationaleDialog() },
+                            onRationalePermissionsRequest = { viewModel.onUserApprovesRationaleRequest() },
+                            onRationaleOpenSettings = { viewModel.onUserRequestsOpenSettings() },
+                            onDismissEmptyPasswordListDialog = { viewModel.dismissEmptyPasswordListDialog() },
+                            onOpenPasswordManagement = { 
+                                viewModel.dismissEmptyPasswordListDialog()
+                                currentScreen = "settings"
+                            },
+                            onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
+                            onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
+                            onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
+                            onUploadScanResults = { viewModel.uploadScanResultsToFirebase() },
+                            onClearUploadStatus = { viewModel.clearUploadStatus() },
+                            onOpenSettings = { currentScreen = "settings" },
+                            onExportWithFormatAndAction = { format, action ->
+                                viewModel.exportWifiNetworks(this@MainActivity, format, action)
+                            },
+                            onShareCsv = { viewModel.shareCsv(this@MainActivity) },
+                            onClearNetworks = { viewModel.clearNetworks() },
+                            onOpenPinnedNetworks = { 
+                                // Navigate to pinned networks page via swipe
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.PINNED.index)
+                                }
+                            },
+                            onPinNetwork = { network, comment, password, photoUri ->
+                                // Use the new temporary data system for pinning
+                                viewModel.pinNetworkWithTemporaryData(network.bssid, true)
+                            },
+                            onUnpinNetwork = { bssid -> 
+                                // Use the new temporary data system for unpinning
+                                viewModel.pinNetworkWithTemporaryData(bssid, false)
+                            },
+                            onClearConnectionProgress = { viewModel.clearConnectionProgress() },
+                            onUpdateNetworkData = { network, comment, password, photoUri ->
+                                // Use temporary network data for all networks (pinned and unpinned)
+                                viewModel.updateTemporaryNetworkData(network.bssid, network.ssid, comment, password, photoUri)
+                            },
+                            onUpdateNetworkDataWithPhotoDeletion = { network, comment, password, photoUri, clearPhoto ->
+                                // Use temporary network data with photo deletion support
+                                viewModel.updateTemporaryNetworkDataWithPhotoDeletion(network.bssid, network.ssid, comment, password, photoUri, clearPhoto)
+                            },
+                            onOpenMaps = {
+                                // Navigate to maps page via swipe
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAPS.index)
+                                }
+                            },
+                            onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) },
+                            onClearConnectionStatus = { viewModel.clearConnectionStatus() }
+                        )
+                    }
+                    SwipeDestination.MAPS.index -> {
+                        // Create a Maps screen composition that integrates with the swipe navigation
+                        MapsScreenWrapper(
+                            wifiNetworks = wifiNetworks,
+                            onBack = {
+                                // Navigate back to main screen (center page)
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                            },
+                            onNavigateToPage = { pageIndex ->
+                                currentPage = pageIndex
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(pageIndex)
+                                }
+                            },
+                            currentPage = currentPage
+                        )
+                    }
+                }
             }
         }
     }

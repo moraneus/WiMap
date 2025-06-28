@@ -10,6 +10,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import com.ner.wimap.R
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -116,19 +117,26 @@ fun MainScreen(
                 MainTopAppBar(
                     onOpenPinnedNetworks = onOpenPinnedNetworks,
                     onOpenSettings = onOpenSettings,
-                    isBackgroundServiceActive = isBackgroundServiceActive
+                    isBackgroundServiceActive = isBackgroundServiceActive,
+                    showNavigationActions = true,
+                    onShowAbout = { showAboutDialog = true },
+                    onShowTerms = { showTermsDialog = true },
+                    currentPage = 1, // Main screen is always page 1
+                    onNavigateToPage = { page ->
+                        when (page) {
+                            0 -> onOpenPinnedNetworks()
+                            2 -> onOpenMaps()
+                        }
+                    }
                 )
             },
             bottomBar = {
-                ModernBottomNavigationBar(
+                ModernBottomBar(
                     isScanning = isScanning,
                     onStartScan = onStartScan,
                     onStopScan = onStopScan,
                     onShareExportClicked = { showExportDialog = true },
-                    onClearNetworks = onClearNetworks,
-                    onOpenMaps = onOpenMaps,
-                    onShowAbout = { showAboutDialog = true },
-                    onShowTerms = { showTermsDialog = true }
+                    onClearNetworks = onClearNetworks
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
@@ -356,238 +364,6 @@ fun MainScreen(
     }
 }
 
-@Composable
-fun ModernBottomNavigationBar(
-    isScanning: Boolean,
-    onStartScan: () -> Unit,
-    onStopScan: () -> Unit,
-    onShareExportClicked: () -> Unit,
-    onClearNetworks: () -> Unit,
-    onOpenMaps: () -> Unit,
-    onShowAbout: () -> Unit,
-    onShowTerms: () -> Unit
-) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(80.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
-        tonalElevation = 3.dp,
-        shadowElevation = 8.dp
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Share Button
-            ModernNavButton(
-                icon = Icons.Default.Share,
-                label = "Share",
-                onClick = onShareExportClicked
-            )
-            
-            // Clear Button  
-            ModernNavButton(
-                icon = Icons.Default.Clear,
-                label = "Clear",
-                onClick = onClearNetworks
-            )
-            
-            // Integrated Scan Button (Center, Prominent)
-            IntegratedScanButton(
-                isScanning = isScanning,
-                onStartScan = onStartScan,
-                onStopScan = onStopScan
-            )
-            
-            // Maps Button
-            ModernNavButton(
-                icon = Icons.Default.Map,
-                label = "Maps",
-                onClick = onOpenMaps
-            )
-            
-            // More/Menu Button with dropdown
-            MoreMenuButton(
-                onShowAbout = onShowAbout,
-                onShowTerms = onShowTerms
-            )
-        }
-    }
-}
-
-@Composable
-private fun ModernNavButton(
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    label: String,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable { onClick() }
-            .padding(horizontal = 8.dp, vertical = 6.dp)
-    ) {
-        Icon(
-            imageVector = icon,
-            contentDescription = label,
-            tint = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.size(24.dp)
-        )
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = label,
-            style = MaterialTheme.typography.labelSmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            maxLines = 1
-        )
-    }
-}
-
-@Composable
-private fun IntegratedScanButton(
-    isScanning: Boolean,
-    onStartScan: () -> Unit,
-    onStopScan: () -> Unit
-) {
-    Column(
-        horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.padding(horizontal = 4.dp)
-    ) {
-        Box(
-            modifier = Modifier
-                .size(56.dp)
-                .shadow(
-                    elevation = if (isScanning) 6.dp else 4.dp,
-                    shape = CircleShape,
-                    ambientColor = if (isScanning) 
-                        MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-                    else 
-                        MaterialTheme.colorScheme.primary.copy(alpha = 0.3f)
-                )
-                .background(
-                    color = if (isScanning) 
-                        MaterialTheme.colorScheme.errorContainer 
-                    else 
-                        MaterialTheme.colorScheme.primaryContainer,
-                    shape = CircleShape
-                )
-                .clickable { if (isScanning) onStopScan() else onStartScan() },
-            contentAlignment = Alignment.Center
-        ) {
-            Icon(
-                imageVector = if (isScanning) Icons.Default.Stop else Icons.Default.PlayArrow,
-                contentDescription = if (isScanning) "Stop Scan" else "Start Scan",
-                tint = if (isScanning) 
-                    MaterialTheme.colorScheme.onErrorContainer 
-                else 
-                    MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.size(28.dp)
-            )
-        }
-        Spacer(modifier = Modifier.height(4.dp))
-        Text(
-            text = if (isScanning) "Stop" else "Scan",
-            style = MaterialTheme.typography.labelSmall.copy(
-                fontWeight = FontWeight.SemiBold
-            ),
-            color = if (isScanning) 
-                MaterialTheme.colorScheme.error 
-            else 
-                MaterialTheme.colorScheme.primary
-        )
-    }
-}
-
-@Composable
-private fun MoreMenuButton(
-    onShowAbout: () -> Unit,
-    onShowTerms: () -> Unit
-) {
-    var expanded by remember { mutableStateOf(false) }
-    
-    Box {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally,
-            modifier = Modifier
-                .clip(RoundedCornerShape(12.dp))
-                .clickable { expanded = true }
-                .padding(horizontal = 8.dp, vertical = 6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "More",
-                tint = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.size(24.dp)
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "More",
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1
-            )
-        }
-        
-        DropdownMenu(
-            expanded = expanded,
-            onDismissRequest = { expanded = false },
-            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
-        ) {
-            DropdownMenuItem(
-                text = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Info,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "About",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                },
-                onClick = {
-                    expanded = false
-                    onShowAbout()
-                }
-            )
-            DropdownMenuItem(
-                text = {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Description,
-                            contentDescription = null,
-                            tint = MaterialTheme.colorScheme.onSurface,
-                            modifier = Modifier.size(20.dp)
-                        )
-                        Text(
-                            text = "Terms of Use",
-                            style = MaterialTheme.typography.bodyMedium
-                        )
-                    }
-                },
-                onClick = {
-                    expanded = false
-                    onShowTerms()
-                }
-            )
-        }
-    }
-}
 
 @Composable
 private fun NetworkCountHeader(
@@ -786,56 +562,65 @@ private fun TermsOfUseDialog(
 private fun OfflineNetworksSeparator(
     offlineCount: Int
 ) {
-    Card(
+    Surface(
         modifier = Modifier
             .fillMaxWidth()
             .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF5F5F5)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+        tonalElevation = 1.dp
     ) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(16.dp),
+                .padding(horizontal = 20.dp, vertical = 14.dp),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            Icon(
-                imageVector = Icons.Default.SignalWifiOff,
-                contentDescription = "Offline Networks",
-                tint = Color(0xFF9E9E9E),
-                modifier = Modifier.size(24.dp)
-            )
+            Surface(
+                shape = CircleShape,
+                color = MaterialTheme.colorScheme.surfaceVariant,
+                modifier = Modifier.size(40.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.SignalWifiOff,
+                    contentDescription = "Offline Networks",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier
+                        .size(20.dp)
+                        .padding(10.dp)
+                )
+            }
+            
             Column(
                 modifier = Modifier.weight(1f)
             ) {
                 Text(
                     text = "Out of Range Networks",
-                    style = MaterialTheme.typography.titleMedium.copy(
-                        fontWeight = FontWeight.SemiBold
+                    style = MaterialTheme.typography.titleSmall.copy(
+                        fontWeight = FontWeight.Bold
                     ),
-                    color = Color(0xFF757575)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 Text(
                     text = "Networks not seen recently - still editable",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF9E9E9E)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f)
                 )
             }
+            
             Surface(
-                shape = CircleShape,
-                color = Color(0xFFE0E0E0)
+                shape = RoundedCornerShape(12.dp),
+                color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f),
+                modifier = Modifier.padding(4.dp)
             ) {
                 Text(
                     text = "$offlineCount",
-                    style = MaterialTheme.typography.labelMedium.copy(
+                    style = MaterialTheme.typography.labelLarge.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = Color(0xFF757575),
-                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                 )
             }
         }

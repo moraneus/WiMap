@@ -55,7 +55,9 @@ fun PinnedNetworksScreen(
     onConnectToPinnedNetwork: (PinnedNetwork) -> Unit,
     onSharePinnedNetwork: (PinnedNetwork) -> Unit = { },
     onExportPinnedNetwork: (PinnedNetwork, ExportFormat, ExportAction) -> Unit = { _, _, _ -> },
-    onUpdatePinnedNetworkData: (bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { _, _, _, _, _, _ -> }
+    onUpdatePinnedNetworkData: (bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { _, _, _, _, _, _ -> },
+    onNavigateToPage: (Int) -> Unit = {},
+    currentPage: Int = 0
 ) {
     var showActionMenu by remember { mutableStateOf(false) }
     var selectedNetwork by remember { mutableStateOf<PinnedNetwork?>(null) }
@@ -70,7 +72,10 @@ fun PinnedNetworksScreen(
         UnifiedTopAppBar(
             title = stringResource(R.string.title_pinned_networks),
             icon = Icons.Default.PushPin,
-            onBack = onBack
+            onBack = onBack,
+            currentPage = currentPage,
+            onNavigateToPage = onNavigateToPage,
+            showNavigationActions = true
         )
 
         // Content
