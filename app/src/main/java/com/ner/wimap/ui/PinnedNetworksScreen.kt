@@ -133,7 +133,8 @@ fun PinnedNetworksScreen(
                         comment = network.comment ?: "",
                         password = network.savedPassword,
                         photoPath = network.photoUri,
-                        isPinned = true // Always true for pinned networks screen
+                        isPinned = true, // Always true for pinned networks screen
+                        lastSeenTimestamp = network.timestamp // Use timestamp as last seen time for pinned networks
                     )
                     
                     EnhancedWifiNetworkCard(
@@ -428,7 +429,7 @@ fun ModernPinnedNetworkCard(
 
             // Pinned info
             Text(
-                text = "Pinned on ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(network.pinnedAt))}",
+                text = "Pinned on ${SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(network.pinnedAt))}",
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF667eea), // Use main app color
                 fontWeight = FontWeight.Medium
@@ -462,7 +463,7 @@ fun ModernPinnedNetworkCard(
                         }
 
                         DetailRow("Frequency", "${if (network.channel <= 14) "2.4" else "5"} GHz")
-                        DetailRow("Timestamp", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(network.timestamp)))
+                        DetailRow("Timestamp", SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()).format(Date(network.timestamp)))
                         if (!network.photoUri.isNullOrEmpty()) {
                             DetailRow("Photo", "Attached")
                         }

@@ -62,6 +62,7 @@ class MainActivity : ComponentActivity() {
         val hasEverScanned by viewModel.hasEverScanned.collectAsState()
         val connectionStatus by viewModel.connectionStatus.collectAsState()
         val uploadStatus by viewModel.uploadStatus.collectAsState()
+        val connectionSuccessMessage by viewModel.connectionSuccessMessage.collectAsState()
         val showPasswordDialog by viewModel.showPasswordDialog.collectAsState()
         val networkForPasswordInput by viewModel.networkForPasswordInput.collectAsState()
         val showPermissionRationaleDialog by viewModel.showPermissionRationaleDialog.collectAsState()
@@ -116,6 +117,14 @@ class MainActivity : ComponentActivity() {
             exportError?.let {
                 snackbarHostState.showSnackbar("Export Error: $it")
                 viewModel.clearExportError()
+            }
+        }
+
+        // Handle connection success notifications
+        LaunchedEffect(connectionSuccessMessage) {
+            connectionSuccessMessage?.let { message ->
+                snackbarHostState.showSnackbar(message)
+                viewModel.clearConnectionSuccessMessage()
             }
         }
 
@@ -215,7 +224,8 @@ class MainActivity : ComponentActivity() {
                         val intent = MapsActivity.createIntent(this@MainActivity, wifiNetworks)
                         startActivity(intent)
                     },
-                    onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) }
+                    onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) },
+                    onClearConnectionStatus = { viewModel.clearConnectionStatus() }
                 )
             }
 

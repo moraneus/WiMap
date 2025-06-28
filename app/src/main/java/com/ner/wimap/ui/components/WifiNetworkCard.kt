@@ -360,7 +360,7 @@ internal fun NetworkHeader(
                         },
                         CircleShape
                     )
-                    .clickable(enabled = !isConnecting) { onConnectClicked() },
+                    .clickable(enabled = !isConnecting && !hasValidPassword) { onConnectClicked() },
                 contentAlignment = Alignment.Center
             ) {
                 if (isConnecting) {

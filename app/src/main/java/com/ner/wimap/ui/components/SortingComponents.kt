@@ -23,127 +23,128 @@ fun SortingControl(
     onSortingModeChanged: (SortingMode) -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .padding(vertical = 8.dp),
-        shape = RoundedCornerShape(12.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+    var expanded by remember { mutableStateOf(false) }
+    
+    ExposedDropdownMenuBox(
+        expanded = expanded,
+        onExpandedChange = { expanded = !expanded },
+        modifier = modifier.fillMaxWidth()
     ) {
-        Column(
-            modifier = Modifier.padding(16.dp)
+        Card(
+            modifier = Modifier
+                .fillMaxWidth()
+                .menuAnchor()
+                .clickable { expanded = true },
+            shape = RoundedCornerShape(12.dp),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.7f)
+            ),
+            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
         ) {
             Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp),
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth()
+                horizontalArrangement = Arrangement.SpaceBetween
             ) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Icon(
+                        imageVector = getSortingIcon(currentSortingMode),
+                        contentDescription = "Sort",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(20.dp)
+                    )
+                    Text(
+                        text = "Sort: ${getSortingDisplayText(currentSortingMode)}",
+                        style = MaterialTheme.typography.titleSmall.copy(
+                            fontWeight = FontWeight.SemiBold
+                        ),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
                 Icon(
-                    imageVector = Icons.Default.Sort,
-                    contentDescription = "Sort",
-                    tint = MaterialTheme.colorScheme.primary,
+                    imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                    contentDescription = if (expanded) "Collapse" else "Expand",
+                    tint = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.size(20.dp)
                 )
-                Spacer(modifier = Modifier.width(8.dp))
-                Text(
-                    text = "Sort by",
-                    style = MaterialTheme.typography.titleSmall.copy(
-                        fontWeight = FontWeight.SemiBold
-                    ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
             }
-            
-            Spacer(modifier = Modifier.height(12.dp))
-            
-            // Sorting chips
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                SortingChip(
-                    text = "Last Seen",
-                    icon = Icons.Default.Schedule,
-                    isSelected = currentSortingMode == SortingMode.LAST_SEEN,
-                    onClick = { onSortingModeChanged(SortingMode.LAST_SEEN) },
-                    modifier = Modifier.weight(1f)
-                )
-                
-                SortingChip(
-                    text = "Signal",
-                    icon = Icons.Default.SignalWifi4Bar,
-                    isSelected = currentSortingMode == SortingMode.SIGNAL_STRENGTH,
-                    onClick = { onSortingModeChanged(SortingMode.SIGNAL_STRENGTH) },
-                    modifier = Modifier.weight(1f)
-                )
-                
-                SortingChip(
-                    text = "A-Z",
-                    icon = Icons.Default.SortByAlpha,
-                    isSelected = currentSortingMode == SortingMode.SSID_ALPHABETICAL,
-                    onClick = { onSortingModeChanged(SortingMode.SSID_ALPHABETICAL) },
-                    modifier = Modifier.weight(1f)
+        }
+        
+        ExposedDropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier.background(MaterialTheme.colorScheme.surface)
+        ) {
+            SortingMode.values().forEach { mode ->
+                DropdownMenuItem(
+                    text = {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            Icon(
+                                imageVector = getSortingIcon(mode),
+                                contentDescription = null,
+                                tint = if (mode == currentSortingMode) 
+                                    MaterialTheme.colorScheme.primary 
+                                else 
+                                    MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.size(20.dp)
+                            )
+                            Text(
+                                text = getSortingDisplayText(mode),
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontWeight = if (mode == currentSortingMode) 
+                                        FontWeight.SemiBold 
+                                    else 
+                                        FontWeight.Normal
+                                ),
+                                color = if (mode == currentSortingMode) 
+                                    MaterialTheme.colorScheme.primary 
+                                else 
+                                    MaterialTheme.colorScheme.onSurface
+                            )
+                        }
+                    },
+                    onClick = {
+                        onSortingModeChanged(mode)
+                        expanded = false
+                    },
+                    modifier = Modifier.background(
+                        if (mode == currentSortingMode) 
+                            MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        else 
+                            Color.Transparent
+                    )
                 )
             }
         }
     }
 }
 
-@Composable
-private fun SortingChip(
-    text: String,
-    icon: androidx.compose.ui.graphics.vector.ImageVector,
-    isSelected: Boolean,
-    onClick: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val backgroundColor = if (isSelected) {
-        MaterialTheme.colorScheme.primary
-    } else {
-        MaterialTheme.colorScheme.surface
+/**
+ * Get the appropriate icon for each sorting mode
+ */
+fun getSortingIcon(mode: SortingMode): androidx.compose.ui.graphics.vector.ImageVector {
+    return when (mode) {
+        SortingMode.LAST_SEEN -> Icons.Default.Schedule
+        SortingMode.SIGNAL_STRENGTH -> Icons.Default.SignalWifi4Bar
+        SortingMode.SSID_ALPHABETICAL -> Icons.Default.SortByAlpha
     }
-    
-    val contentColor = if (isSelected) {
-        MaterialTheme.colorScheme.onPrimary
-    } else {
-        MaterialTheme.colorScheme.onSurface
-    }
-    
-    Card(
-        modifier = modifier
-            .clip(RoundedCornerShape(20.dp))
-            .clickable { onClick() },
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(
-            containerColor = backgroundColor
-        ),
-        elevation = CardDefaults.cardElevation(
-            defaultElevation = if (isSelected) 4.dp else 1.dp
-        )
-    ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 12.dp, vertical = 8.dp),
-            horizontalArrangement = Arrangement.Center,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Icon(
-                imageVector = icon,
-                contentDescription = text,
-                tint = contentColor,
-                modifier = Modifier.size(16.dp)
-            )
-            Spacer(modifier = Modifier.width(4.dp))
-            Text(
-                text = text,
-                style = MaterialTheme.typography.labelMedium.copy(
-                    fontWeight = if (isSelected) FontWeight.SemiBold else FontWeight.Normal
-                ),
-                color = contentColor
-            )
-        }
+}
+
+/**
+ * Get the display text for each sorting mode
+ */
+fun getSortingDisplayText(mode: SortingMode): String {
+    return when (mode) {
+        SortingMode.LAST_SEEN -> "Last Seen"
+        SortingMode.SIGNAL_STRENGTH -> "Signal Strength"
+        SortingMode.SSID_ALPHABETICAL -> "Name (A-Z)"
     }
 }

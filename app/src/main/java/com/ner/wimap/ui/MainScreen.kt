@@ -81,7 +81,8 @@ fun MainScreen(
     onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit,
     onUpdateNetworkDataWithPhotoDeletion: (WifiNetwork, String?, String?, String?, Boolean) -> Unit = { network, comment, password, photoUri, _ -> onUpdateNetworkData(network, comment, password, photoUri) },
     onOpenMaps: () -> Unit,
-    onSortingModeChanged: (com.ner.wimap.presentation.viewmodel.SortingMode) -> Unit
+    onSortingModeChanged: (com.ner.wimap.presentation.viewmodel.SortingMode) -> Unit,
+    onClearConnectionStatus: () -> Unit
 ) {
     val snackbarHostState = remember { SnackbarHostState() }
     val isProduction = remember { BuildConfig.BUILD_TYPE == "release" }
@@ -92,7 +93,10 @@ fun MainScreen(
     var showTermsDialog by remember { mutableStateOf(false) }
 
     LaunchedEffect(connectionStatus) {
-        connectionStatus?.let { snackbarHostState.showSnackbar(it) }
+        connectionStatus?.let { 
+            snackbarHostState.showSnackbar(it)
+            onClearConnectionStatus()
+        }
     }
 
     LaunchedEffect(uploadStatus) {
@@ -198,7 +202,8 @@ fun MainScreen(
                             onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
                                 onUpdateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
                             },
-                            isPinned = isCurrentlyPinned // Explicitly pass the current pin status
+                            isPinned = isCurrentlyPinned, // Explicitly pass the current pin status
+                            successfulPasswords = successfulPasswords
                         )
                     }
 

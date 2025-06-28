@@ -54,6 +54,7 @@ fun EnhancedWifiNetworkCard(
     onUpdateData: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?) -> Unit,
     onUpdateDataWithPhotoDeletion: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { bssid, ssid, comment, password, photoPath, _ -> onUpdateData(bssid, ssid, comment, password, photoPath) },
     isPinned: Boolean? = null, // Optional override for pin status
+    successfulPasswords: Map<String, String> = emptyMap(),
     modifier: Modifier = Modifier
 ) {
     var showDetails by remember { mutableStateOf(false) }
@@ -71,6 +72,9 @@ fun EnhancedWifiNetworkCard(
     
     // Use explicit isPinned parameter if provided, otherwise fall back to network's pin status
     val actuallyPinned = isPinned ?: network.isPinned
+    
+    // Check if this network has a valid password (either saved locally or from successful connection)
+    val hasValidPassword = savedPassword.isNotEmpty() || successfulPasswords.containsKey(network.bssid)
     
     // Check if network has any attached data (comments, passwords, or photos)
     val hasAttachedData = comment.isNotEmpty() || 
@@ -153,7 +157,7 @@ fun EnhancedWifiNetworkCard(
                 isPinned = actuallyPinned,
                 isOpenNetwork = isOpenNetwork,
                 isConnecting = isConnecting,
-                hasValidPassword = savedPassword.isNotEmpty(),
+                hasValidPassword = hasValidPassword,
                 onConnectClicked = {
                     onConnectClick(network)
                 }

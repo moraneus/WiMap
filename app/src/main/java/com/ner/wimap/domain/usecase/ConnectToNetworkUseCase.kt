@@ -32,4 +32,8 @@ class ConnectToNetworkUseCase @Inject constructor(
     
     suspend fun updateConnectionSettings(maxRetries: Int, timeoutSeconds: Int, rssiThreshold: Int) = 
         wifiRepository.updateConnectionSettings(maxRetries, timeoutSeconds, rssiThreshold)
+        
+    fun clearConnectionStatus() = wifiRepository.clearConnectionStatus()
+    
+    fun clearConnectionProgress() = wifiRepository.clearConnectionProgress()
 }

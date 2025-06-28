@@ -129,6 +129,12 @@ class ConnectionManager(
                 var attemptCount = 0
                 for ((index, password) in storedPasswords.withIndex()) {
                     if (connected || !isActive) break // Check for cancellation
+                    
+                    // Additional check: if connection was cancelled, stop immediately
+                    if (!_connectingNetworks.value.contains(network.bssid)) {
+                        android.util.Log.d("ConnectionManager", "Connection cancelled, stopping password attempts")
+                        break
+                    }
 
                     _currentPassword.value = password
                     _connectionProgress.value = "Trying password ${index + 1}/${storedPasswords.size} for ${network.ssid}..."
@@ -137,11 +143,23 @@ class ConnectionManager(
                     for (retry in 1..maxRetries) {
                         if (!isActive) break // Check for cancellation
                         
+                        // Check if connection was cancelled
+                        if (!_connectingNetworks.value.contains(network.bssid)) {
+                            android.util.Log.d("ConnectionManager", "Connection cancelled during retry attempts")
+                            break
+                        }
+                        
                         attemptCount++
                         _currentAttempt.value = attemptCount
                         _connectionProgress.value = "Password ${index + 1}/${storedPasswords.size}, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
 
                         val success = attemptConnectionWithRetry(network, password, timeoutSeconds)
+
+                        // Check again if cancelled after connection attempt
+                        if (!_connectingNetworks.value.contains(network.bssid)) {
+                            android.util.Log.d("ConnectionManager", "Connection cancelled after attempt")
+                            break
+                        }
 
                         if (success) {
                             _connectionStatus.value = "✅ Connected to ${network.ssid} with password: '$password'"
@@ -168,9 +186,19 @@ class ConnectionManager(
                             if (retry < maxRetries) {
                                 _connectionProgress.value = "❌ Wrong password '$password', retrying in 2s..."
                                 delay(2000)
+                                // Check if cancelled during delay
+                                if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
+                                    android.util.Log.d("ConnectionManager", "Connection cancelled during retry delay")
+                                    return@launch
+                                }
                             } else {
                                 _connectionProgress.value = "❌ Password '$password' failed after $maxRetries attempts"
                                 delay(1000)
+                                // Check if cancelled during delay
+                                if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
+                                    android.util.Log.d("ConnectionManager", "Connection cancelled during failure delay")
+                                    return@launch
+                                }
                             }
                         }
                     }
@@ -183,6 +211,11 @@ class ConnectionManager(
                     _connectionStatus.value = "❌ All stored passwords failed for ${network.ssid}"
                     _connectionProgress.value = "All passwords failed - manual entry required"
                     delay(2000)
+                    // Check if cancelled during delay
+                    if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
+                        android.util.Log.d("ConnectionManager", "Connection cancelled during failure message delay")
+                        return@launch
+                    }
                     onShowPasswordDialog(network)
                 }
             } catch (e: Exception) {
@@ -196,7 +229,12 @@ class ConnectionManager(
                 _connectingNetworkName.value = null
                 _connectingNetworks.value = _connectingNetworks.value - network.bssid
                 _isConnecting.value = _connectingNetworks.value.isNotEmpty() // Update global state
-                delay(3000)
+                // Only delay if not cancelled
+                try {
+                    delay(3000)
+                } catch (e: CancellationException) {
+                    // If cancelled, don't delay - clear immediately
+                }
                 _connectionProgress.value = null
             }
         }
@@ -261,6 +299,11 @@ class ConnectionManager(
                     if (retry < maxRetries) {
                         _connectionProgress.value = "❌ Attempt $retry failed, retrying in 2s..."
                         delay(2000)
+                        // Check if cancelled during delay
+                        if (!_connectingNetworks.value.contains(network.bssid)) {
+                            android.util.Log.d("ConnectionManager", "Manual connection cancelled during retry delay")
+                            return@launch
+                        }
                     } else {
                         _connectionStatus.value = "❌ Manual password failed for ${network.ssid} after $maxRetries attempts"
                         _connectionProgress.value = "Manual password incorrect after all retries"
@@ -275,7 +318,12 @@ class ConnectionManager(
             _connectingNetworkName.value = null
             _connectingNetworks.value = _connectingNetworks.value - network.bssid
             _isConnecting.value = _connectingNetworks.value.isNotEmpty()
-            delay(2000)
+            // Only delay if not cancelled
+            try {
+                delay(2000)
+            } catch (e: CancellationException) {
+                // If cancelled, don't delay - clear immediately
+            }
             _connectionProgress.value = null
         }
     }
@@ -367,19 +415,23 @@ class ConnectionManager(
                     // Check the WifiScanner's connection status for results
                     val currentStatus = wifiScanner.connectionStatus.value
                     if (currentStatus != originalStatus && currentStatus != null) {
+                        android.util.Log.d("ConnectionManager", "WifiScanner status: '$currentStatus'")
                         when {
                             currentStatus.contains("✅ Password validated") -> {
                                 connectionResult = true
                                 _connectionProgress.value = "✅ Password validation successful!"
+                                android.util.Log.d("ConnectionManager", "Password validation successful")
                             }
                             currentStatus.contains("❌") -> {
                                 connectionResult = false
                                 connectionError = currentStatus
                                 _connectionProgress.value = "❌ Password validation failed"
+                                android.util.Log.d("ConnectionManager", "Password validation failed: $currentStatus")
                             }
                             currentStatus.contains("Connection validated and disconnected") -> {
                                 connectionResult = true
                                 _connectionProgress.value = "✅ Connection validated successfully!"
+                                android.util.Log.d("ConnectionManager", "Connection validated and disconnected")
                             }
                         }
                     }
@@ -390,6 +442,13 @@ class ConnectionManager(
                     true -> {
                         // Save the working password to SharedPreferences
                         saveWorkingPassword(network, password)
+                        
+                        // Store the successful password in the map for UI updates
+                        _successfulPasswords.value = _successfulPasswords.value.toMutableMap().apply {
+                            put(network.bssid, password)
+                        }
+                        android.util.Log.d("ConnectionManager", "Stored successful password for ${network.bssid}: ${password.take(3)}***")
+                        
                         _connectionProgress.value = "✅ Password validated and saved for ${network.ssid}"
                         _connectionStatus.value = "✅ Connection successful! Password saved for future reference."
                         return true
@@ -481,11 +540,16 @@ class ConnectionManager(
     }
 
     fun clearConnectionProgress() {
-        // Cancel the current connection job
-        currentConnectionJob?.cancel()
+        android.util.Log.d("ConnectionManager", "Clearing connection progress - cancelling all connections")
+        
+        // Cancel the current connection job IMMEDIATELY
+        currentConnectionJob?.cancel(CancellationException("User cancelled connection"))
         currentConnectionJob = null
         
-        // Clear all connection state immediately
+        // Cancel any ongoing Wi-Fi connection attempts in WifiScanner
+        wifiScanner.cancelConnectionAttempt()
+        
+        // Clear all connection state IMMEDIATELY - no delays
         _connectionProgress.value = null
         _currentPassword.value = null
         _currentAttempt.value = 0
@@ -493,13 +557,19 @@ class ConnectionManager(
         _connectingNetworkName.value = null
         _connectingNetworks.value = emptySet()
         _isConnecting.value = false
+        _connectionStatus.value = null // Clear status immediately, no message
         
-        // Set status to indicate cancellation
-        _connectionStatus.value = "Connection cancelled by user"
+        android.util.Log.d("ConnectionManager", "All connection attempts cancelled and UI cleared immediately")
     }
 
     fun cancelConnection() {
         clearConnectionProgress()
+    }
+    
+    fun clearConnectionStatus() {
+        // Clear connection status to prevent re-display when returning from other screens
+        _connectionStatus.value = null
+        android.util.Log.d("ConnectionManager", "Connection status cleared")
     }
 
     fun setMaxRetries(retries: Int) {

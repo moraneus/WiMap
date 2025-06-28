@@ -87,4 +87,12 @@ class WifiRepositoryImpl @Inject constructor(
     override suspend fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) {
         scanManager.removeStaleNetworks(hideNetworksUnseenForSeconds)
     }
+    
+    override fun clearConnectionStatus() {
+        connectionManager.clearConnectionStatus()
+    }
+    
+    override fun clearConnectionProgress() {
+        connectionManager.clearConnectionProgress()
+    }
 }

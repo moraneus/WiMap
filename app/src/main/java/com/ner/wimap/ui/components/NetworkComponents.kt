@@ -16,6 +16,7 @@ import androidx.compose.ui.unit.sp
 import com.ner.wimap.model.WifiNetwork
 import java.text.SimpleDateFormat
 import java.util.*
+import kotlin.math.abs
 
 @Composable
 fun NetworkInfoChips(
@@ -30,6 +31,9 @@ fun NetworkInfoChips(
         InfoChip("${network.rssi}dBm", Color(0xFF9B59B6))
         InfoChip("Ch${network.channel}", Color(0xFFE67E22))
         InfoChip(network.security, Color(0xFF16A085))
+        
+        // Show last seen time instead of just GPS indicator
+        InfoChip(formatLastSeenTime(network.lastSeenTimestamp), Color(0xFF3498DB))
 
         if (network.peakRssiLatitude != null && network.peakRssiLongitude != null &&
             network.peakRssiLatitude != 0.0 && network.peakRssiLongitude != 0.0) {
@@ -185,7 +189,7 @@ fun NetworkDetails(
                 DetailRow("Peak RSSI", "${network.peakRssi}dBm")
             }
             DetailRow("Frequency", "${if (network.channel <= 14) "2.4" else "5"} GHz")
-            DetailRow("Timestamp", SimpleDateFormat("HH:mm:ss", Locale.getDefault()).format(Date(network.timestamp)))
+            DetailRow("Last Seen", formatLastSeenTime(network.lastSeenTimestamp))
             if (hasPhoto) {
                 DetailRow("Photo", "Attached")
             }
@@ -302,4 +306,12 @@ fun NetworkPasswordDialog(
         },
         shape = RoundedCornerShape(20.dp)
     )
+}
+
+/**
+ * Format timestamp to show full date and time with seconds
+ */
+fun formatLastSeenTime(lastSeenTimestamp: Long): String {
+    val dateFormat = SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault())
+    return dateFormat.format(Date(lastSeenTimestamp))
 }

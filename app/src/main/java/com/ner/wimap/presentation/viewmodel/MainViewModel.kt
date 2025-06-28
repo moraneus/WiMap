@@ -76,6 +76,9 @@ class MainViewModel @Inject constructor(
     private val _uploadStatus = MutableStateFlow<String?>(null)
     val uploadStatus: StateFlow<String?> = _uploadStatus.asStateFlow()
 
+    private val _connectionSuccessMessage = MutableStateFlow<String?>(null)
+    val connectionSuccessMessage: StateFlow<String?> = _connectionSuccessMessage.asStateFlow()
+
     // Filter settings
     private val _ssidFilter = MutableStateFlow("")
     val ssidFilter: StateFlow<String> = _ssidFilter.asStateFlow()
@@ -260,6 +263,14 @@ class MainViewModel @Inject constructor(
             return
         }
         
+        // Validate RSSI threshold before attempting connection
+        val rssiThreshold = _rssiThresholdForConnection.value
+        if (network.rssi < rssiThreshold) {
+            _permissionsRationaleMessage.value = "Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm). Connection not attempted."
+            _showPermissionRationaleDialog.value = true
+            return
+        }
+        
         viewModelScope.launch {
             val result = connectToNetworkUseCase.connectToNetwork(network)
             if (result.isFailure) {
@@ -301,7 +312,7 @@ class MainViewModel @Inject constructor(
     }
 
     fun clearConnectionProgress() {
-        // This would be handled by the use case or repository
+        connectToNetworkUseCase.clearConnectionProgress()
     }
 
     // Pinned network functions
@@ -593,6 +604,28 @@ class MainViewModel @Inject constructor(
         _uploadStatus.value = null
     }
 
+    fun clearConnectionSuccessMessage() {
+        _connectionSuccessMessage.value = null
+    }
+
+    fun clearConnectionStatus() {
+        // Clear connection status to prevent re-display when returning from other screens
+        connectToNetworkUseCase.clearConnectionStatus()
+    }
+
+    // Monitor connection status for success notifications
+    private fun monitorConnectionSuccess() {
+        viewModelScope.launch {
+            connectionStatus.collect { status ->
+                if (status != null && status.contains("✅ Connected to")) {
+                    // Extract network name from success message
+                    val networkName = status.substringAfter("✅ Connected to ").substringBefore(" with")
+                    _connectionSuccessMessage.value = "Connected successfully to $networkName. Password saved."
+                }
+            }
+        }
+    }
+
     // SharedPreferences for password storage
     private val sharedPreferences: SharedPreferences = application.getSharedPreferences("wimap_settings", Context.MODE_PRIVATE)
     
@@ -621,6 +654,9 @@ class MainViewModel @Inject constructor(
         
         // Start periodic cleanup of stale networks
         startPeriodicNetworkCleanup()
+        
+        // Monitor connection status for success notifications
+        monitorConnectionSuccess()
     }
 
     // SharedPreferences methods

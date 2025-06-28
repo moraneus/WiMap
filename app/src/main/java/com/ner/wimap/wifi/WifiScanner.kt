@@ -345,42 +345,45 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
             var connectionAttemptActive = true
             var connectionSuccessful = false
             var connectionValidated = false
+            var connectionCancelled = false
             
             currentNetworkCallback = object : ConnectivityManager.NetworkCallback() {
                 override fun onAvailable(net: Network) {
                     super.onAvailable(net)
                     if (!connectionAttemptActive) return
                     
+                    android.util.Log.d("WifiScanner", "onAvailable called for network connection")
+                    
                     try {
                         // Verify this is actually the network we're trying to connect to
                         val currentWifiInfo = wifiManager.connectionInfo
                         val connectedSsid = currentWifiInfo?.ssid?.replace("\"", "")
                         
+                        android.util.Log.d("WifiScanner", "Connected to SSID: '$connectedSsid', expected: '${network.ssid}'")
+                        
                         if (connectedSsid != network.ssid) {
+                            android.util.Log.w("WifiScanner", "Wrong network connected: $connectedSsid instead of ${network.ssid}")
                             _connectionStatus.postValue("❌ Connected to wrong network: $connectedSsid instead of ${network.ssid}")
                             releaseCurrentNetworkCallback()
                             return
                         }
                         
-                        // Verify the connection was made with our current password attempt
-                        if (!validateConnectionWithCurrentPassword(network, password)) {
-                            _connectionStatus.postValue("❌ Connection succeeded but may be using cached credentials")
-                            releaseCurrentNetworkCallback()
-                            return
-                        }
-                        
+                        // Connection successful - password is correct
                         connectionSuccessful = true
-                        _connectionStatus.postValue("✅ Successfully connected to ${network.ssid} with provided password")
+                        connectionAttemptActive = false // Stop the attempt, we succeeded
+                        android.util.Log.d("WifiScanner", "Connection successful! Password is correct for ${network.ssid}")
+                        _connectionStatus.postValue("✅ Password validated for ${network.ssid}")
                         
-                        // Immediately validate and disconnect to complete verification
+                        // Immediately disconnect and complete verification
                         Handler(Looper.getMainLooper()).postDelayed({
-                            if (connectionAttemptActive) {
-                                validateAndDisconnect(net, network)
-                                connectionValidated = true
-                            }
-                        }, 1000) // Wait 1 second to ensure connection is stable
+                            android.util.Log.d("WifiScanner", "Disconnecting after successful validation")
+                            connectivityManager.bindProcessToNetwork(null)
+                            releaseCurrentNetworkCallback()
+                            _connectionStatus.postValue("Connection validated and disconnected")
+                        }, 500) // Quick disconnect
                         
                     } catch (e: Exception) {
+                        android.util.Log.e("WifiScanner", "Exception in onAvailable: ${e.message}")
                         _connectionStatus.postValue("❌ Failed to validate connection: ${e.message}")
                         releaseCurrentNetworkCallback()
                     }
@@ -388,9 +391,12 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
 
                 override fun onLost(net: Network) {
                     super.onLost(net)
+                    android.util.Log.d("WifiScanner", "onLost called, connectionValidated: $connectionValidated")
                     if (connectionValidated) {
+                        android.util.Log.d("WifiScanner", "Sending final success message")
                         _connectionStatus.postValue("✅ Connection validated and disconnected successfully")
                     } else {
+                        android.util.Log.w("WifiScanner", "Connection lost without validation")
                         _connectionStatus.postValue("⚠️ Lost connection to ${network.ssid}")
                     }
                     connectivityManager.bindProcessToNetwork(null)
@@ -401,6 +407,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                     super.onUnavailable()
                     if (!connectionAttemptActive) return
                     
+                    android.util.Log.d("WifiScanner", "onUnavailable called - connection failed")
                     connectionAttemptActive = false
                     _connectionStatus.postValue("❌ Could not connect to ${network.ssid} - incorrect password or network unavailable")
                     releaseCurrentNetworkCallback()
@@ -425,10 +432,11 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                     _connectionStatus.postValue("❌ Connection timeout - no response from ${network.ssid}")
                     releaseCurrentNetworkCallback()
                 }
-            }, 15000) // 15 second timeout
+            }, 10000) // 10 second timeout
             
             connectivityManager.requestNetwork(networkRequest, currentNetworkCallback!!)
             _connectionStatus.postValue("🔄 Attempting fresh connection to ${network.ssid}...")
+            android.util.Log.d("WifiScanner", "Connection request sent for ${network.ssid} with password: ${password?.take(3)}***")
             
         } catch (e: SecurityException) {
             _connectionStatus.postValue("❌ Permission error: ${e.message}")
@@ -470,6 +478,28 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
             }
         }
         _connectionStatus.postValue("Disconnected.") 
+    }
+
+    fun cancelConnectionAttempt() {
+        android.util.Log.d("WifiScanner", "Cancelling connection attempt")
+        
+        // Cancel any ongoing connection job
+        connectionJob?.cancel()
+        connectionJob = null
+        
+        // Release network callback to stop connection attempt
+        releaseCurrentNetworkCallback()
+        
+        // Clear any process network binding
+        try {
+            connectivityManager.bindProcessToNetwork(null)
+        } catch (e: Exception) {
+            android.util.Log.w("WifiScanner", "Error unbinding network: ${e.message}")
+        }
+        
+        // Update status
+        _connectionStatus.postValue("Connection cancelled by user")
+        android.util.Log.d("WifiScanner", "Connection attempt cancelled")
     }
 
     private fun releaseCurrentNetworkCallback(){
@@ -569,41 +599,6 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
      * Validate that the connection was made with the current password attempt
      * and not from cached/remembered credentials
      */
-    private fun validateConnectionWithCurrentPassword(network: WifiNetwork, password: String?): Boolean {
-        try {
-            // For Android 10+, WifiNetworkSpecifier connections should be non-persistent
-            // but we add additional validation to ensure the connection is fresh
-            
-            val currentWifiInfo = wifiManager.connectionInfo
-            if (currentWifiInfo == null || currentWifiInfo.networkId == -1) {
-                return false
-            }
-            
-            // Check if this is a fresh connection by verifying timing
-            // If we just initiated the connection and it succeeded quickly,
-            // it's likely using our current password attempt
-            
-            // Additional validation: check if the network was in configured networks
-            // before our connection attempt (which would indicate cached credentials)
-            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) {
-                val configuredNetworks = wifiManager.configuredNetworks
-                val wasConfigured = configuredNetworks?.any { config ->
-                    config.SSID == "\"${network.ssid}\"" && config.networkId == currentWifiInfo.networkId
-                } ?: false
-                
-                // If it was already configured and we didn't just add it, 
-                // it might be using cached credentials
-                if (wasConfigured) {
-                    return false
-                }
-            }
-            
-            return true
-        } catch (e: Exception) {
-            // If validation fails, assume the connection might be using cached credentials
-            return false
-        }
-    }
 
     /**
      * Validate the connection and immediately disconnect to complete password verification
@@ -619,7 +614,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                 connectivityManager.bindProcessToNetwork(null)
                 releaseCurrentNetworkCallback()
                 
-                _connectionStatus.postValue("✅ Password validated for ${wifiNetwork.ssid} - connection test complete")
+                _connectionStatus.postValue("Connection validated and disconnected")
             }, 500)
             
         } catch (e: Exception) {
