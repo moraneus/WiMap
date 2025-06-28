@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="@android:color/white"
+    android:padding="16dp"
+    android:minWidth="200dp"
+    android:elevation="8dp">
+
+    <!-- SSID Title -->
+    <TextView
+        android:id="@+id/tv_ssid"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="MyHomeWiFi"
+        android:textStyle="bold"
+        android:textSize="16sp"
+        android:textColor="@color/primary_text"
+        android:maxLines="1"
+        android:ellipsize="end" />
+
+    <!-- BSSID -->
+    <TextView
+        android:id="@+id/tv_bssid"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="00:11:22:33:44:55"
+        android:textSize="12sp"
+        android:textColor="@color/secondary_text"
+        android:layout_marginTop="4dp"
+        android:fontFamily="monospace" />
+
+    <!-- Signal & Security Info -->
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal"
+        android:layout_marginTop="8dp">
+
+        <!-- Signal Strength -->
+        <TextView
+            android:id="@+id/tv_signal"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="-45dBm"
+            android:textSize="11sp"
+            android:textColor="@android:color/white"
+            android:background="@drawable/info_chip_background"
+            android:padding="4dp"
+            android:layout_marginEnd="4dp" />
+
+        <!-- Security Type -->
+        <TextView
+            android:id="@+id/tv_security"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="WPA2"
+            android:textSize="11sp"
+            android:textColor="@android:color/white"
+            android:background="@drawable/info_chip_background_security"
+            android:padding="4dp" />
+
+    </LinearLayout>
+
+    <!-- Tap to view more hint -->
+    <TextView
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="Tap for details"
+        android:textSize="10sp"
+        android:textColor="@color/hint_text"
+        android:layout_marginTop="8dp"
+        android:fontStyle="italic" />
+
+</LinearLayout>

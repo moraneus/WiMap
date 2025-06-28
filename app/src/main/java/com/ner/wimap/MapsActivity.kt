@@ -36,6 +36,17 @@ import com.ner.wimap.ui.components.UnifiedTopBarActionButton
 import com.ner.wimap.ui.getSignalColor
 import java.text.SimpleDateFormat
 import java.util.*
+import android.view.LayoutInflater
+import android.view.View
+import android.widget.TextView
+import androidx.core.content.ContextCompat
+import com.google.maps.android.clustering.ClusterManager
+import com.google.maps.android.clustering.ClusterItem
+import com.google.maps.android.clustering.view.DefaultClusterRenderer
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Paint
+import android.graphics.Typeface
 
 data class ParcelableWifiNetwork(
     val ssid: String,
@@ -94,6 +105,29 @@ data class ParcelableWifiNetwork(
 
 fun WifiNetwork.toParcelable(): ParcelableWifiNetwork {
     return ParcelableWifiNetwork(ssid, bssid, rssi, channel, security, latitude, longitude, timestamp, password)
+}
+
+/**
+ * ClusterItem wrapper for WifiNetwork to enable clustering
+ */
+data class WifiNetworkClusterItem(
+    val network: WifiNetwork
+) : ClusterItem {
+    override fun getPosition(): LatLng {
+        return LatLng(network.latitude ?: 0.0, network.longitude ?: 0.0)
+    }
+    
+    override fun getTitle(): String {
+        return "SSID: ${network.ssid}"
+    }
+    
+    override fun getSnippet(): String {
+        return "BSSID: ${network.bssid}"
+    }
+    
+    override fun getZIndex(): Float? {
+        return null
+    }
 }
 
 class MapsActivity : ComponentActivity() {
@@ -249,14 +283,14 @@ fun GoogleMapView(
             MapView(context).apply {
                 onCreate(Bundle())
                 getMapAsync { googleMap ->
-                    setupMap(googleMap, networks, selectedNetwork, onNetworkSelected)
+                    setupMap(googleMap, networks, selectedNetwork, onNetworkSelected, context)
                 }
             }
         },
         modifier = Modifier.fillMaxSize()
     ) { mapView ->
         mapView.getMapAsync { googleMap ->
-            setupMap(googleMap, networks, selectedNetwork, onNetworkSelected)
+            setupMap(googleMap, networks, selectedNetwork, onNetworkSelected, mapView.context)
         }
     }
 }
@@ -265,42 +299,55 @@ private fun setupMap(
     googleMap: GoogleMap,
     networks: List<WifiNetwork>,
     selectedNetwork: WifiNetwork?,
-    onNetworkSelected: (WifiNetwork?) -> Unit
+    onNetworkSelected: (WifiNetwork?) -> Unit,
+    context: Context
 ) {
     googleMap.clear()
+    
+    // Set up cluster manager
+    val clusterManager = ClusterManager<WifiNetworkClusterItem>(context, googleMap)
+    val clusterRenderer = WifiNetworkClusterRenderer(context, googleMap, clusterManager)
+    clusterManager.renderer = clusterRenderer
+    
+    // Set custom info window adapter for both clusters and individual markers
+    googleMap.setInfoWindowAdapter(CustomInfoWindowAdapter(context))
+    clusterManager.markerCollection.setInfoWindowAdapter(CustomInfoWindowAdapter(context))
 
     val bounds = LatLngBounds.Builder()
     var hasValidLocation = false
 
+    // Add networks to cluster manager instead of directly to map
     networks.forEach { network ->
         if (network.latitude != null && network.longitude != null) {
             val position = LatLng(network.latitude, network.longitude)
             bounds.include(position)
             hasValidLocation = true
-
-            val markerColor = when {
-                !network.password.isNullOrEmpty() -> BitmapDescriptorFactory.HUE_GREEN
-                network.security.contains("Open", ignoreCase = true) -> BitmapDescriptorFactory.HUE_ORANGE
-                else -> BitmapDescriptorFactory.HUE_RED
-            }
-
-            val marker = googleMap.addMarker(
-                MarkerOptions()
-                    .position(position)
-                    .title(network.ssid)
-                    .snippet("${network.rssi}dBm • ${network.security}")
-                    .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
-            )
-
-            marker?.tag = network
+            
+            // Create cluster item and add to cluster manager
+            val clusterItem = WifiNetworkClusterItem(network)
+            clusterManager.addItem(clusterItem)
         }
     }
+    
+    // Cluster the markers
+    clusterManager.cluster()
 
-    googleMap.setOnMarkerClickListener { marker ->
-        val network = marker.tag as? WifiNetwork
+    // Set click listeners on cluster manager
+    clusterManager.setOnClusterItemClickListener { clusterItem ->
+        val network = clusterItem.network
         onNetworkSelected(network)
         true
     }
+    
+    clusterManager.setOnClusterItemInfoWindowClickListener { clusterItem ->
+        val network = clusterItem.network
+        onNetworkSelected(network)
+    }
+
+    // Set up map click listeners
+    googleMap.setOnCameraIdleListener(clusterManager)
+    googleMap.setOnMarkerClickListener(clusterManager)
+    googleMap.setOnInfoWindowClickListener(clusterManager)
 
     googleMap.setOnMapClickListener {
         onNetworkSelected(null)
@@ -497,5 +544,111 @@ fun EmptyLocationState() {
         )
 
         Spacer(modifier = Modifier.weight(1f))
+    }
+}
+
+/**
+ * Custom cluster renderer for Wi-Fi networks with enhanced markers and performance optimizations
+ */
+class WifiNetworkClusterRenderer(
+    context: Context,
+    map: GoogleMap,
+    clusterManager: ClusterManager<WifiNetworkClusterItem>
+) : DefaultClusterRenderer<WifiNetworkClusterItem>(context, map, clusterManager) {
+    
+    companion object {
+        private const val MAX_MARKERS_ZOOM_OUT = 100 // Limit markers when zoomed out
+        private const val MIN_ZOOM_FOR_ALL_MARKERS = 12f // Show all markers above this zoom
+    }
+    
+    override fun onBeforeClusterItemRendered(item: WifiNetworkClusterItem, markerOptions: MarkerOptions) {
+        val network = item.network
+        
+        // Set marker color based on network security and password availability
+        val markerColor = when {
+            !network.password.isNullOrEmpty() -> BitmapDescriptorFactory.HUE_GREEN
+            network.security.contains("Open", ignoreCase = true) -> BitmapDescriptorFactory.HUE_ORANGE
+            else -> BitmapDescriptorFactory.HUE_RED
+        }
+        
+        markerOptions
+            .title("SSID: ${network.ssid}")
+            .snippet("BSSID: ${network.bssid}")
+            .icon(BitmapDescriptorFactory.defaultMarker(markerColor))
+    }
+    
+    override fun onClusterItemRendered(clusterItem: WifiNetworkClusterItem, marker: Marker) {
+        super.onClusterItemRendered(clusterItem, marker)
+        // Store the network data in the marker tag for info window access
+        marker.tag = clusterItem.network
+    }
+    
+    override fun shouldRenderAsCluster(cluster: com.google.maps.android.clustering.Cluster<WifiNetworkClusterItem>): Boolean {
+        // Performance optimization: cluster when there are many close markers
+        return cluster.size > 3
+    }
+    
+    /**
+     * Create custom marker icon with signal strength indicator
+     */
+    private fun createSignalMarkerIcon(network: WifiNetwork, context: Context): BitmapDescriptor {
+        val markerColor = when {
+            !network.password.isNullOrEmpty() -> BitmapDescriptorFactory.HUE_GREEN
+            network.security.contains("Open", ignoreCase = true) -> BitmapDescriptorFactory.HUE_ORANGE
+            else -> BitmapDescriptorFactory.HUE_RED
+        }
+        
+        // For now, return default marker. Custom drawing can be added later for more detailed icons
+        return BitmapDescriptorFactory.defaultMarker(markerColor)
+    }
+}
+
+/**
+ * Custom info window adapter for displaying enhanced Wi-Fi network information
+ */
+class CustomInfoWindowAdapter(private val context: Context) : GoogleMap.InfoWindowAdapter {
+    
+    override fun getInfoWindow(marker: Marker): View? {
+        return null // Use default info window frame
+    }
+    
+    override fun getInfoContents(marker: Marker): View? {
+        val network = marker.tag as? WifiNetwork ?: return null
+        
+        val view = LayoutInflater.from(context).inflate(R.layout.custom_marker_info_window, null)
+        
+        // Set SSID
+        val ssidTextView = view.findViewById<TextView>(R.id.tv_ssid)
+        ssidTextView.text = network.ssid
+        
+        // Set BSSID
+        val bssidTextView = view.findViewById<TextView>(R.id.tv_bssid)
+        bssidTextView.text = network.bssid
+        
+        // Set signal strength with color coding
+        val signalTextView = view.findViewById<TextView>(R.id.tv_signal)
+        signalTextView.text = "${network.rssi}dBm"
+        
+        // Color code signal strength
+        val signalColor = when {
+            network.rssi >= -50 -> ContextCompat.getColor(context, R.color.signal_strong)
+            network.rssi >= -70 -> ContextCompat.getColor(context, R.color.signal_medium)
+            else -> ContextCompat.getColor(context, R.color.signal_weak)
+        }
+        signalTextView.setBackgroundColor(signalColor)
+        
+        // Set security type
+        val securityTextView = view.findViewById<TextView>(R.id.tv_security)
+        securityTextView.text = network.security
+        
+        // Color code security type
+        val securityColor = if (network.security.contains("Open", ignoreCase = true)) {
+            ContextCompat.getColor(context, R.color.security_open)
+        } else {
+            ContextCompat.getColor(context, R.color.security_secure)
+        }
+        securityTextView.setBackgroundColor(securityColor)
+        
+        return view
     }
 }

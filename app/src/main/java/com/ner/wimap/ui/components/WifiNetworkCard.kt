@@ -96,6 +96,11 @@ fun WifiNetworkCard(
     val context = LocalContext.current
     val isOpenNetwork = network.security.contains("Open", ignoreCase = true) ||
             network.security.contains("OPEN", ignoreCase = true)
+    
+    // Check if network has any attached data (comments, passwords, or photos)
+    val hasAttachedData = comment.isNotEmpty() || 
+                         savedPassword.isNotEmpty() || 
+                         photoUri != null
 
     // Check if this network has a valid password (either saved locally or from successful connection)
     val hasValidPassword = savedPassword.isNotEmpty() || successfulPasswords.containsKey(network.bssid)
@@ -119,12 +124,27 @@ fun WifiNetworkCard(
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .shadow(if (isPinned) 12.dp else 4.dp, RoundedCornerShape(16.dp)),
+            .shadow(
+                elevation = when {
+                    isPinned -> 12.dp
+                    hasAttachedData -> 6.dp
+                    else -> 4.dp
+                }, 
+                shape = RoundedCornerShape(16.dp)
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (isPinned) Color(0xFFFFF3E0) else Color.White
+            containerColor = when {
+                isPinned -> Color(0xFFFFF3E0) // Orange tint for pinned
+                hasAttachedData -> Color(0xFFF0F8FF) // Light blue tint for attached data
+                else -> Color.White
+            }
         ),
-        border = if (isPinned) BorderStroke(2.dp, Color(0xFF667eea)) else null // Use main app color
+        border = when {
+            isPinned -> BorderStroke(2.dp, Color(0xFF667eea)) // Blue border for pinned
+            hasAttachedData -> BorderStroke(1.dp, Color(0xFF87CEEB)) // Light blue border for attached data
+            else -> null
+        }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header Section

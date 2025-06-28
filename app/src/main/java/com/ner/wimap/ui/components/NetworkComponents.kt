@@ -36,8 +36,17 @@ fun NetworkInfoChips(
             InfoChip("GPS", Color(0xFFE74C3C))
         }
 
+        // Show indicators for attached data
         if (hasPhoto) {
             InfoChip("📷", Color(0xFF8E44AD))
+        }
+        
+        if (network.comment.isNotEmpty()) {
+            InfoChip("💬", Color(0xFF27AE60))
+        }
+        
+        if (!network.password.isNullOrEmpty()) {
+            InfoChip("🔑", Color(0xFF2C3E50))
         }
     }
 }

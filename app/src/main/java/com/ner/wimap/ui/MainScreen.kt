@@ -171,6 +171,9 @@ fun MainScreen(
                         items = wifiNetworks,
                         key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
                     ) { network ->
+                        // Check if this network is currently pinned
+                        val isCurrentlyPinned = pinnedNetworks.any { it.bssid == network.bssid }
+                        
                         EnhancedWifiNetworkCard(
                             network = network,
                             isConnecting = connectingNetworks.contains(network.bssid),
@@ -190,7 +193,8 @@ fun MainScreen(
                             },
                             onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
                                 onUpdateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
-                            }
+                            },
+                            isPinned = isCurrentlyPinned // Explicitly pass the current pin status
                         )
                     }
 

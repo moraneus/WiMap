@@ -53,6 +53,7 @@ fun EnhancedWifiNetworkCard(
     onMoreInfoClick: (WifiNetwork) -> Unit,
     onUpdateData: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?) -> Unit,
     onUpdateDataWithPhotoDeletion: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { bssid, ssid, comment, password, photoPath, _ -> onUpdateData(bssid, ssid, comment, password, photoPath) },
+    isPinned: Boolean? = null, // Optional override for pin status
     modifier: Modifier = Modifier
 ) {
     var showDetails by remember { mutableStateOf(false) }
@@ -67,6 +68,14 @@ fun EnhancedWifiNetworkCard(
     val context = LocalContext.current
     val isOpenNetwork = network.security.contains("Open", ignoreCase = true) ||
             network.security.contains("OPEN", ignoreCase = true)
+    
+    // Use explicit isPinned parameter if provided, otherwise fall back to network's pin status
+    val actuallyPinned = isPinned ?: network.isPinned
+    
+    // Check if network has any attached data (comments, passwords, or photos)
+    val hasAttachedData = comment.isNotEmpty() || 
+                         savedPassword.isNotEmpty() || 
+                         photoPath != null
 
     // Check if this network has a valid password (either saved locally or from successful connection)
     // Simple camera launcher with direct permission handling - no enhanced managers
@@ -115,18 +124,33 @@ fun EnhancedWifiNetworkCard(
     Card(
         modifier = Modifier
             .fillMaxSize()
-            .shadow(if (network.isPinned) 12.dp else 4.dp, RoundedCornerShape(16.dp)),
+            .shadow(
+                elevation = when {
+                    actuallyPinned -> 12.dp
+                    hasAttachedData -> 6.dp
+                    else -> 4.dp
+                }, 
+                shape = RoundedCornerShape(16.dp)
+            ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = if (network.isPinned) Color(0xFFFFF3E0) else Color.White
+            containerColor = when {
+                actuallyPinned -> Color(0xFFFFF3E0) // Orange tint for pinned
+                hasAttachedData -> Color(0xFFF0F8FF) // Light blue tint for attached data
+                else -> Color.White
+            }
         ),
-        border = if (network.isPinned) BorderStroke(2.dp, Color(0xFF667eea)) else null // Use main app color
+        border = when {
+            actuallyPinned -> BorderStroke(2.dp, Color(0xFF667eea)) // Blue border for pinned
+            hasAttachedData -> BorderStroke(1.dp, Color(0xFF87CEEB)) // Light blue border for attached data
+            else -> null
+        }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header Section
             NetworkHeader(
                 network = network,
-                isPinned = network.isPinned,
+                isPinned = actuallyPinned,
                 isOpenNetwork = isOpenNetwork,
                 isConnecting = isConnecting,
                 hasValidPassword = savedPassword.isNotEmpty(),
@@ -179,9 +203,9 @@ fun EnhancedWifiNetworkCard(
                     }
                 },
                 onPinClick = {
-                    onPinClick(network.bssid, !network.isPinned)
+                    onPinClick(network.bssid, !actuallyPinned)
                 },
-                isPinned = network.isPinned
+                isPinned = actuallyPinned
             )
 
             // Expandable details

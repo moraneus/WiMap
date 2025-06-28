@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Colors for custom marker info windows -->
+    <color name="primary_text">#FF2C3E50</color>
+    <color name="secondary_text">#FF7F8C8D</color>
+    <color name="hint_text">#FFBDC3C7</color>
+    <color name="marker_background">#FFFFFF</color>
+    <color name="signal_strong">#FF27AE60</color>
+    <color name="signal_medium">#FFFF9800</color>
+    <color name="signal_weak">#FFF44336</color>
+    <color name="security_open">#FFFF9800</color>
+    <color name="security_secure">#FF2196F3</color>
+</resources>
