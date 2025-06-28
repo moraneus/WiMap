@@ -197,6 +197,10 @@ class MainActivity : ComponentActivity() {
                         // Use temporary network data for all networks (pinned and unpinned)
                         viewModel.updateTemporaryNetworkData(network.bssid, network.ssid, comment, password, photoUri)
                     },
+                    onUpdateNetworkDataWithPhotoDeletion = { network, comment, password, photoUri, clearPhoto ->
+                        // Use temporary network data with photo deletion support
+                        viewModel.updateTemporaryNetworkDataWithPhotoDeletion(network.bssid, network.ssid, comment, password, photoUri, clearPhoto)
+                    },
                     onOpenMaps = {
                         // Open Google Maps activity with current networks
                         val intent = MapsActivity.createIntent(this@MainActivity, wifiNetworks)

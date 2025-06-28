@@ -47,6 +47,7 @@ fun EnhancedWifiNetworkCard(
     onCancelConnectionClick: () -> Unit,
     onMoreInfoClick: (WifiNetwork) -> Unit,
     onUpdateData: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?) -> Unit,
+    onUpdateDataWithPhotoDeletion: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { bssid, ssid, comment, password, photoPath, _ -> onUpdateData(bssid, ssid, comment, password, photoPath) },
     modifier: Modifier = Modifier
 ) {
     var showDetails by remember { mutableStateOf(false) }
@@ -134,9 +135,9 @@ fun EnhancedWifiNetworkCard(
                         // Launch real camera
                         cameraLauncher()
                     } else {
-                        // Remove existing photo
+                        // Remove existing photo - use clearPhoto flag to ensure permanent deletion
                         photoPath = null
-                        onUpdateData(network.bssid, network.ssid, comment, savedPassword, null)
+                        onUpdateDataWithPhotoDeletion(network.bssid, network.ssid, comment, savedPassword, null, true)
                         Toast.makeText(context, "Photo removed!", Toast.LENGTH_SHORT).show()
                     }
                 },

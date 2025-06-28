@@ -74,6 +74,7 @@ fun MainScreen(
     onUnpinNetwork: (String) -> Unit,
     onClearConnectionProgress: () -> Unit,
     onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit,
+    onUpdateNetworkDataWithPhotoDeletion: (WifiNetwork, String?, String?, String?, Boolean) -> Unit = { network, comment, password, photoUri, _ -> onUpdateNetworkData(network, comment, password, photoUri) },
     onOpenMaps: () -> Unit,
     onSortingModeChanged: (com.ner.wimap.presentation.viewmodel.SortingMode) -> Unit
 ) {
@@ -179,6 +180,9 @@ fun MainScreen(
                             successfulPasswords = successfulPasswords,
                             onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
                                 onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
+                            },
+                            onUpdateNetworkDataWithPhotoDeletion = { updatedNetwork, newComment, newPassword, newPhotoUri, clearPhoto ->
+                                onUpdateNetworkDataWithPhotoDeletion(updatedNetwork, newComment, newPassword, newPhotoUri, clearPhoto)
                             }
                         )
                     }

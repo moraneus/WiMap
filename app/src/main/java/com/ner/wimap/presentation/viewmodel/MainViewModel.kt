@@ -162,8 +162,26 @@ class MainViewModel @Inject constructor(
     val connectingNetworkName = connectToNetworkUseCase.getConnectingNetworkName()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
-    val pinnedNetworks = managePinnedNetworksUseCase.getAllPinnedNetworks()
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    // Enhanced pinned networks that combine pinned data with temporary modifications
+    val pinnedNetworks = combine(
+        managePinnedNetworksUseCase.getAllPinnedNetworks(),
+        manageTemporaryNetworkDataUseCase.getAllTemporaryData()
+    ) { pinnedNetworksList, temporaryDataList ->
+        val temporaryDataMap = temporaryDataList.associateBy { it.bssid }
+        pinnedNetworksList.map { pinnedNetwork ->
+            val temporaryData = temporaryDataMap[pinnedNetwork.bssid]
+            if (temporaryData != null) {
+                // Merge temporary data into pinned network for live updates
+                pinnedNetwork.copy(
+                    comment = temporaryData.comment.takeIf { it.isNotEmpty() } ?: pinnedNetwork.comment,
+                    savedPassword = temporaryData.savedPassword ?: pinnedNetwork.savedPassword,
+                    photoUri = temporaryData.photoPath ?: pinnedNetwork.photoUri
+                )
+            } else {
+                pinnedNetwork
+            }
+        }
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     val exportStatus = exportNetworksUseCase.getExportStatus()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
@@ -277,12 +295,36 @@ class MainViewModel @Inject constructor(
     fun deletePinnedNetwork(network: PinnedNetwork) {
         viewModelScope.launch {
             managePinnedNetworksUseCase.deletePinnedNetwork(network)
+            // Also update temporary data to reflect that network is no longer pinned
+            val existingTempData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(network.bssid)
+            if (existingTempData != null) {
+                manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                    bssid = network.bssid,
+                    ssid = existingTempData.ssid,
+                    comment = existingTempData.comment,
+                    password = existingTempData.savedPassword,
+                    photoPath = existingTempData.photoPath,
+                    isPinned = false
+                )
+            }
         }
     }
 
     fun updateNetworkData(network: WifiNetwork, comment: String?, password: String?, photoUri: String?) {
         viewModelScope.launch {
             managePinnedNetworksUseCase.updateNetworkData(network, comment, password, photoUri)
+        }
+    }
+
+    fun updatePinnedNetworkDataWithPhotoDeletion(
+        network: WifiNetwork, 
+        comment: String?, 
+        password: String?, 
+        photoUri: String?,
+        clearPhoto: Boolean
+    ) {
+        viewModelScope.launch {
+            managePinnedNetworksUseCase.updateNetworkDataWithPhotoDeletion(network, comment, password, photoUri, clearPhoto)
         }
     }
 
@@ -298,6 +340,50 @@ class MainViewModel @Inject constructor(
                 photoPath = photoPath,
                 isPinned = null // Don't change pin status when just updating data
             )
+            
+            // If this network is currently pinned, also update the pinned network data for consistency
+            val currentPinnedNetworks = pinnedNetworks.value
+            val isPinnedNetwork = currentPinnedNetworks.any { it.bssid == bssid }
+            if (isPinnedNetwork) {
+                val network = wifiNetworks.value.find { it.bssid == bssid }
+                if (network != null) {
+                    android.util.Log.d("MainViewModel", "Also updating pinned network data for consistency")
+                    managePinnedNetworksUseCase.updateNetworkData(network, comment, password, photoPath)
+                }
+            }
+        }
+    }
+
+    fun updateTemporaryNetworkDataWithPhotoDeletion(
+        bssid: String, 
+        ssid: String, 
+        comment: String?, 
+        password: String?, 
+        photoPath: String?, 
+        clearPhoto: Boolean
+    ) {
+        android.util.Log.d("MainViewModel", "Updating temporary network data with photo deletion for BSSID $bssid: clearPhoto=$clearPhoto")
+        viewModelScope.launch {
+            manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                bssid = bssid,
+                ssid = ssid,
+                comment = comment ?: "",
+                password = password,
+                photoPath = photoPath,
+                isPinned = null,
+                clearPhoto = clearPhoto
+            )
+            
+            // If this network is currently pinned, also update the pinned network data for consistency
+            val currentPinnedNetworks = pinnedNetworks.value
+            val isPinnedNetwork = currentPinnedNetworks.any { it.bssid == bssid }
+            if (isPinnedNetwork) {
+                val network = wifiNetworks.value.find { it.bssid == bssid }
+                if (network != null) {
+                    android.util.Log.d("MainViewModel", "Also updating pinned network data with photo deletion for consistency")
+                    managePinnedNetworksUseCase.updateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
+                }
+            }
         }
     }
 

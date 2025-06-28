@@ -45,7 +45,8 @@ fun WifiNetworkCard(
     onUnpinNetwork: (String) -> Unit,
     isConnecting: Boolean = false,
     successfulPasswords: Map<String, String> = emptyMap(),
-    onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit = { _, _, _, _ -> }
+    onUpdateNetworkData: (WifiNetwork, String?, String?, String?) -> Unit = { _, _, _, _ -> },
+    onUpdateNetworkDataWithPhotoDeletion: (WifiNetwork, String?, String?, String?, Boolean) -> Unit = { network, comment, password, photoUri, _ -> onUpdateNetworkData(network, comment, password, photoUri) }
 ) {
     val isPinnedInitially = network.isPinned || pinnedNetworks.any { it.bssid == network.bssid }
     val pinnedNetwork = pinnedNetworks.find { it.bssid == network.bssid }
@@ -167,9 +168,9 @@ fun WifiNetworkCard(
                         // Launch real camera
                         cameraLauncher()
                     } else {
-                        // Remove existing photo
+                        // Remove existing photo - use clearPhoto flag to ensure permanent deletion
                         photoUri = null
-                        onUpdateNetworkData(network, comment, savedPassword, null)
+                        onUpdateNetworkDataWithPhotoDeletion(network, comment, savedPassword, null, true)
                         Toast.makeText(context, "Photo removed!", Toast.LENGTH_SHORT).show()
                     }
                 },

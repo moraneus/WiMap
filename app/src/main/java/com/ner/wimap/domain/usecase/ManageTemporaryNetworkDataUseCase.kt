@@ -1,9 +1,11 @@
 package com.ner.wimap.domain.usecase
 
+import android.net.Uri
 import com.ner.wimap.data.database.TemporaryNetworkData
 import com.ner.wimap.domain.repository.TemporaryNetworkDataRepository
 import com.ner.wimap.model.WifiNetwork
 import kotlinx.coroutines.flow.Flow
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -50,13 +52,26 @@ class ManageTemporaryNetworkDataUseCase @Inject constructor(
         ssid: String,
         comment: String = "",
         password: String? = null,
-        photoPath: String? = null
+        photoPath: String? = null,
+        clearPhoto: Boolean = false
     ) {
         val existingData = temporaryNetworkDataRepository.getTemporaryDataByBssid(bssid)
+        
+        // Handle photo deletion vs update
+        val finalPhotoPath = when {
+            clearPhoto -> {
+                // Delete existing photo file if it exists
+                existingData?.photoPath?.let { deletePhotoFile(it) }
+                null
+            }
+            photoPath != null -> photoPath
+            else -> existingData?.photoPath
+        }
+        
         val updatedData = (existingData ?: TemporaryNetworkData(bssid = bssid, ssid = ssid)).copy(
             comment = comment,
             savedPassword = password ?: existingData?.savedPassword,
-            photoPath = photoPath ?: existingData?.photoPath,
+            photoPath = finalPhotoPath,
             lastUpdated = System.currentTimeMillis()
         )
         temporaryNetworkDataRepository.updateTemporaryData(updatedData)
@@ -68,15 +83,27 @@ class ManageTemporaryNetworkDataUseCase @Inject constructor(
         comment: String = "",
         password: String? = null,
         photoPath: String? = null,
-        isPinned: Boolean? = null
+        isPinned: Boolean? = null,
+        clearPhoto: Boolean = false
     ) {
         val existingData = getTemporaryDataByBssid(bssid)
         if (existingData != null) {
+            // Handle photo deletion vs update
+            val finalPhotoPath = when {
+                clearPhoto -> {
+                    // Delete existing photo file if it exists
+                    existingData.photoPath?.let { deletePhotoFile(it) }
+                    null
+                }
+                photoPath != null -> photoPath
+                else -> existingData.photoPath
+            }
+            
             // Update existing data
             val updatedData = existingData.copy(
                 comment = comment,
                 savedPassword = password ?: existingData.savedPassword,
-                photoPath = photoPath ?: existingData.photoPath,
+                photoPath = finalPhotoPath,
                 isPinned = isPinned ?: existingData.isPinned,
                 lastUpdated = System.currentTimeMillis()
             )
@@ -136,5 +163,42 @@ class ManageTemporaryNetworkDataUseCase @Inject constructor(
             }
         }
         return temporaryDataMap
+    }
+
+    /**
+     * Deletes a photo file from the filesystem
+     */
+    private fun deletePhotoFile(photoPath: String): Boolean {
+        return try {
+            // Handle both URI strings and file paths
+            val file = if (photoPath.startsWith("content://") || photoPath.startsWith("file://")) {
+                // Extract file path from URI
+                val uri = Uri.parse(photoPath)
+                uri.path?.let { File(it) }
+            } else {
+                // Direct file path
+                File(photoPath)
+            }
+            
+            file?.let { 
+                if (it.exists()) {
+                    it.delete()
+                } else {
+                    false
+                }
+            } ?: false
+        } catch (e: Exception) {
+            // Log error but don't crash the app
+            false
+        }
+    }
+
+    /**
+     * Cleanup method to delete photo file when removing temporary data
+     */
+    suspend fun deleteTemporaryDataWithCleanup(bssid: String) {
+        val existingData = getTemporaryDataByBssid(bssid)
+        existingData?.photoPath?.let { deletePhotoFile(it) }
+        temporaryNetworkDataRepository.deleteTemporaryData(bssid)
     }
 }
