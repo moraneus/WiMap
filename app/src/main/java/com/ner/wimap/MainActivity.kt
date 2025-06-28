@@ -71,6 +71,7 @@ class MainActivity : ComponentActivity() {
         val networkForEmptyPasswordDialog by viewModel.networkForEmptyPasswordDialog.collectAsState()
         val isBackgroundScanningEnabled by viewModel.isBackgroundScanningEnabled.collectAsState()
         val backgroundScanIntervalMinutes by viewModel.backgroundScanIntervalMinutes.collectAsState()
+        val isBackgroundServiceActive by viewModel.isBackgroundServiceActive.collectAsState()
         val isAutoUploadEnabled by viewModel.isAutoUploadEnabled.collectAsState()
         val pinnedNetworks by viewModel.pinnedNetworks.collectAsState()
         val isConnecting by viewModel.isConnecting.collectAsState()
@@ -166,6 +167,7 @@ class MainActivity : ComponentActivity() {
                     networkForEmptyPasswordDialog = networkForEmptyPasswordDialog,
                     isBackgroundScanningEnabled = isBackgroundScanningEnabled,
                     backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
+                    isBackgroundServiceActive = isBackgroundServiceActive,
                     isAutoUploadEnabled = isAutoUploadEnabled,
                     pinnedNetworks = pinnedNetworks,
                     isConnecting = isConnecting,
@@ -190,7 +192,7 @@ class MainActivity : ComponentActivity() {
                         viewModel.dismissEmptyPasswordListDialog()
                         navController.navigate("settings") 
                     },
-                    onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(enabled) },
+                    onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
                     onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
                     onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
                     onUploadScanResults = { viewModel.uploadScanResultsToFirebase() },
@@ -251,6 +253,10 @@ class MainActivity : ComponentActivity() {
                     onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
                     hideNetworksUnseenForSeconds = hideNetworksUnseenForSeconds,
                     onHideNetworksUnseenForSecondsChange = { viewModel.setHideNetworksUnseenForSeconds(it) },
+                    isBackgroundScanningEnabled = isBackgroundScanningEnabled,
+                    onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
+                    backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
+                    onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
                     onClearAllData = { viewModel.clearAllData() },
                     onBack = { navController.popBackStack() }
                 )

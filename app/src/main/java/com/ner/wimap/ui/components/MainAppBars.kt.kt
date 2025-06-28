@@ -30,7 +30,8 @@ import com.ner.wimap.ui.viewmodel.ExportAction
 @Composable
 fun MainTopAppBar(
     onOpenPinnedNetworks: () -> Unit,
-    onOpenSettings: () -> Unit
+    onOpenSettings: () -> Unit,
+    isBackgroundServiceActive: Boolean = false
 ) {
     // Animated gradient colors
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
@@ -95,11 +96,19 @@ fun MainTopAppBar(
                             ),
                             color = Color.White
                         )
-                        Text(
-                            text = "WiFi Network Scanner",
-                            style = MaterialTheme.typography.labelMedium,
-                            color = Color.White.copy(alpha = 0.8f)
-                        )
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Text(
+                                text = "WiFi Network Scanner",
+                                style = MaterialTheme.typography.labelMedium,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                            if (isBackgroundServiceActive) {
+                                BackgroundServiceIndicator()
+                            }
+                        }
                     }
                 }
                 
@@ -458,5 +467,36 @@ fun UnifiedTopBarActionButton(
                 modifier = Modifier.size(22.dp)
             )
         }
+    }
+}
+
+@Composable
+private fun BackgroundServiceIndicator() {
+    val infiniteTransition = rememberInfiniteTransition(label = "service_indicator")
+    val alpha by infiniteTransition.animateFloat(
+        initialValue = 0.5f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(1000, easing = FastOutSlowInEasing),
+            repeatMode = RepeatMode.Reverse
+        ),
+        label = "pulse_alpha"
+    )
+    
+    Box(
+        modifier = Modifier
+            .size(16.dp)
+            .background(
+                Color.Green.copy(alpha = alpha),
+                CircleShape
+            ),
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = Icons.Default.CloudSync,
+            contentDescription = "Background scanning active",
+            tint = Color.White,
+            modifier = Modifier.size(10.dp)
+        )
     }
 }

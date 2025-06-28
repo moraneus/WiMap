@@ -19,6 +19,7 @@ import androidx.compose.material.icons.filled.Construction
 import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.CloudSync
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -60,6 +61,10 @@ fun SettingsScreen(
     onRssiThresholdForConnectionChange: (Int) -> Unit,
     hideNetworksUnseenForSeconds: Int,
     onHideNetworksUnseenForSecondsChange: (Int) -> Unit,
+    isBackgroundScanningEnabled: Boolean = false,
+    onToggleBackgroundScanning: (Boolean) -> Unit = {},
+    backgroundScanIntervalMinutes: Int = 15,
+    onSetBackgroundScanInterval: (Int) -> Unit = {},
     onClearAllData: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -211,6 +216,95 @@ fun SettingsScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = Color(0xFF7F8C8D)
                                 )
+                            }
+                        }
+                    }
+                )
+            }
+
+            // Background Scanning Section
+            item {
+                ModernSettingsCategoryCard(
+                    icon = Icons.Default.CloudSync,
+                    title = "Background Scanning",
+                    subtitle = "Automatic WiFi scanning when app is in background",
+                    gradientColors = listOf(Color(0xFF43E97B), Color(0xFF38F9D7)),
+                    content = {
+                        Column(
+                            modifier = Modifier.padding(24.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Enable/Disable Background Scanning
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = "Enable Background Scanning",
+                                        style = MaterialTheme.typography.bodyLarge.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Text(
+                                        text = "Continue scanning for WiFi networks when app is in background",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                }
+                                Switch(
+                                    checked = isBackgroundScanningEnabled,
+                                    onCheckedChange = onToggleBackgroundScanning
+                                )
+                            }
+
+                            if (isBackgroundScanningEnabled) {
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                // Scan Interval Slider
+                                Column {
+                                    Text(
+                                        text = "Scan Interval: $backgroundScanIntervalMinutes minutes",
+                                        style = MaterialTheme.typography.bodyMedium.copy(
+                                            fontWeight = FontWeight.Medium
+                                        ),
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = "How often to automatically scan for new WiFi networks when the app is running in the background. Shorter intervals find networks faster but use more battery.",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    Slider(
+                                        value = backgroundScanIntervalMinutes.toFloat(),
+                                        onValueChange = { onSetBackgroundScanInterval(it.toInt()) },
+                                        valueRange = 5f..60f,
+                                        steps = 10,
+                                        colors = SliderDefaults.colors(
+                                            thumbColor = Color(0xFF43E97B),
+                                            activeTrackColor = Color(0xFF43E97B)
+                                        )
+                                    )
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text(
+                                            text = "5 min",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                        Text(
+                                            text = "60 min",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f)
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

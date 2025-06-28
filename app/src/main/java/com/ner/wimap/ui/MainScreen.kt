@@ -44,6 +44,7 @@ fun MainScreen(
     networkForEmptyPasswordDialog: WifiNetwork?,
     isBackgroundScanningEnabled: Boolean,
     backgroundScanIntervalMinutes: Int,
+    isBackgroundServiceActive: Boolean,
     isAutoUploadEnabled: Boolean,
     pinnedNetworks: List<PinnedNetwork>,
     isConnecting: Boolean,
@@ -114,7 +115,8 @@ fun MainScreen(
             topBar = {
                 MainTopAppBar(
                     onOpenPinnedNetworks = onOpenPinnedNetworks,
-                    onOpenSettings = onOpenSettings
+                    onOpenSettings = onOpenSettings,
+                    isBackgroundServiceActive = isBackgroundServiceActive
                 )
             },
             bottomBar = {

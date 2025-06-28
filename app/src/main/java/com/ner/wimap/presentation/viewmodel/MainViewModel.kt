@@ -12,6 +12,7 @@ import com.ner.wimap.domain.usecase.ManagePinnedNetworksUseCase
 import com.ner.wimap.domain.usecase.ManageTemporaryNetworkDataUseCase
 import com.ner.wimap.domain.usecase.ScanWifiNetworksUseCase
 import com.ner.wimap.model.WifiNetwork
+import com.ner.wimap.service.WiFiScanService
 import com.ner.wimap.ui.viewmodel.ExportAction
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -69,6 +70,10 @@ class MainViewModel @Inject constructor(
 
     private val _backgroundScanIntervalMinutes = MutableStateFlow(15)
     val backgroundScanIntervalMinutes: StateFlow<Int> = _backgroundScanIntervalMinutes.asStateFlow()
+    
+    // Background service state
+    private val _isBackgroundServiceActive = MutableStateFlow(false)
+    val isBackgroundServiceActive: StateFlow<Boolean> = _isBackgroundServiceActive.asStateFlow()
 
     private val _isAutoUploadEnabled = MutableStateFlow(true)
     val isAutoUploadEnabled: StateFlow<Boolean> = _isAutoUploadEnabled.asStateFlow()
@@ -253,6 +258,79 @@ class MainViewModel @Inject constructor(
     fun clearNetworks() {
         viewModelScope.launch {
             scanWifiNetworksUseCase.clearNetworks()
+        }
+    }
+    
+    // Background scanning with foreground service
+    fun startBackgroundScan(context: Context) {
+        if (_isBackgroundServiceActive.value) {
+            return // Already running
+        }
+        
+        viewModelScope.launch {
+            try {
+                // Check for notification permission on Android 13+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val hasNotificationPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    
+                    if (!hasNotificationPermission) {
+                        _permissionsRationaleMessage.value = "Notification permission is required for background scanning. Please grant it in the next dialog."
+                        _showPermissionRationaleDialog.value = true
+                        return@launch
+                    }
+                }
+                
+                // Clear previous results before starting a fresh scan
+                scanWifiNetworksUseCase.clearNetworks()
+                
+                // Mark that a scan has been started
+                _hasEverScanned.value = true
+                _isBackgroundServiceActive.value = true
+                
+                // Start the foreground service
+                android.util.Log.d("MainViewModel", "About to start WiFiScanService")
+                WiFiScanService.startService(context)
+                android.util.Log.d("MainViewModel", "WiFiScanService.startService() called")
+                
+            } catch (e: Exception) {
+                _permissionsRationaleMessage.value = "Error starting background scan: ${e.message}"
+                _showPermissionRationaleDialog.value = true
+                _isBackgroundServiceActive.value = false
+            }
+        }
+    }
+    
+    fun stopBackgroundScan(context: Context) {
+        viewModelScope.launch {
+            try {
+                // Stop the foreground service
+                WiFiScanService.stopService(context)
+                _isBackgroundServiceActive.value = false
+                
+                // Also stop the regular scanning
+                scanWifiNetworksUseCase.stopScan()
+                
+                // Check for stale networks after scan completes
+                try {
+                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
+                } catch (e: Exception) {
+                    // Silently handle cleanup errors
+                }
+            } catch (e: Exception) {
+                // Handle cleanup errors
+                _isBackgroundServiceActive.value = false
+            }
+        }
+    }
+    
+    fun toggleBackgroundScan(context: Context) {
+        if (_isBackgroundServiceActive.value) {
+            stopBackgroundScan(context)
+        } else {
+            startBackgroundScan(context)
         }
     }
 
@@ -523,9 +601,10 @@ class MainViewModel @Inject constructor(
             android.Manifest.permission.CHANGE_WIFI_STATE
         )
         
-        // Add NEARBY_WIFI_DEVICES permission for Android 13+
+        // Add NEARBY_WIFI_DEVICES and POST_NOTIFICATIONS permissions for Android 13+
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             permissions.add(android.Manifest.permission.NEARBY_WIFI_DEVICES)
+            permissions.add(android.Manifest.permission.POST_NOTIFICATIONS)
         }
         
         _requestPermissionsAction.value = permissions
@@ -552,8 +631,19 @@ class MainViewModel @Inject constructor(
     }
 
     // Settings functions
-    fun toggleBackgroundScanning(isEnabled: Boolean) {
+    fun toggleBackgroundScanning(context: Context, isEnabled: Boolean) {
+        android.util.Log.d("MainViewModel", "toggleBackgroundScanning called: enabled=$isEnabled")
+        android.widget.Toast.makeText(context, "Background scanning: ${if (isEnabled) "ENABLED" else "DISABLED"}", android.widget.Toast.LENGTH_SHORT).show()
+        
         _isBackgroundScanningEnabled.value = isEnabled
+        
+        if (isEnabled) {
+            android.util.Log.d("MainViewModel", "Calling startBackgroundScan")
+            startBackgroundScan(context)
+        } else {
+            android.util.Log.d("MainViewModel", "Calling stopBackgroundScan")
+            stopBackgroundScan(context)
+        }
     }
 
     fun setBackgroundScanInterval(minutes: Int) {
