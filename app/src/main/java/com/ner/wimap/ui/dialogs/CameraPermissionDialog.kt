@@ -11,19 +11,15 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import com.ner.wimap.R
 
 @Composable
-fun ModernPermissionDialog(
-    message: String?,
-    onGrantPermissions: () -> Unit,
-    onOpenSettings: () -> Unit,
+fun CameraPermissionRationaleDialog(
+    onAllowCamera: () -> Unit,
     onDismiss: () -> Unit
 ) {
     Dialog(
@@ -57,7 +53,7 @@ fun ModernPermissionDialog(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = "Permissions Required",
+                        text = "Camera Permission",
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold
                         ),
@@ -74,7 +70,7 @@ fun ModernPermissionDialog(
                     ) {
                         Icon(
                             imageVector = Icons.Default.Close,
-                            contentDescription = stringResource(R.string.content_desc_dismiss),
+                            contentDescription = "Close",
                             tint = MaterialTheme.colorScheme.onErrorContainer,
                             modifier = Modifier.size(18.dp)
                         )
@@ -83,36 +79,36 @@ fun ModernPermissionDialog(
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // Warning icon
+                // Camera icon
                 Box(
                     modifier = Modifier
                         .size(80.dp)
                         .clip(RoundedCornerShape(40.dp))
-                        .background(MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.3f)),
+                        .background(MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.3f)),
                     contentAlignment = Alignment.Center
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Warning,
+                        imageVector = Icons.Default.CameraAlt,
                         contentDescription = null,
-                        tint = MaterialTheme.colorScheme.error,
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(40.dp)
                     )
                 }
 
                 Spacer(modifier = Modifier.height(20.dp))
 
-                // Message
+                // Explanation
                 Text(
-                    text = message ?: stringResource(R.string.location_wifi_permissions_required),
+                    text = "WiMap needs camera access to take photos of Wi-Fi network locations.",
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurface,
                     textAlign = TextAlign.Center,
                     lineHeight = MaterialTheme.typography.bodyLarge.lineHeight
                 )
 
-                Spacer(modifier = Modifier.height(20.dp))
+                Spacer(modifier = Modifier.height(16.dp))
 
-                // Permission requirements card
+                // What we do with photos
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(
@@ -125,29 +121,26 @@ fun ModernPermissionDialog(
                         verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
-                            text = "Required Permissions:",
+                            text = "What we do with your photos:",
                             style = MaterialTheme.typography.titleSmall.copy(
                                 fontWeight = FontWeight.SemiBold
                             ),
                             color = MaterialTheme.colorScheme.onSurface
                         )
                         
-                        PermissionItem(
+                        PhotoUsageItem(
+                            icon = Icons.Default.PhotoLibrary,
+                            description = "Store photos privately in the app"
+                        )
+                        
+                        PhotoUsageItem(
                             icon = Icons.Default.LocationOn,
-                            title = "Location Access",
-                            description = "Required to scan WiFi networks and get GPS coordinates"
+                            description = "Help you remember network locations"
                         )
                         
-                        PermissionItem(
-                            icon = Icons.Default.Wifi,
-                            title = "WiFi Access",
-                            description = "Required to discover and analyze wireless networks"
-                        )
-                        
-                        PermissionItem(
-                            icon = Icons.Default.CameraAlt,
-                            title = "Camera Access",
-                            description = "Optional - to capture photos of network locations"
+                        PhotoUsageItem(
+                            icon = Icons.Default.Security,
+                            description = "Never shared or uploaded anywhere"
                         )
                     }
                 }
@@ -160,7 +153,7 @@ fun ModernPermissionDialog(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Button(
-                        onClick = onGrantPermissions,
+                        onClick = onAllowCamera,
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = MaterialTheme.colorScheme.primary,
@@ -172,39 +165,16 @@ fun ModernPermissionDialog(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Icon(
-                                imageVector = Icons.Default.Check,
+                                imageVector = Icons.Default.CameraAlt,
                                 contentDescription = null,
                                 modifier = Modifier.size(18.dp)
                             )
                             Text(
-                                text = "Allow",
+                                text = "Allow Camera",
                                 style = MaterialTheme.typography.labelLarge.copy(
                                     fontWeight = FontWeight.SemiBold
                                 ),
                                 maxLines = 1
-                            )
-                        }
-                    }
-                    
-                    OutlinedButton(
-                        onClick = onOpenSettings,
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = ButtonDefaults.outlinedButtonColors(
-                            contentColor = MaterialTheme.colorScheme.primary
-                        )
-                    ) {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Settings,
-                                contentDescription = null,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Text(
-                                text = "Open App Settings",
-                                style = MaterialTheme.typography.labelLarge
                             )
                         }
                     }
@@ -214,7 +184,7 @@ fun ModernPermissionDialog(
                         modifier = Modifier.fillMaxWidth()
                     ) {
                         Text(
-                            text = stringResource(R.string.cancel),
+                            text = "Cancel",
                             style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -226,9 +196,8 @@ fun ModernPermissionDialog(
 }
 
 @Composable
-private fun PermissionItem(
+private fun PhotoUsageItem(
     icon: androidx.compose.ui.graphics.vector.ImageVector,
-    title: String,
     description: String
 ) {
     Row(
@@ -241,21 +210,10 @@ private fun PermissionItem(
             tint = MaterialTheme.colorScheme.primary,
             modifier = Modifier.size(20.dp)
         )
-        Column(
-            verticalArrangement = Arrangement.spacedBy(4.dp)
-        ) {
-            Text(
-                text = title,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontWeight = FontWeight.Medium
-                ),
-                color = MaterialTheme.colorScheme.onSurface
-            )
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
+        Text(
+            text = description,
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurface
+        )
     }
 }

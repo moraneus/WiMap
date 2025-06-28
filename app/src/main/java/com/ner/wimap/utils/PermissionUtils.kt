@@ -61,20 +61,10 @@ object PermissionUtils {
     
     /**
      * Get all required permissions for camera operations
+     * Only CAMERA permission needed since photos are stored in app's private directory
      */
     fun getRequiredCameraPermissions(): List<String> {
-        val permissions = mutableListOf(
-            Manifest.permission.CAMERA
-        )
-        
-        // Add READ_MEDIA_IMAGES permission for Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            permissions.add(Manifest.permission.READ_MEDIA_IMAGES)
-        } else {
-            permissions.add(Manifest.permission.READ_EXTERNAL_STORAGE)
-        }
-        
-        return permissions
+        return listOf(Manifest.permission.CAMERA)
     }
     
     /**

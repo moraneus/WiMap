@@ -23,6 +23,7 @@ import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.components.*
 import com.ner.wimap.ui.dialogs.*
+// Removed enhanced permission imports - camera permissions handled directly
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
 
@@ -170,19 +171,25 @@ fun MainScreen(
                         items = wifiNetworks,
                         key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}" }
                     ) { network ->
-                        WifiNetworkCard(
+                        EnhancedWifiNetworkCard(
                             network = network,
-                            onConnectClicked = { onConnect(network) },
-                            pinnedNetworks = pinnedNetworks,
-                            onPinNetwork = onPinNetwork,
-                            onUnpinNetwork = onUnpinNetwork,
                             isConnecting = connectingNetworks.contains(network.bssid),
-                            successfulPasswords = successfulPasswords,
-                            onUpdateNetworkData = { updatedNetwork, newComment, newPassword, newPhotoUri ->
-                                onUpdateNetworkData(updatedNetwork, newComment, newPassword, newPhotoUri)
+                            connectionStatus = if (connectingNetworks.contains(network.bssid)) connectionProgress else null,
+                            onPinClick = { bssid, pin -> 
+                                if (pin) {
+                                    onPinNetwork(network, null, null, null)
+                                } else {
+                                    onUnpinNetwork(bssid)
+                                }
                             },
-                            onUpdateNetworkDataWithPhotoDeletion = { updatedNetwork, newComment, newPassword, newPhotoUri, clearPhoto ->
-                                onUpdateNetworkDataWithPhotoDeletion(updatedNetwork, newComment, newPassword, newPhotoUri, clearPhoto)
+                            onConnectClick = { onConnect(network) },
+                            onCancelConnectionClick = onClearConnectionProgress,
+                            onMoreInfoClick = { /* No-op for now */ },
+                            onUpdateData = { bssid, ssid, comment, password, photoPath ->
+                                onUpdateNetworkData(network, comment, password, photoPath)
+                            },
+                            onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                                onUpdateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
                             }
                         )
                     }
@@ -245,6 +252,10 @@ fun MainScreen(
         }
     }
 
+    // Camera permissions now handled directly by AutoPermissionCameraLauncher
+    // No global permission handler needed to avoid settings dialogs
+    
+    // Restore original WiFi/Location permission dialog with explanation
     if (showPermissionRationaleDialog) {
         key("permission_dialog") {
             ModernPermissionDialog(

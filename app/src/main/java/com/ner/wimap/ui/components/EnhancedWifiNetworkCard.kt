@@ -1,5 +1,8 @@
 package com.ner.wimap.ui.components
 
+import android.content.Context
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -33,10 +36,10 @@ import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.data.database.TemporaryNetworkData
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
-import com.ner.wimap.camera.rememberEnhancedCameraLauncher
-import com.ner.wimap.permissions.PermissionUIHandler
-import com.ner.wimap.permissions.rememberPermissionManager
+// Removed rememberAutoPermissionCameraLauncher - using direct camera permission handling
+// Removed EnhancedPermissionUIHandler imports - camera permissions handled by AutoPermissionCameraLauncher
 import com.ner.wimap.ui.dialogs.ImageViewerDialog
+import com.ner.wimap.ui.dialogs.CameraPermissionRationaleDialog
 import com.ner.wimap.R
 
 @Composable
@@ -59,25 +62,53 @@ fun EnhancedWifiNetworkCard(
     var showPasswordDialog by remember { mutableStateOf(false) }
     var showCommentDialog by remember { mutableStateOf(false) }
     var showImageViewer by remember { mutableStateOf(false) }
+    var showCameraPermissionDialog by remember { mutableStateOf(false) }
 
     val context = LocalContext.current
     val isOpenNetwork = network.security.contains("Open", ignoreCase = true) ||
             network.security.contains("OPEN", ignoreCase = true)
 
     // Check if this network has a valid password (either saved locally or from successful connection)
-    // Enhanced camera launcher with permission handling
-    val permissionManager = rememberPermissionManager()
-    val cameraLauncher = rememberEnhancedCameraLauncher(
-        onPhotoTaken = { uri ->
-            photoPath = uri.toString()
+    // Simple camera launcher with direct permission handling - no enhanced managers
+    var photoUri by remember { mutableStateOf<Uri?>(null) }
+    
+    val directCameraLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.TakePicture()
+    ) { success ->
+        if (success && photoUri != null) {
+            photoPath = photoUri.toString()
             onUpdateData(network.bssid, network.ssid, comment, savedPassword, photoPath)
             Toast.makeText(context, context.getString(R.string.photo_captured_successfully), Toast.LENGTH_SHORT).show()
-        },
-        onError = { error ->
-            Toast.makeText(context, "Camera error: $error", Toast.LENGTH_SHORT).show()
-        },
-        onPermissionDenied = { message ->
-            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
+        }
+    }
+    
+    val directPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val allGranted = permissions.values.all { it }
+        if (allGranted) {
+            // Launch camera after permissions granted
+            launchCameraWithUri(context, directCameraLauncher) { uri ->
+                photoUri = uri
+            }
+        } else {
+            // Simple toast - no red error dialogs
+            Toast.makeText(context, "Camera access needed for photos", Toast.LENGTH_SHORT).show()
+        }
+    }
+    
+    val cameraLauncher = SimpleCameraLauncherState(
+        launch = {
+            val hasPermissions = com.ner.wimap.utils.PermissionUtils.hasAllCameraPermissions(context)
+            
+            if (hasPermissions) {
+                launchCameraWithUri(context, directCameraLauncher) { uri ->
+                    photoUri = uri
+                }
+            } else {
+                // Show rationale dialog first
+                showCameraPermissionDialog = true
+            }
         }
     )
 
@@ -138,17 +169,8 @@ fun EnhancedWifiNetworkCard(
                 onShowPasswordDialog = { showPasswordDialog = true },
                 onCameraClick = {
                     if (photoPath == null) {
-                        // Check permissions and launch camera
-                        if (permissionManager.hasCameraPermissions()) {
-                            cameraLauncher.launch()
-                        } else {
-                            // Request permissions first
-                            permissionManager.requestCameraPermissions { granted ->
-                                if (granted) {
-                                    cameraLauncher.launch()
-                                }
-                            }
-                        }
+                        // Launch camera with automatic permission handling
+                        cameraLauncher.launch()
                     } else {
                         // Remove existing photo - use clearPhoto flag to ensure permanent deletion
                         photoPath = null
@@ -214,6 +236,56 @@ fun EnhancedWifiNetworkCard(
         }
     }
     
-    // Handle permission UI dialogs and snackbars
-    PermissionUIHandler(permissionManager = permissionManager)
+    // Camera Permission Rationale Dialog
+    if (showCameraPermissionDialog) {
+        CameraPermissionRationaleDialog(
+            onAllowCamera = {
+                showCameraPermissionDialog = false
+                // Request permissions after user understands why
+                val requiredPermissions = com.ner.wimap.utils.PermissionUtils.getRequiredCameraPermissions()
+                directPermissionLauncher.launch(requiredPermissions.toTypedArray())
+            },
+            onDismiss = { 
+                showCameraPermissionDialog = false 
+            }
+        )
+    }
+}
+
+/**
+ * Simple camera launcher state without enhanced permission management
+ */
+data class SimpleCameraLauncherState(
+    val launch: () -> Unit
+)
+
+/**
+ * Launch camera with URI creation - no enhanced permission management
+ */
+private fun launchCameraWithUri(
+    context: Context,
+    cameraLauncher: androidx.activity.result.ActivityResultLauncher<Uri>,
+    onUriCreated: (Uri) -> Unit
+) {
+    try {
+        val timeStamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
+        val imageFileName = "WIFI_PHOTO_$timeStamp.jpg"
+        val storageDir = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES)
+        
+        if (storageDir != null && !storageDir.exists()) {
+            storageDir.mkdirs()
+        }
+        
+        val photoFile = File(storageDir, imageFileName)
+        val uri = FileProvider.getUriForFile(
+            context,
+            "${context.packageName}.fileprovider",
+            photoFile
+        )
+        
+        onUriCreated(uri)
+        cameraLauncher.launch(uri)
+    } catch (e: Exception) {
+        // Silent error handling - no red dialogs
+    }
 }

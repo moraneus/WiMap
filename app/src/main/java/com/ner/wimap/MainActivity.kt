@@ -125,7 +125,7 @@ class MainActivity : ComponentActivity() {
             }
         }
 
-        // Handle navigation to app settings
+        // Handle navigation to app settings for WiFi/Location permissions only
         LaunchedEffect(navigateToAppSettingsAction) {
             if (navigateToAppSettingsAction) {
                 val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {

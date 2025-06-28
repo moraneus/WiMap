@@ -1157,7 +1157,7 @@ fun HideUnseenNetworksSection(
     ) {
         // Title with current value prominently displayed - shorter and clearer text
         Text(
-            text = "Period time to clear unseen networks: ${formatSeconds(currentSeconds)}",
+            text = "Clear unseen networks after: ${formatSeconds(currentSeconds)}",
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.SemiBold
             ),
