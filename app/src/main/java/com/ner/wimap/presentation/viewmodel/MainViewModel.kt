@@ -172,10 +172,18 @@ class MainViewModel @Inject constructor(
             val temporaryData = temporaryDataMap[pinnedNetwork.bssid]
             if (temporaryData != null) {
                 // Merge temporary data into pinned network for live updates
+                // CRITICAL: Handle photo deletion properly - if either source has null photo, use null
+                val mergedPhotoUri = when {
+                    temporaryData.photoPath == null && pinnedNetwork.photoUri == null -> null
+                    temporaryData.photoPath == null -> null // Temporary data explicitly deleted photo
+                    pinnedNetwork.photoUri == null -> null // Pinned data explicitly deleted photo
+                    else -> temporaryData.photoPath ?: pinnedNetwork.photoUri
+                }
+                
                 pinnedNetwork.copy(
                     comment = temporaryData.comment.takeIf { it.isNotEmpty() } ?: pinnedNetwork.comment,
                     savedPassword = temporaryData.savedPassword ?: pinnedNetwork.savedPassword,
-                    photoUri = temporaryData.photoPath ?: pinnedNetwork.photoUri
+                    photoUri = mergedPhotoUri
                 )
             } else {
                 pinnedNetwork
@@ -364,24 +372,51 @@ class MainViewModel @Inject constructor(
     ) {
         android.util.Log.d("MainViewModel", "Updating temporary network data with photo deletion for BSSID $bssid: clearPhoto=$clearPhoto")
         viewModelScope.launch {
-            manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
-                bssid = bssid,
-                ssid = ssid,
-                comment = comment ?: "",
-                password = password,
-                photoPath = photoPath,
-                isPinned = null,
-                clearPhoto = clearPhoto
-            )
-            
-            // If this network is currently pinned, also update the pinned network data for consistency
+            // Check if this is a pinned network BEFORE making any updates
             val currentPinnedNetworks = pinnedNetworks.value
             val isPinnedNetwork = currentPinnedNetworks.any { it.bssid == bssid }
-            if (isPinnedNetwork) {
+            
+            if (isPinnedNetwork && clearPhoto) {
+                // For pinned networks with photo deletion, update both sources atomically
                 val network = wifiNetworks.value.find { it.bssid == bssid }
                 if (network != null) {
-                    android.util.Log.d("MainViewModel", "Also updating pinned network data with photo deletion for consistency")
-                    managePinnedNetworksUseCase.updateNetworkDataWithPhotoDeletion(network, comment, password, photoPath, clearPhoto)
+                    android.util.Log.d("MainViewModel", "Atomically updating both pinned and temporary data for photo deletion")
+                    
+                    // Update pinned data first to ensure permanent deletion
+                    managePinnedNetworksUseCase.updateNetworkDataWithPhotoDeletion(network, comment, password, null, clearPhoto)
+                    
+                    // Then update temporary data to match, ensuring photoPath is null
+                    manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                        bssid = bssid,
+                        ssid = ssid,
+                        comment = comment ?: "",
+                        password = password,
+                        photoPath = null, // Explicitly set to null for photo deletion
+                        isPinned = null,
+                        clearPhoto = clearPhoto
+                    )
+                } else {
+                    android.util.Log.w("MainViewModel", "Could not find network with BSSID $bssid in current wifi networks")
+                }
+            } else {
+                // For non-pinned networks or non-deletion updates, use normal flow
+                manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                    bssid = bssid,
+                    ssid = ssid,
+                    comment = comment ?: "",
+                    password = password,
+                    photoPath = photoPath,
+                    isPinned = null,
+                    clearPhoto = clearPhoto
+                )
+                
+                // Update pinned data if network is pinned (for non-deletion cases)
+                if (isPinnedNetwork && !clearPhoto) {
+                    val network = wifiNetworks.value.find { it.bssid == bssid }
+                    if (network != null) {
+                        android.util.Log.d("MainViewModel", "Also updating pinned network data for consistency")
+                        managePinnedNetworksUseCase.updateNetworkData(network, comment, password, photoPath)
+                    }
                 }
             }
         }
@@ -552,8 +587,8 @@ class MainViewModel @Inject constructor(
     private val _rssiThresholdForConnection = MutableStateFlow(-70)
     val rssiThresholdForConnection: StateFlow<Int> = _rssiThresholdForConnection.asStateFlow()
 
-    private val _hideNetworksUnseenForHours = MutableStateFlow(24)
-    val hideNetworksUnseenForHours: StateFlow<Int> = _hideNetworksUnseenForHours.asStateFlow()
+    private val _hideNetworksUnseenForSeconds = MutableStateFlow(30)
+    val hideNetworksUnseenForSeconds: StateFlow<Int> = _hideNetworksUnseenForSeconds.asStateFlow()
 
     init {
         // Load all settings from SharedPreferences on initialization
@@ -650,8 +685,8 @@ class MainViewModel @Inject constructor(
         }
     }
 
-    fun setHideNetworksUnseenForHours(hours: Int) {
-        _hideNetworksUnseenForHours.value = hours
+    fun setHideNetworksUnseenForSeconds(seconds: Int) {
+        _hideNetworksUnseenForSeconds.value = seconds
         saveConnectionSettingsToPreferences()
     }
 
@@ -684,7 +719,7 @@ class MainViewModel @Inject constructor(
                 _maxRetries.value = 3
                 _connectionTimeoutSeconds.value = 10
                 _rssiThresholdForConnection.value = -70
-                _hideNetworksUnseenForHours.value = 24
+                _hideNetworksUnseenForSeconds.value = 30
                 _isBackgroundScanningEnabled.value = false
                 _backgroundScanIntervalMinutes.value = 15
                 _isAutoUploadEnabled.value = true
@@ -714,7 +749,7 @@ class MainViewModel @Inject constructor(
             while (true) {
                 delay(30 * 60 * 1000L) // Run every 30 minutes
                 try {
-                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForHours.value)
+                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
                 } catch (e: Exception) {
                     // Silently handle cleanup errors
                 }
@@ -838,7 +873,7 @@ class MainViewModel @Inject constructor(
         _maxRetries.value = sharedPreferences.getInt("max_retries", 3).coerceIn(1, 10)
         _connectionTimeoutSeconds.value = sharedPreferences.getInt("connection_timeout_seconds", 10).coerceIn(5, 60)
         _rssiThresholdForConnection.value = sharedPreferences.getInt("rssi_threshold_for_connection", -70).coerceIn(-100, -30)
-        _hideNetworksUnseenForHours.value = sharedPreferences.getInt("hide_networks_unseen_for_hours", 24)
+        _hideNetworksUnseenForSeconds.value = sharedPreferences.getInt("hide_networks_unseen_for_seconds", 30)
         
         // Update ConnectionManager with loaded settings
         viewModelScope.launch {
@@ -855,7 +890,7 @@ class MainViewModel @Inject constructor(
             .putInt("max_retries", _maxRetries.value)
             .putInt("connection_timeout_seconds", _connectionTimeoutSeconds.value)
             .putInt("rssi_threshold_for_connection", _rssiThresholdForConnection.value)
-            .putInt("hide_networks_unseen_for_hours", _hideNetworksUnseenForHours.value)
+            .putInt("hide_networks_unseen_for_seconds", _hideNetworksUnseenForSeconds.value)
             .apply()
     }
 }

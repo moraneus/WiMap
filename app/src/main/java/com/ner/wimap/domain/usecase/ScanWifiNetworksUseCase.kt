@@ -18,5 +18,5 @@ class ScanWifiNetworksUseCase @Inject constructor(
     
     suspend fun clearNetworks() = wifiRepository.clearNetworks()
     
-    suspend fun removeStaleNetworks(hideNetworksUnseenForHours: Int) = wifiRepository.removeStaleNetworks(hideNetworksUnseenForHours)
+    suspend fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) = wifiRepository.removeStaleNetworks(hideNetworksUnseenForSeconds)
 }

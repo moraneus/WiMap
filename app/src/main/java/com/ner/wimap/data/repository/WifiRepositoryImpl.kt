@@ -84,7 +84,7 @@ class WifiRepositoryImpl @Inject constructor(
 
     override fun getConnectingNetworkName(): Flow<String?> = connectionManager.connectingNetworkName
 
-    override suspend fun removeStaleNetworks(hideNetworksUnseenForHours: Int) {
-        scanManager.removeStaleNetworks(hideNetworksUnseenForHours)
+    override suspend fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) {
+        scanManager.removeStaleNetworks(hideNetworksUnseenForSeconds)
     }
 }

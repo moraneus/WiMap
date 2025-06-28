@@ -32,7 +32,9 @@ import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
-import com.ner.wimap.camera.rememberCameraLauncher
+import com.ner.wimap.camera.rememberEnhancedCameraLauncher
+import com.ner.wimap.permissions.PermissionUIHandler
+import com.ner.wimap.permissions.rememberPermissionManager
 import com.ner.wimap.ui.dialogs.ImageViewerDialog
 import com.ner.wimap.R
 
@@ -98,8 +100,9 @@ fun WifiNetworkCard(
     // Check if this network has a valid password (either saved locally or from successful connection)
     val hasValidPassword = savedPassword.isNotEmpty() || successfulPasswords.containsKey(network.bssid)
 
-    // Camera launcher
-    val cameraLauncher = rememberCameraLauncher(
+    // Enhanced camera launcher with permission handling
+    val permissionManager = rememberPermissionManager()
+    val cameraLauncher = rememberEnhancedCameraLauncher(
         onPhotoTaken = { uri ->
             photoUri = uri
             onUpdateNetworkData(network, comment, savedPassword, uri.toString())
@@ -107,6 +110,9 @@ fun WifiNetworkCard(
         },
         onError = { error ->
             Toast.makeText(context, "Camera error: $error", Toast.LENGTH_SHORT).show()
+        },
+        onPermissionDenied = { message ->
+            Toast.makeText(context, message, Toast.LENGTH_LONG).show()
         }
     )
 
@@ -165,8 +171,17 @@ fun WifiNetworkCard(
                 onShowPasswordDialog = { showPasswordDialog = true },
                 onCameraClick = {
                     if (photoUri == null) {
-                        // Launch real camera
-                        cameraLauncher()
+                        // Check permissions and launch camera
+                        if (permissionManager.hasCameraPermissions()) {
+                            cameraLauncher.launch()
+                        } else {
+                            // Request permissions first
+                            permissionManager.requestCameraPermissions { granted ->
+                                if (granted) {
+                                    cameraLauncher.launch()
+                                }
+                            }
+                        }
                     } else {
                         // Remove existing photo - use clearPhoto flag to ensure permanent deletion
                         photoUri = null
@@ -238,6 +253,9 @@ fun WifiNetworkCard(
             )
         }
     }
+    
+    // Handle permission UI dialogs and snackbars
+    PermissionUIHandler(permissionManager = permissionManager)
 }
 
 @Composable

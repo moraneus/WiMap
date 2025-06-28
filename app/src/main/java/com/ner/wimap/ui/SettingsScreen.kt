@@ -58,8 +58,8 @@ fun SettingsScreen(
     onConnectionTimeoutChange: (Int) -> Unit,
     rssiThresholdForConnection: Int,
     onRssiThresholdForConnectionChange: (Int) -> Unit,
-    hideNetworksUnseenForHours: Int,
-    onHideNetworksUnseenForHoursChange: (Int) -> Unit,
+    hideNetworksUnseenForSeconds: Int,
+    onHideNetworksUnseenForSecondsChange: (Int) -> Unit,
     onClearAllData: () -> Unit,
     onBack: () -> Unit
 ) {
@@ -305,8 +305,8 @@ fun SettingsScreen(
                         ) {
                             // Hide networks unseen for X seconds (30s to 1 hour)
                             HideUnseenNetworksSection(
-                                hideNetworksUnseenForHours = hideNetworksUnseenForHours,
-                                onHideNetworksUnseenForHoursChange = onHideNetworksUnseenForHoursChange
+                                hideNetworksUnseenForSeconds = hideNetworksUnseenForSeconds,
+                                onHideNetworksUnseenForSecondsChange = onHideNetworksUnseenForSecondsChange
                             )
                         }
                     }
@@ -1132,30 +1132,32 @@ fun RssiThresholdSliderSection(
 
 @Composable
 fun HideUnseenNetworksSection(
-    hideNetworksUnseenForHours: Int,
-    onHideNetworksUnseenForHoursChange: (Int) -> Unit
+    hideNetworksUnseenForSeconds: Int,
+    onHideNetworksUnseenForSecondsChange: (Int) -> Unit
 ) {
-    // Handle the conversion from the legacy hours system to seconds
-    // If the value is negative, it's already in seconds (our new encoding)
-    // If positive, it's in hours and needs conversion
-    val currentSeconds = if (hideNetworksUnseenForHours < 0) {
-        // Already stored as seconds (negative encoding)
-        (-hideNetworksUnseenForHours).coerceIn(30, 600)
-    } else if (hideNetworksUnseenForHours == 0) {
-        // Default to 120 seconds (2 minutes)
-        120
-    } else {
-        // Convert from hours to seconds, but clamp to our new range
-        (hideNetworksUnseenForHours * 3600).coerceIn(30, 600)
+    // Seconds-based system: 30 seconds to 10 minutes in 30-second increments
+    val currentSeconds = hideNetworksUnseenForSeconds.coerceIn(30, 600) // 30 seconds to 10 minutes
+    
+    // Helper function to format seconds nicely
+    fun formatSeconds(seconds: Int): String {
+        return when {
+            seconds < 60 -> "${seconds}s"
+            seconds % 60 == 0 -> "${seconds / 60}m"
+            else -> {
+                val mins = seconds / 60
+                val secs = seconds % 60
+                "${mins}m ${secs}s"
+            }
+        }
     }
     
     Column(
         modifier = Modifier.fillMaxWidth(),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        // Title with current value prominently displayed
+        // Title with current value prominently displayed - shorter and clearer text
         Text(
-            text = "Hide networks not seen in the last: ${currentSeconds} seconds",
+            text = "Period time to clear unseen networks: ${formatSeconds(currentSeconds)}",
             style = MaterialTheme.typography.titleSmall.copy(
                 fontWeight = FontWeight.SemiBold
             ),
@@ -1170,13 +1172,13 @@ fun HideUnseenNetworksSection(
             Slider(
                 value = currentSeconds.toFloat(),
                 onValueChange = { newSeconds ->
-                    // Round to nearest 10-second increment
-                    val roundedSeconds = (newSeconds / 10).toInt() * 10
-                    // Store as negative value to indicate it's in seconds
-                    onHideNetworksUnseenForHoursChange(-roundedSeconds)
+                    // Round to nearest 30-second increment
+                    val roundedSeconds = (newSeconds / 30).toInt() * 30
+                    val clampedSeconds = roundedSeconds.coerceIn(30, 600)
+                    onHideNetworksUnseenForSecondsChange(clampedSeconds)
                 },
                 valueRange = 30f..600f, // 30 seconds to 10 minutes
-                steps = 56, // (600-30)/10 - 1 = 56 steps for 10-second intervals
+                steps = 18, // (600-30)/30 - 1 = 18 steps for 30-second intervals
                 colors = SliderDefaults.colors(
                     thumbColor = Color(0xFF764ba2),
                     activeTrackColor = Color(0xFF667eea),
@@ -1190,10 +1192,10 @@ fun HideUnseenNetworksSection(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween
             ) {
-                // Major tick labels
-                listOf(30, 60, 120, 180, 300, 600).forEach { seconds ->
+                // Major tick labels: 30s, 1m, 2m, 5m, 10m
+                listOf(30, 60, 120, 300, 600).forEach { seconds ->
                     Text(
-                        text = formatSecondsCompact(seconds),
+                        text = formatSeconds(seconds),
                         style = MaterialTheme.typography.bodySmall,
                         color = if (currentSeconds == seconds) Color(0xFF3498DB) else Color(0xFF7F8C8D),
                         fontWeight = if (currentSeconds == seconds) FontWeight.SemiBold else FontWeight.Normal
@@ -1202,72 +1204,12 @@ fun HideUnseenNetworksSection(
             }
         }
         
-        // Visual tick marks
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(8.dp)
-                .padding(horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            // Create tick marks for every 30 seconds
-            for (i in 0..19) { // 20 major ticks from 30s to 600s
-                val tickSeconds = 30 + (i * 30)
-                Box(
-                    modifier = Modifier
-                        .width(2.dp)
-                        .height(if (tickSeconds % 60 == 0) 8.dp else 4.dp) // Taller ticks for minutes
-                        .background(
-                            color = if (currentSeconds >= tickSeconds) Color(0xFF667eea) else Color(0xFFE0E6ED),
-                            shape = RoundedCornerShape(1.dp)
-                        )
-                )
-            }
-        }
-        
-        // Current selection highlight
-        Card(
-            modifier = Modifier.fillMaxWidth(),
-            shape = RoundedCornerShape(12.dp),
-            colors = CardDefaults.cardColors(
-                containerColor = Color(0xFF3498DB).copy(alpha = 0.1f)
-            ),
-            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
-        ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.FilterList,
-                    contentDescription = null,
-                    tint = Color(0xFF3498DB),
-                    modifier = Modifier.size(20.dp)
-                )
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "Current Setting",
-                        style = MaterialTheme.typography.labelMedium.copy(
-                            fontWeight = FontWeight.Medium
-                        ),
-                        color = Color(0xFF3498DB)
-                    )
-                    Text(
-                        text = "Networks will be hidden after ${formatSecondsDetailed(currentSeconds)} of inactivity",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = Color(0xFF2C3E50)
-                    )
-                }
-            }
-        }
-        
+        // Helpful description
         Text(
-            text = "Networks not seen for this duration will be automatically removed from the list in real time",
+            text = "Networks not seen for this duration will be automatically removed from the list",
             style = MaterialTheme.typography.bodySmall,
-            color = Color(0xFF7F8C8D)
+            color = Color(0xFF7F8C8D),
+            modifier = Modifier.padding(top = 8.dp)
         )
     }
 }

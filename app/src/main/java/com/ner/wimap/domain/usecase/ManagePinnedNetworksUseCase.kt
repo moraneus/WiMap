@@ -5,6 +5,7 @@ import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.domain.repository.PinnedNetworkRepository
 import com.ner.wimap.model.WifiNetwork
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import java.io.File
 import javax.inject.Inject
 
@@ -44,11 +45,10 @@ class ManagePinnedNetworksUseCase @Inject constructor(
         return try {
             if (clearPhoto) {
                 // Get existing network to delete its photo
-                var existingPhotoUri: String? = null
-                pinnedNetworkRepository.getAllPinnedNetworks().collect { networks ->
-                    existingPhotoUri = networks.find { it.bssid == network.bssid }?.photoUri
-                }
-                existingPhotoUri?.let { deletePhotoFile(it) }
+                val networks = pinnedNetworkRepository.getAllPinnedNetworks()
+                val networksList = networks.first()
+                val existingNetwork = networksList.find { it.bssid == network.bssid }
+                existingNetwork?.photoUri?.let { deletePhotoFile(it) }
                 pinnedNetworkRepository.updateNetworkData(network, comment, password, null)
             } else {
                 pinnedNetworkRepository.updateNetworkData(network, comment, password, photoUri)

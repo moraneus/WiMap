@@ -165,9 +165,9 @@ class ScanManager(
     /**
      * Removes networks that haven't been seen for the specified duration
      */
-    fun removeStaleNetworks(hideNetworksUnseenForHours: Int) {
+    fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) {
         val currentTime = System.currentTimeMillis()
-        val thresholdTime = currentTime - (hideNetworksUnseenForHours * 60 * 60 * 1000L) // Convert hours to milliseconds
+        val thresholdTime = currentTime - (hideNetworksUnseenForSeconds * 1000L) // Convert seconds to milliseconds
         
         val keysToRemove = mutableListOf<String>()
         

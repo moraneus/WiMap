@@ -95,7 +95,7 @@ class MainActivity : ComponentActivity() {
         val maxRetries by viewModel.maxRetries.collectAsState()
         val connectionTimeoutSeconds by viewModel.connectionTimeoutSeconds.collectAsState()
         val rssiThresholdForConnection by viewModel.rssiThresholdForConnection.collectAsState()
-        val hideNetworksUnseenForHours by viewModel.hideNetworksUnseenForHours.collectAsState()
+        val hideNetworksUnseenForSeconds by viewModel.hideNetworksUnseenForSeconds.collectAsState()
         val availableSecurityTypes = viewModel.availableSecurityTypes
 
         // Navigation actions
@@ -230,8 +230,8 @@ class MainActivity : ComponentActivity() {
                     onConnectionTimeoutChange = { viewModel.setConnectionTimeoutSeconds(it) },
                     rssiThresholdForConnection = rssiThresholdForConnection,
                     onRssiThresholdForConnectionChange = { viewModel.setRssiThresholdForConnection(it) },
-                    hideNetworksUnseenForHours = hideNetworksUnseenForHours,
-                    onHideNetworksUnseenForHoursChange = { viewModel.setHideNetworksUnseenForHours(it) },
+                    hideNetworksUnseenForSeconds = hideNetworksUnseenForSeconds,
+                    onHideNetworksUnseenForSecondsChange = { viewModel.setHideNetworksUnseenForSeconds(it) },
                     onClearAllData = { viewModel.clearAllData() },
                     onBack = { navController.popBackStack() }
                 )
@@ -254,6 +254,9 @@ class MainActivity : ComponentActivity() {
                     },
                     onExportPinnedNetwork = { network, format, action ->
                         viewModel.exportPinnedNetwork(this@MainActivity, network, format, action)
+                    },
+                    onUpdatePinnedNetworkData = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                        viewModel.updateTemporaryNetworkDataWithPhotoDeletion(bssid, ssid, comment, password, photoPath, clearPhoto)
                     }
                 )
             }

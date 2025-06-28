@@ -32,10 +32,12 @@ import coil.compose.rememberAsyncImagePainter
 import android.net.Uri
 import com.ner.wimap.R
 import com.ner.wimap.data.database.PinnedNetwork
+import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.ui.components.InfoChip
 import com.ner.wimap.ui.components.DetailRow
 import com.ner.wimap.ui.components.ExportFormatDialog
 import com.ner.wimap.ui.components.UnifiedTopAppBar
+import com.ner.wimap.ui.components.EnhancedWifiNetworkCard
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
 import com.ner.wimap.ui.viewmodel.ExportFormat
@@ -52,7 +54,8 @@ fun PinnedNetworksScreen(
     onDeletePinnedNetwork: (PinnedNetwork) -> Unit,
     onConnectToPinnedNetwork: (PinnedNetwork) -> Unit,
     onSharePinnedNetwork: (PinnedNetwork) -> Unit = { },
-    onExportPinnedNetwork: (PinnedNetwork, ExportFormat, ExportAction) -> Unit = { _, _, _ -> }
+    onExportPinnedNetwork: (PinnedNetwork, ExportFormat, ExportAction) -> Unit = { _, _, _ -> },
+    onUpdatePinnedNetworkData: (bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { _, _, _, _, _, _ -> }
 ) {
     var showActionMenu by remember { mutableStateOf(false) }
     var selectedNetwork by remember { mutableStateOf<PinnedNetwork?>(null) }
@@ -117,15 +120,46 @@ fun PinnedNetworksScreen(
                 }
 
                 items(pinnedNetworks) { network ->
-                    ModernPinnedNetworkCard(
-                        network = network,
-                        successfulPasswords = successfulPasswords,
-                        connectingNetworks = connectingNetworks,
-                        onLongPress = {
+                    // Convert PinnedNetwork to WifiNetwork for EnhancedWifiNetworkCard
+                    val wifiNetwork = WifiNetwork(
+                        ssid = network.ssid,
+                        bssid = network.bssid,
+                        rssi = network.rssi,
+                        channel = network.channel,
+                        security = network.security,
+                        latitude = network.latitude,
+                        longitude = network.longitude,
+                        timestamp = network.timestamp,
+                        comment = network.comment ?: "",
+                        password = network.savedPassword,
+                        photoPath = network.photoUri,
+                        isPinned = true // Always true for pinned networks screen
+                    )
+                    
+                    EnhancedWifiNetworkCard(
+                        network = wifiNetwork,
+                        isConnecting = connectingNetworks.contains(network.bssid),
+                        connectionStatus = null,
+                        onPinClick = { bssid, isPinned ->
+                            // On unpin, delete the network
+                            if (!isPinned) {
+                                onDeletePinnedNetwork(network)
+                            }
+                        },
+                        onConnectClick = { _ ->
+                            onConnectToPinnedNetwork(network)
+                        },
+                        onCancelConnectionClick = { /* Not needed for pinned networks */ },
+                        onMoreInfoClick = { _ ->
                             selectedNetwork = network
                             showActionMenu = true
                         },
-                        onConnect = { onConnectToPinnedNetwork(network) }
+                        onUpdateData = { bssid, ssid, comment, password, photoPath ->
+                            onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, false)
+                        },
+                        onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                            onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, clearPhoto)
+                        }
                     )
                 }
             }
