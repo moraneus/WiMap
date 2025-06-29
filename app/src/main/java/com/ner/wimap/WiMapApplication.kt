@@ -2,6 +2,7 @@ package com.ner.wimap
 
 import android.app.Application
 import android.content.Context
+import com.ner.wimap.ads.AdInitializer
 import com.ner.wimap.util.LocaleHelper
 import com.ner.wimap.utils.OUILookupManager
 import dagger.hilt.android.HiltAndroidApp
@@ -9,14 +10,21 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
+import javax.inject.Inject
 
 @HiltAndroidApp
 class WiMapApplication : Application() {
+    
+    @Inject
+    lateinit var adInitializer: AdInitializer
     
     private val applicationScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize AdMob
+        adInitializer.initialize(this)
         
         // Initialize OUI database for MAC vendor lookups
         applicationScope.launch {

@@ -5,6 +5,7 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -17,6 +18,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.*
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -27,6 +29,9 @@ import com.ner.wimap.ui.dialogs.*
 // Removed enhanced permission imports - camera permissions handled directly
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
+import com.ner.wimap.ads.NativeAdCard
+import com.ner.wimap.ads.AdManager
+import dagger.hilt.android.EntryPointAccessors
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -201,11 +206,28 @@ fun MainScreen(
                     val onlineNetworks = wifiNetworks.filter { !it.isOffline }
                     val offlineNetworks = wifiNetworks.filter { it.isOffline }
                     
-                    // Online networks section
-                    items(
+                    // Online networks section with ads
+                    itemsIndexed(
                         items = onlineNetworks,
-                        key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
-                    ) { network ->
+                        key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
+                    ) { index, network ->
+                        // Get AdManager instance
+                        val context = LocalContext.current
+                        val adManager = remember {
+                            val hiltEntryPoint = EntryPointAccessors.fromApplication(
+                                context.applicationContext,
+                                com.ner.wimap.ads.AdManagerEntryPoint::class.java
+                            )
+                            hiltEntryPoint.adManager()
+                        }
+                        
+                        // Show native ad after every 6 cards
+                        if (adManager.shouldShowNativeAd(index)) {
+                            NativeAdCard(
+                                modifier = Modifier.padding(vertical = 8.dp)
+                            )
+                        }
+                        
                         // Check if this network is currently pinned
                         val isCurrentlyPinned = pinnedNetworks.any { it.bssid == network.bssid }
                         

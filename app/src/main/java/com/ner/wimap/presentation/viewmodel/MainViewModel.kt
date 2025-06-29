@@ -35,7 +35,8 @@ class MainViewModel @Inject constructor(
     private val connectToNetworkUseCase: ConnectToNetworkUseCase,
     private val managePinnedNetworksUseCase: ManagePinnedNetworksUseCase,
     private val manageTemporaryNetworkDataUseCase: ManageTemporaryNetworkDataUseCase,
-    private val exportNetworksUseCase: ExportNetworksUseCase
+    private val exportNetworksUseCase: ExportNetworksUseCase,
+    private val adManager: com.ner.wimap.ads.AdManager
 ) : AndroidViewModel(application) {
 
     // UI State
@@ -567,14 +568,52 @@ class MainViewModel @Inject constructor(
 
     // Export functions
     fun exportWifiNetworks(context: Context, format: ExportFormat, action: ExportAction) {
-        viewModelScope.launch {
-            exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
+        if (context is android.app.Activity) {
+            adManager.showInterstitialAdBeforeAction(
+                activity = context,
+                onAdDismissed = {
+                    // Execute export after ad is dismissed
+                    viewModelScope.launch {
+                        exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
+                    }
+                },
+                onAdNotAvailable = {
+                    // Execute export if no ad is available
+                    viewModelScope.launch {
+                        exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
+                    }
+                }
+            )
+        } else {
+            // Fallback if context is not Activity
+            viewModelScope.launch {
+                exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
+            }
         }
     }
 
     fun exportPinnedNetwork(context: Context, network: PinnedNetwork, format: ExportFormat, action: ExportAction) {
-        viewModelScope.launch {
-            exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
+        if (context is android.app.Activity) {
+            adManager.showInterstitialAdBeforeAction(
+                activity = context,
+                onAdDismissed = {
+                    // Execute export after ad is dismissed
+                    viewModelScope.launch {
+                        exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
+                    }
+                },
+                onAdNotAvailable = {
+                    // Execute export if no ad is available
+                    viewModelScope.launch {
+                        exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
+                    }
+                }
+            )
+        } else {
+            // Fallback if context is not Activity
+            viewModelScope.launch {
+                exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
+            }
         }
     }
 
