@@ -41,13 +41,6 @@ import com.ner.wimap.ui.getSignalColor
 // Removed EnhancedPermissionUIHandler imports - camera permissions handled by AutoPermissionCameraLauncher
 import com.ner.wimap.ui.dialogs.ImageViewerDialog
 import com.ner.wimap.ui.dialogs.CameraPermissionRationaleDialog
-import com.ner.wimap.utils.OUILookupManager
-import android.util.Log
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import kotlinx.coroutines.delay
 import com.ner.wimap.R
 
 @Composable
@@ -63,6 +56,7 @@ fun EnhancedWifiNetworkCard(
     onUpdateDataWithPhotoDeletion: (bssid: String, ssid: String, comment: String, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { bssid, ssid, comment, password, photoPath, _ -> onUpdateData(bssid, ssid, comment, password, photoPath) },
     isPinned: Boolean? = null, // Optional override for pin status
     successfulPasswords: Map<String, String> = emptyMap(),
+    isSelected: Boolean = false, // Selection state for multi-select operations
     modifier: Modifier = Modifier
 ) {
     var showDetails by remember { mutableStateOf(false) }
@@ -133,27 +127,33 @@ fun EnhancedWifiNetworkCard(
         }
     )
 
-    // Modern borderless design - especially clean for offline networks
-    Box(
+    // Modern card design with subtle shadow for better separation
+    Card(
         modifier = Modifier
             .fillMaxWidth()
-            .background(
-                color = when {
-                    network.isOffline && actuallyPinned -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                    network.isOffline -> MaterialTheme.colorScheme.surface
-                    actuallyPinned -> MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.4f)
-                    hasAttachedData -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
-                    else -> MaterialTheme.colorScheme.surface
-                },
-                shape = RoundedCornerShape(16.dp)
-            )
             .then(
                 when {
                     network.isOffline && actuallyPinned -> Modifier.alpha(0.85f)
                     network.isOffline -> Modifier.alpha(0.75f)
                     else -> Modifier
                 }
-            )
+            ),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = when {
+                network.isOffline && actuallyPinned -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
+                network.isOffline -> MaterialTheme.colorScheme.surface
+                actuallyPinned -> MaterialTheme.colorScheme.surface
+                hasAttachedData -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
+                else -> MaterialTheme.colorScheme.surface
+            }
+        ),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = when {
+            isSelected -> BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+            actuallyPinned -> BorderStroke(2.5.dp, MaterialTheme.colorScheme.primary)
+            else -> null
+        }
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header Section
@@ -168,33 +168,8 @@ fun EnhancedWifiNetworkCard(
                 }
             )
 
-            // BSSID with Vendor - real lookup with fallback
-            var vendor by remember { mutableStateOf<String?>(null) }
-            
-            LaunchedEffect(network.bssid) {
-                // Wait a bit for database to initialize if needed
-                var attempts = 0
-                while (attempts < 5 && !OUILookupManager.getInstance().isReady()) {
-                    delay(500)
-                    attempts++
-                }
-                
-                if (OUILookupManager.getInstance().isReady()) {
-                    vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
-                    Log.d("VendorLookup", "BSSID: ${network.bssid}, Vendor: $vendor")
-                } else {
-                    Log.e("VendorLookup", "Database not ready after ${attempts * 500}ms for BSSID: ${network.bssid}")
-                    // Fallback to hardcoded for common vendors
-                    vendor = when {
-                        network.bssid.startsWith("00:00:0C", ignoreCase = true) -> "Cisco"
-                        network.bssid.startsWith("3C:5A:B4", ignoreCase = true) -> "Google"
-                        network.bssid.startsWith("A4:2B:B0", ignoreCase = true) -> "TP-Link"
-                        network.bssid.startsWith("00:03:93", ignoreCase = true) -> "Apple"
-                        network.bssid.startsWith("F8:32:E4", ignoreCase = true) -> "Apple"
-                        else -> null
-                    }
-                }
-            }
+            // BSSID with Vendor - use pre-populated vendor from network object
+            val vendor = network.vendor
             
             val bssidText = if (vendor != null) {
                 "${network.bssid} ($vendor)"

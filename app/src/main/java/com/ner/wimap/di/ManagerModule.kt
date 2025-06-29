@@ -37,8 +37,8 @@ object ManagerModule {
     
     @Provides
     @Singleton
-    fun provideFirebaseRepository(): FirebaseRepository {
-        return FirebaseRepository()
+    fun provideFirebaseRepository(deviceInfoManager: com.ner.wimap.data.DeviceInfoManager): FirebaseRepository {
+        return FirebaseRepository(deviceInfoManager)
     }
     
     @Provides

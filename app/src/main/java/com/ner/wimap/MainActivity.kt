@@ -33,6 +33,13 @@ import androidx.compose.foundation.pager.rememberPagerState
 import com.ner.wimap.ui.theme.WiMapTheme
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
+import com.ner.wimap.ads.AdMobManager
+import com.ner.wimap.ui.dialogs.PrivacyConsentDialog
+import androidx.lifecycle.lifecycleScope
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import dagger.hilt.android.AndroidEntryPoint
 
 @AndroidEntryPoint
@@ -40,6 +47,9 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        
+        // Preload interstitial ad
+        AdMobManager.loadInterstitialAd(this)
 
         setContent {
             WiMapTheme {
@@ -78,6 +88,7 @@ class MainActivity : ComponentActivity() {
         val permissionsRationaleMessage by viewModel.permissionsRationaleMessage.collectAsState()
         val showEmptyPasswordListDialog by viewModel.showEmptyPasswordListDialog.collectAsState()
         val networkForEmptyPasswordDialog by viewModel.networkForEmptyPasswordDialog.collectAsState()
+        val showPrivacyConsentDialog by viewModel.showPrivacyConsentDialog.collectAsState()
         val isBackgroundScanningEnabled by viewModel.isBackgroundScanningEnabled.collectAsState()
         val backgroundScanIntervalMinutes by viewModel.backgroundScanIntervalMinutes.collectAsState()
         val isBackgroundServiceActive by viewModel.isBackgroundServiceActive.collectAsState()
@@ -160,6 +171,29 @@ class MainActivity : ComponentActivity() {
             }
         }
 
+        // Check and show privacy consent dialog on app start and resume
+        val lifecycleOwner = LocalLifecycleOwner.current
+        DisposableEffect(lifecycleOwner) {
+            val observer = LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_START -> {
+                        // Check for consent dialog when app becomes visible
+                        viewModel.checkAndShowPrivacyConsent()
+                    }
+                    else -> {}
+                }
+            }
+            lifecycleOwner.lifecycle.addObserver(observer)
+            onDispose {
+                lifecycleOwner.lifecycle.removeObserver(observer)
+            }
+        }
+        
+        // Initial check on first composition
+        LaunchedEffect(Unit) {
+            viewModel.checkAndShowPrivacyConsent()
+        }
+
         // Current navigation state for handling settings screen
         var currentScreen by remember { mutableStateOf("main") }
         var currentPage by remember { mutableStateOf(SwipeDestination.MAIN.index) }
@@ -191,6 +225,8 @@ class MainActivity : ComponentActivity() {
                 onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
                 backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
                 onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
+                isAutoUploadEnabled = isAutoUploadEnabled,
+                onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
                 onClearAllData = { viewModel.clearAllData() },
                 onBack = { currentScreen = "main" }
             )
@@ -432,5 +468,13 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+        
+        // Privacy Consent Dialog
+        PrivacyConsentDialog(
+            isVisible = showPrivacyConsentDialog,
+            onConsentGranted = { viewModel.onPrivacyConsentGranted() },
+            onConsentDenied = { viewModel.onPrivacyConsentDenied() },
+            onDismiss = { viewModel.dismissPrivacyConsentDialog() }
+        )
     }
 }

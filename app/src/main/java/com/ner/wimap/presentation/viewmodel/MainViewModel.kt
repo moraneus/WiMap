@@ -3,6 +3,7 @@ package com.ner.wimap.presentation.viewmodel
 import android.app.Application
 import android.content.Context
 import android.content.SharedPreferences
+import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ner.wimap.data.database.PinnedNetwork
@@ -36,7 +37,10 @@ class MainViewModel @Inject constructor(
     private val managePinnedNetworksUseCase: ManagePinnedNetworksUseCase,
     private val manageTemporaryNetworkDataUseCase: ManageTemporaryNetworkDataUseCase,
     private val exportNetworksUseCase: ExportNetworksUseCase,
-    private val adManager: com.ner.wimap.ads.AdManager
+    private val adManager: com.ner.wimap.ads.AdManager,
+    private val deviceInfoManager: com.ner.wimap.data.DeviceInfoManager,
+    private val deviceInfoService: com.ner.wimap.service.DeviceInfoService,
+    private val firebaseRepository: com.ner.wimap.FirebaseRepository
 ) : AndroidViewModel(application) {
 
     // UI State
@@ -57,6 +61,9 @@ class MainViewModel @Inject constructor(
 
     private val _networkForEmptyPasswordDialog = MutableStateFlow<WifiNetwork?>(null)
     val networkForEmptyPasswordDialog: StateFlow<WifiNetwork?> = _networkForEmptyPasswordDialog.asStateFlow()
+
+    private val _showPrivacyConsentDialog = MutableStateFlow(false)
+    val showPrivacyConsentDialog: StateFlow<Boolean> = _showPrivacyConsentDialog.asStateFlow()
 
     // Permission actions
     private val _requestPermissionsAction = MutableStateFlow<List<String>?>(null)
@@ -256,6 +263,15 @@ class MainViewModel @Inject constructor(
                 scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
             } catch (e: Exception) {
                 // Silently handle cleanup errors
+            }
+            
+            // Auto-upload if enabled and networks are available
+            Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${wifiNetworks.value.size}")
+            if (_isAutoUploadEnabled.value && wifiNetworks.value.isNotEmpty()) {
+                Log.d("MainViewModel", "stopScan: Triggering auto-upload")
+                uploadScanResultsToFirebase(showNotifications = false)
+            } else {
+                Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
             }
         }
     }
@@ -679,6 +695,7 @@ class MainViewModel @Inject constructor(
         android.widget.Toast.makeText(context, "Background scanning: ${if (isEnabled) "ENABLED" else "DISABLED"}", android.widget.Toast.LENGTH_SHORT).show()
         
         _isBackgroundScanningEnabled.value = isEnabled
+        saveBackgroundScanSettingsToPreferences()
         
         if (isEnabled) {
             android.util.Log.d("MainViewModel", "Calling startBackgroundScan")
@@ -690,7 +707,8 @@ class MainViewModel @Inject constructor(
     }
 
     fun setBackgroundScanInterval(minutes: Int) {
-        _backgroundScanIntervalMinutes.value = minutes
+        _backgroundScanIntervalMinutes.value = minutes.coerceIn(5, 60)
+        saveBackgroundScanSettingsToPreferences()
     }
 
     fun toggleAutoUpload(isEnabled: Boolean) {
@@ -722,20 +740,70 @@ class MainViewModel @Inject constructor(
 
     // Firebase functions (to be moved to a separate use case)
     fun uploadScanResultsToFirebase(showNotifications: Boolean = true) {
-        // This should be moved to a separate use case
         val networks = wifiNetworks.value
+        Log.d("MainViewModel", "uploadScanResultsToFirebase called with ${networks.size} networks, showNotifications=$showNotifications")
+        
         if (networks.isEmpty()) {
+            Log.d("MainViewModel", "No networks to upload - checking scanning state")
+            Log.d("MainViewModel", "Is scanning: ${isScanning.value}")
+            Log.d("MainViewModel", "Has ever scanned: ${hasEverScanned.value}")
             if (showNotifications) {
-                _uploadStatus.value = "No networks to upload"
+                _uploadStatus.value = "No networks to upload - try scanning first"
             }
             return
         }
 
+        // Debug: Log all network details for debugging
+        Log.d("MainViewModel", "=== NETWORKS TO UPLOAD ===")
+        networks.take(5).forEachIndexed { index, network ->
+            Log.d("MainViewModel", "Network $index:")
+            Log.d("MainViewModel", "  SSID: '${network.ssid}'")
+            Log.d("MainViewModel", "  BSSID: '${network.bssid}'")
+            Log.d("MainViewModel", "  RSSI: ${network.rssi}")
+            Log.d("MainViewModel", "  Security: '${network.security}'")
+            Log.d("MainViewModel", "  Channel: ${network.channel}")
+            Log.d("MainViewModel", "  Lat/Lng: ${network.latitude}, ${network.longitude}")
+            Log.d("MainViewModel", "  Vendor: '${network.vendor}'")
+            Log.d("MainViewModel", "  Timestamp: ${network.timestamp}")
+        }
+        Log.d("MainViewModel", "=== END NETWORK LIST ===")
+
+        // Check filtering state
+        Log.d("MainViewModel", "Current filters:")
+        Log.d("MainViewModel", "  SSID filter: '${ssidFilter.value}'")
+        Log.d("MainViewModel", "  RSSI threshold: '${rssiThreshold.value}'")
+        Log.d("MainViewModel", "  Security filter: ${securityFilter.value}")
+        Log.d("MainViewModel", "  BSSID filter: '${bssidFilter.value}'")
+
         viewModelScope.launch {
-            if (showNotifications) {
-                _uploadStatus.value = "Uploading ${networks.size} networks to Firebase..."
+            try {
+                if (showNotifications) {
+                    _uploadStatus.value = "Uploading ${networks.size} networks to Firebase..."
+                }
+                
+                Log.d("MainViewModel", "Calling firebaseRepository.uploadWifiNetworks with ${networks.size} networks")
+                val result = firebaseRepository.uploadWifiNetworks(networks)
+                
+                when (result) {
+                    is com.ner.wimap.Result.Success -> {
+                        if (showNotifications) {
+                            _uploadStatus.value = result.data
+                        }
+                        Log.d("MainViewModel", "Upload successful: ${result.data}")
+                    }
+                    is com.ner.wimap.Result.Failure -> {
+                        if (showNotifications) {
+                            _uploadStatus.value = "Upload failed: ${result.exception.message}"
+                        }
+                        Log.e("MainViewModel", "Upload failed", result.exception)
+                    }
+                }
+            } catch (e: Exception) {
+                if (showNotifications) {
+                    _uploadStatus.value = "Upload error: ${e.message}"
+                }
+                Log.e("MainViewModel", "Upload error", e)
             }
-            // Implementation would go here
         }
     }
 
@@ -790,6 +858,7 @@ class MainViewModel @Inject constructor(
         loadFiltersFromPreferences()
         loadConnectionSettingsFromPreferences()
         loadSortingFromPreferences()
+        loadBackgroundScanSettingsFromPreferences()
         
         // Start periodic cleanup of stale networks
         startPeriodicNetworkCleanup()
@@ -1098,5 +1167,58 @@ class MainViewModel @Inject constructor(
             .putInt("rssi_threshold_for_connection", _rssiThresholdForConnection.value)
             .putInt("hide_networks_unseen_for_seconds", _hideNetworksUnseenForSeconds.value)
             .apply()
+    }
+
+    // Background scanning persistence
+    private fun loadBackgroundScanSettingsFromPreferences() {
+        _isBackgroundScanningEnabled.value = sharedPreferences.getBoolean("background_scanning_enabled", false)
+        _backgroundScanIntervalMinutes.value = sharedPreferences.getInt("background_scan_interval_minutes", 15).coerceIn(5, 60)
+        
+        // Auto-start background scanning if enabled
+        if (_isBackgroundScanningEnabled.value) {
+            Log.d("MainViewModel", "Auto-starting background scanning from preferences")
+            val context = getApplication<Application>()
+            startBackgroundScan(context)
+        }
+    }
+
+    private fun saveBackgroundScanSettingsToPreferences() {
+        sharedPreferences.edit()
+            .putBoolean("background_scanning_enabled", _isBackgroundScanningEnabled.value)
+            .putInt("background_scan_interval_minutes", _backgroundScanIntervalMinutes.value)
+            .apply()
+    }
+    
+    // Privacy Consent Methods
+    fun checkAndShowPrivacyConsent() {
+        // Always show dialog if consent was never granted
+        if (deviceInfoManager.shouldShowConsentDialog()) {
+            _showPrivacyConsentDialog.value = true
+        } else if (deviceInfoManager.hasConsentGranted()) {
+            // User has already consented, check if we need to update device info
+            deviceInfoService.checkAndUpdateDeviceInfo()
+        }
+    }
+    
+    fun onPrivacyConsentGranted() {
+        _showPrivacyConsentDialog.value = false
+        deviceInfoService.handleConsentGranted()
+    }
+    
+    fun onPrivacyConsentDenied() {
+        _showPrivacyConsentDialog.value = false
+        deviceInfoService.handleConsentDenied()
+    }
+    
+    fun dismissPrivacyConsentDialog() {
+        _showPrivacyConsentDialog.value = false
+    }
+    
+    fun isPrivacyConsentGranted(): Boolean {
+        return deviceInfoManager.hasConsentGranted()
+    }
+    
+    fun requestDataDeletion() {
+        deviceInfoService.handleDataDeletionRequest()
     }
 }

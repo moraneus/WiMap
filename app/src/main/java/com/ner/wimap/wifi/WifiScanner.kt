@@ -23,6 +23,7 @@ import androidx.lifecycle.MutableLiveData
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.Coordinates
 import com.ner.wimap.utils.PermissionUtils
+import com.ner.wimap.utils.OUILookupManager
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.*
 import com.ner.wimap.R
@@ -255,6 +256,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                         longitude = currentLocation?.longitude, // Current location
                         timestamp = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.JELLY_BEAN_MR1) scanResult.timestamp else currentTime,
                         password = existingNetwork?.password, // Preserve existing password
+                        vendor = OUILookupManager.getInstance().lookupVendorShort(scanResult.BSSID), // Lookup vendor from BSSID
                         peakRssi = peakRssi, // Peak RSSI seen so far
                         peakRssiLatitude = peakLat, // GPS coordinates where peak RSSI was observed
                         peakRssiLongitude = peakLng, // GPS coordinates where peak RSSI was observed

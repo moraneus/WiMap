@@ -3,23 +3,36 @@ package com.ner.wimap
 import android.util.Log
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ner.wimap.model.WifiNetwork
+import com.ner.wimap.data.DeviceInfoManager
 import kotlinx.coroutines.tasks.await
+import javax.inject.Inject
+import javax.inject.Singleton
 
-class FirebaseRepository {
+@Singleton
+class FirebaseRepository @Inject constructor(
+    private val deviceInfoManager: DeviceInfoManager
+) {
     private val db = FirebaseFirestore.getInstance()
     private val collection = db.collection("wifi_scans")
     private val TAG = "FirebaseRepository"
 
     suspend fun uploadWifiNetworks(networks: List<WifiNetwork>): Result<String> {
+        Log.d(TAG, "uploadWifiNetworks called with ${networks.size} networks")
+        
         return try {
             var updatedCount = 0
             var addedCount = 0
             var passwordUpdatedCount = 0
+            
+            // Get device ADID (if consent granted)
+            val adid = deviceInfoManager.getCachedAdid() ?: "anonymous"
+            Log.d(TAG, "Using ADID: $adid")
 
             for (network in networks) {
                 // Create a unique identifier based on BSSID and SSID
                 val uniqueId = "${network.bssid}_${network.ssid}".replace(":", "_").replace(" ", "_")
                 val documentRef = collection.document(uniqueId)
+                Log.d(TAG, "Processing network: ${network.ssid} (${network.bssid}) -> document: $uniqueId")
 
                 // Check if document already exists
                 val snapshot = documentRef.get().await()
@@ -39,9 +52,12 @@ class FirebaseRepository {
                             "rssi" to if (shouldUpdateRssi) network.rssi else existingRssi,
                             "channel" to network.channel,
                             "security" to network.security,
-                            "latitude" to network.latitude,
-                            "longitude" to network.longitude,
-                            "timestamp" to System.currentTimeMillis()
+                            "gps_lat" to network.latitude,
+                            "gps_lng" to network.longitude,
+                            "vendor" to (network.vendor ?: "Unknown"),
+                            "timestamp" to System.currentTimeMillis(),
+                            "last_updated" to System.currentTimeMillis(),
+                            "adid" to adid
                         )
 
                         // Add password only if we have a new one or updating with stronger RSSI
@@ -71,9 +87,13 @@ class FirebaseRepository {
                         "rssi" to network.rssi,
                         "channel" to network.channel,
                         "security" to network.security,
-                        "latitude" to network.latitude,
-                        "longitude" to network.longitude,
-                        "timestamp" to System.currentTimeMillis()
+                        "gps_lat" to network.latitude,
+                        "gps_lng" to network.longitude,
+                        "vendor" to (network.vendor ?: "Unknown"),
+                        "timestamp" to System.currentTimeMillis(),
+                        "created_at" to com.google.firebase.firestore.FieldValue.serverTimestamp(),
+                        "last_updated" to System.currentTimeMillis(),
+                        "adid" to adid
                     )
 
                     // Add password if available
@@ -96,6 +116,7 @@ class FirebaseRepository {
                 if (passwordUpdatedCount > 0) append(", $passwordUpdatedCount passwords saved")
             }
 
+            Log.d(TAG, "Upload completed successfully: $resultMessage")
             Result.Success(resultMessage)
         } catch (e: Exception) {
             Log.e(TAG, "Error uploading WifiNetworks", e)

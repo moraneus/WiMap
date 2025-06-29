@@ -25,9 +25,9 @@ class AdManager @Inject constructor() {
         private const val TEST_NATIVE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110"
         private const val TEST_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
         
-        // Production ad unit IDs (replace with your actual ad unit IDs)
-        private const val PROD_NATIVE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110" // TODO: Replace with real ad unit
-        private const val PROD_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712" // TODO: Replace with real ad unit
+        // Production ad unit IDs
+        private const val PROD_NATIVE_AD_UNIT_ID = "ca-app-pub-9891349918663384/3021988773"
+        private const val PROD_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-9891349918663384/5592311790"
     }
     
     private var interstitialAd: InterstitialAd? = null

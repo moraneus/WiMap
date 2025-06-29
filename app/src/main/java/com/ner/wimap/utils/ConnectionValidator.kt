@@ -1,6 +1,7 @@
 package com.ner.wimap.utils
 
 import android.content.Context
+import android.util.Log
 import com.ner.wimap.wifi.WifiScanner
 
 /**
@@ -140,10 +141,16 @@ object ConnectionValidator {
             val wifiManager = context.applicationContext.getSystemService(Context.WIFI_SERVICE) as android.net.wifi.WifiManager
             
             if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.Q) {
-                val configuredNetworks = wifiManager.configuredNetworks
-                return configuredNetworks?.any { config ->
-                    config.SSID == "\"${network.ssid}\""
-                } ?: false
+                try {
+                    @Suppress("DEPRECATION")
+                    val configuredNetworks = wifiManager.configuredNetworks
+                    return configuredNetworks?.any { config ->
+                        config.SSID == "\"${network.ssid}\""
+                    } ?: false
+                } catch (e: SecurityException) {
+                    Log.w("ConnectionValidator", "Permission denied when accessing configured networks", e)
+                    return false
+                }
             }
             
             // For Android 10+, we rely on other indicators

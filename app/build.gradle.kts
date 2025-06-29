@@ -126,6 +126,9 @@ dependencies {
     // Google AdMob
     implementation("com.google.android.gms:play-services-ads:23.5.0")
     
+    // Google Advertising ID
+    implementation("com.google.android.gms:play-services-ads-identifier:18.0.1")
+    
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)

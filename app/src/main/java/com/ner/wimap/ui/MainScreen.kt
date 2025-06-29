@@ -30,8 +30,6 @@ import com.ner.wimap.ui.dialogs.*
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
 import com.ner.wimap.ads.NativeAdCard
-import com.ner.wimap.ads.AdManager
-import dagger.hilt.android.EntryPointAccessors
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -211,18 +209,8 @@ fun MainScreen(
                         items = onlineNetworks,
                         key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
                     ) { index, network ->
-                        // Get AdManager instance
-                        val context = LocalContext.current
-                        val adManager = remember {
-                            val hiltEntryPoint = EntryPointAccessors.fromApplication(
-                                context.applicationContext,
-                                com.ner.wimap.ads.AdManagerEntryPoint::class.java
-                            )
-                            hiltEntryPoint.adManager()
-                        }
-                        
                         // Show native ad after every 6 cards
-                        if (adManager.shouldShowNativeAd(index)) {
+                        if (index > 0 && index % 6 == 0) {
                             NativeAdCard(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )

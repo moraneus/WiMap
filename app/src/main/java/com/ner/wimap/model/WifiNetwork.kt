@@ -17,5 +17,6 @@ data class WifiNetwork(
     val comment: String = "", // User-added comment
     val photoPath: String? = null, // Path to attached photo
     val isPinned: Boolean = false, // Pin status
-    val isOffline: Boolean = false // Network is out of range/timed out
+    val isOffline: Boolean = false, // Network is out of range/timed out
+    val vendor: String? = null // Router vendor information
 )
