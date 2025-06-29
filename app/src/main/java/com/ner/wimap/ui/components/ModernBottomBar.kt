@@ -32,12 +32,14 @@ fun ModernBottomBar(
     onStopScan: () -> Unit,
     onShareExportClicked: () -> Unit,
     onClearNetworks: () -> Unit,
+    networkCount: Int = 0,
+    onShowNoDataSnackbar: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     Surface(
         modifier = modifier
             .fillMaxWidth()
-            .height(88.dp),
+            .height(100.dp),
         color = MaterialTheme.colorScheme.surface,
         tonalElevation = 8.dp,
         shadowElevation = 12.dp,
@@ -58,16 +60,18 @@ fun ModernBottomBar(
             Row(
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(horizontal = 24.dp, vertical = 12.dp),
+                    .padding(horizontal = 24.dp, vertical = 16.dp),
                 horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Share Button (Left)
+                val hasNetworks = networkCount > 0
                 ModernBottomBarButton(
                     icon = Icons.Outlined.Share,
                     label = "Share",
-                    onClick = onShareExportClicked,
-                    tint = MaterialTheme.colorScheme.primary
+                    onClick = if (hasNetworks) onShareExportClicked else onShowNoDataSnackbar,
+                    tint = if (hasNetworks) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f),
+                    enabled = hasNetworks
                 )
                 
                 // Central Scan Button
@@ -95,11 +99,12 @@ private fun ModernBottomBarButton(
     label: String,
     onClick: () -> Unit,
     tint: Color,
+    enabled: Boolean = true,
     modifier: Modifier = Modifier
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val scale by animateFloatAsState(
-        targetValue = if (isPressed) 0.9f else 1f,
+        targetValue = if (isPressed && enabled) 0.9f else 1f,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "button_scale"
     )
@@ -112,10 +117,12 @@ private fun ModernBottomBarButton(
                 scaleY = scale
             }
             .clip(RoundedCornerShape(16.dp))
-            .clickable { 
-                isPressed = true
-                onClick()
-                isPressed = false
+            .clickable(enabled = enabled) { 
+                if (enabled) {
+                    isPressed = true
+                    onClick()
+                    isPressed = false
+                }
             }
             .padding(horizontal = 12.dp, vertical = 8.dp)
     ) {

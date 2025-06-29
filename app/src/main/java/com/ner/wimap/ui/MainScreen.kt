@@ -93,6 +93,7 @@ fun MainScreen(
     var showExportDialog by remember { mutableStateOf(false) }
     var showAboutDialog by remember { mutableStateOf(false) }
     var showTermsDialog by remember { mutableStateOf(false) }
+    var showNoDataSnackbar by remember { mutableStateOf(false) }
 
     LaunchedEffect(connectionStatus) {
         connectionStatus?.let { 
@@ -107,6 +108,13 @@ fun MainScreen(
             onClearUploadStatus()
         } else if (uploadStatus != null) {
             onClearUploadStatus()
+        }
+    }
+
+    LaunchedEffect(showNoDataSnackbar) {
+        if (showNoDataSnackbar) {
+            snackbarHostState.showSnackbar("No networks found to share. Start scanning to discover networks.")
+            showNoDataSnackbar = false
         }
     }
 
@@ -136,7 +144,11 @@ fun MainScreen(
                     onStartScan = onStartScan,
                     onStopScan = onStopScan,
                     onShareExportClicked = { showExportDialog = true },
-                    onClearNetworks = onClearNetworks
+                    onClearNetworks = onClearNetworks,
+                    networkCount = wifiNetworks.size,
+                    onShowNoDataSnackbar = {
+                        showNoDataSnackbar = true
+                    }
                 )
             },
             snackbarHost = { SnackbarHost(hostState = snackbarHostState) }
