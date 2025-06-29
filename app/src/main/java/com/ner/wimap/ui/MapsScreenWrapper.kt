@@ -120,42 +120,39 @@ fun MapsScreenWrapper(
                 position = CameraPosition.fromLatLngZoom(LatLng(40.7831, -73.9712), 10f)
             }
             
-            Log.d("MapsScreenWrapper", "Rendering GoogleMap with ${networksWithLocation.size} networks")
+            // Memoize marker states to prevent constant recreation
+            val testMarkerState = remember { MarkerState(position = LatLng(40.7831, -73.9712)) }
+            val networkMarkerStates = remember(networksWithLocation) {
+                networksWithLocation.map { network ->
+                    val position = LatLng(
+                        network.peakRssiLatitude ?: network.latitude ?: 0.0,
+                        network.peakRssiLongitude ?: network.longitude ?: 0.0
+                    )
+                    MarkerState(position = position) to network
+                }
+            }
             
             GoogleMap(
                 modifier = Modifier.fillMaxSize(),
                 cameraPositionState = cameraPositionState,
                 properties = mapProperties,
-                uiSettings = mapUiSettings,
-                onMapLoaded = {
-                    Log.d("MapsScreenWrapper", "GoogleMap loaded successfully!")
-                }
+                uiSettings = mapUiSettings
             ) {
                 // Always add a test marker
                 Marker(
-                    state = MarkerState(position = LatLng(40.7831, -73.9712)),
+                    state = testMarkerState,
                     title = "Test Marker",
-                    snippet = "Map is working!",
-                    onClick = { marker ->
-                        Log.d("MapsScreenWrapper", "Test marker clicked: ${marker.title}")
-                        false
-                    }
+                    snippet = "Map is working!"
                 )
                 
-                // Add network markers
-                networksWithLocation.forEach { network ->
-                    val position = LatLng(
-                        network.peakRssiLatitude ?: network.latitude ?: 0.0,
-                        network.peakRssiLongitude ?: network.longitude ?: 0.0
-                    )
-                    
+                // Add network markers using memoized states
+                networkMarkerStates.forEach { (markerState, network) ->
                     Marker(
-                        state = MarkerState(position = position),
+                        state = markerState,
                         title = network.ssid,
                         snippet = buildMarkerSnippet(network),
                         icon = createCustomWiFiMarker(network),
-                        onClick = { marker ->
-                            Log.d("MapsScreenWrapper", "Network marker clicked: ${network.ssid}")
+                        onClick = {
                             selectedNetwork = network
                             false
                         }
@@ -163,10 +160,9 @@ fun MapsScreenWrapper(
                 }
             }
             
-            // Auto-focus on networks if available
-            LaunchedEffect(networksWithLocation) {
+            // Auto-focus on networks if available (only when network count changes)
+            LaunchedEffect(networksWithLocation.size) {
                 if (networksWithLocation.isNotEmpty()) {
-                    Log.d("MapsScreenWrapper", "Adjusting camera for ${networksWithLocation.size} networks")
                     val bounds = networksWithLocation.map { network ->
                         LatLng(
                             network.peakRssiLatitude ?: network.latitude ?: 0.0,
@@ -431,9 +427,13 @@ private fun NetworkListItem(
         label = "item_scale"
     )
     
-    Card(
+    Box(
         modifier = Modifier
             .fillMaxWidth()
+            .background(
+                MaterialTheme.colorScheme.surface,
+                RoundedCornerShape(16.dp)
+            )
             .graphicsLayer {
                 scaleX = scale
                 scaleY = scale
@@ -442,12 +442,7 @@ private fun NetworkListItem(
                 isPressed = true
                 onClick()
                 isPressed = false
-            },
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
-        ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
-        shape = RoundedCornerShape(16.dp)
+            }
     ) {
         Row(
             modifier = Modifier
@@ -472,7 +467,7 @@ private fun NetworkListItem(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.SemiBold
                     ),
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    color = MaterialTheme.colorScheme.onSurface,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -480,7 +475,7 @@ private fun NetworkListItem(
                 Text(
                     text = network.bssid,
                     style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -488,7 +483,7 @@ private fun NetworkListItem(
                 Text(
                     text = "${network.rssi} dBm • ${network.security}",
                     style = MaterialTheme.typography.labelSmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                    color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.6f)
                 )
             }
             
