@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.wifi.WifiScanner
 import com.ner.wimap.FirebaseRepository
@@ -85,37 +87,47 @@ class ConnectionManager(
         // Cancel any existing connection job
         currentConnectionJob?.cancel()
         
-        currentConnectionJob = viewModelScope.launch {
-            // Add this network to connecting set and initialize progress data
-            _connectingNetworks.value = _connectingNetworks.value + network.bssid
-            _isConnecting.value = true // Keep for backward compatibility
-            _connectingNetworkName.value = network.ssid
-            _currentPassword.value = null
-            _currentAttempt.value = 0
-            _totalAttempts.value = 0
-            _connectionProgress.value = "Checking network signal strength..."
+        currentConnectionJob = viewModelScope.launch(Dispatchers.IO) {
+            // Update UI state on main thread
+            withContext(Dispatchers.Main) {
+                _connectingNetworks.value = _connectingNetworks.value + network.bssid
+                _isConnecting.value = true // Keep for backward compatibility
+                _connectingNetworkName.value = network.ssid
+                _currentPassword.value = null
+                _currentAttempt.value = 0
+                _totalAttempts.value = 0
+                _connectionProgress.value = "Checking network signal strength..."
+            }
 
             try {
                 val rssiThreshold = _rssiThresholdForConnection.value
                 if (network.rssi < rssiThreshold) {
-                    _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
-                    _connectionProgress.value = "Connection aborted - weak signal"
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
+                        _connectionProgress.value = "Connection aborted - weak signal"
+                    }
                     delay(2000)
                     return@launch
                 }
 
                 if (network.security.contains("Open", ignoreCase = true)) {
-                    _connectionStatus.value = "ℹ️ Open network detected: ${network.ssid}"
-                    _connectionProgress.value = "Open networks don't require connection"
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.value = "ℹ️ Open network detected: ${network.ssid}"
+                        _connectionProgress.value = "Open networks don't require connection"
+                    }
                     delay(2000)
                     return@launch
                 }
 
                 val storedPasswords = _passwords.value
                 if (storedPasswords.isEmpty()) {
-                    _connectionProgress.value = "No stored passwords found"
+                    withContext(Dispatchers.Main) {
+                        _connectionProgress.value = "No stored passwords found"
+                    }
                     delay(1000)
-                    onShowPasswordDialog(network)
+                    withContext(Dispatchers.Main) {
+                        onShowPasswordDialog(network)
+                    }
                     return@launch
                 }
 
@@ -136,8 +148,10 @@ class ConnectionManager(
                         break
                     }
 
-                    _currentPassword.value = password
-                    _connectionProgress.value = "Trying password ${index + 1}/${storedPasswords.size} for ${network.ssid}..."
+                    withContext(Dispatchers.Main) {
+                        _currentPassword.value = password
+                        _connectionProgress.value = "Trying password ${index + 1}/${storedPasswords.size} for ${network.ssid}..."
+                    }
 
                     // Each password gets exactly maxRetries attempts, no more, no less
                     for (retry in 1..maxRetries) {
@@ -150,8 +164,10 @@ class ConnectionManager(
                         }
                         
                         attemptCount++
-                        _currentAttempt.value = attemptCount
-                        _connectionProgress.value = "Password ${index + 1}/${storedPasswords.size}, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
+                        withContext(Dispatchers.Main) {
+                            _currentAttempt.value = attemptCount
+                            _connectionProgress.value = "Password ${index + 1}/${storedPasswords.size}, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
+                        }
 
                         val success = attemptConnectionWithRetry(network, password, timeoutSeconds)
 
@@ -162,19 +178,24 @@ class ConnectionManager(
                         }
 
                         if (success) {
-                            _connectionStatus.value = "✅ Connected to ${network.ssid} with password: '$password'"
-                            _connectionProgress.value = "Connection successful! Saving password..."
-
-                            // Store the successful password
-                            _successfulPasswords.value = _successfulPasswords.value.toMutableMap().apply {
-                                put(network.bssid, password)
+                            withContext(Dispatchers.Main) {
+                                _connectionStatus.value = "✅ Connected to ${network.ssid} with password: '$password'"
+                                _connectionProgress.value = "Connection successful! Saving password..."
                             }
 
-                            // Add to stored passwords if not already there
-                            if (!_passwords.value.contains(password)) {
-                                _passwords.value = _passwords.value + password
+                            // Store the successful password on main thread
+                            withContext(Dispatchers.Main) {
+                                _successfulPasswords.value = _successfulPasswords.value.toMutableMap().apply {
+                                    put(network.bssid, password)
+                                }
+
+                                // Add to stored passwords if not already there
+                                if (!_passwords.value.contains(password)) {
+                                    _passwords.value = _passwords.value + password
+                                }
                             }
 
+                            // Database operations already on background thread
                             updatePinnedNetworkPassword(network, password)
                             updateFirebaseWithPassword(network, password)
 
@@ -184,7 +205,9 @@ class ConnectionManager(
                         } else {
                             // Only show retry message if we have more attempts left for this password
                             if (retry < maxRetries) {
-                                _connectionProgress.value = "❌ Wrong password '$password', retrying in 2s..."
+                                withContext(Dispatchers.Main) {
+                                    _connectionProgress.value = "❌ Wrong password '$password', retrying in 2s..."
+                                }
                                 delay(2000)
                                 // Check if cancelled during delay
                                 if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
@@ -192,7 +215,9 @@ class ConnectionManager(
                                     return@launch
                                 }
                             } else {
-                                _connectionProgress.value = "❌ Password '$password' failed after $maxRetries attempts"
+                                withContext(Dispatchers.Main) {
+                                    _connectionProgress.value = "❌ Password '$password' failed after $maxRetries attempts"
+                                }
                                 delay(1000)
                                 // Check if cancelled during delay
                                 if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
@@ -208,61 +233,77 @@ class ConnectionManager(
                 }
 
                 if (!connected) {
-                    _connectionStatus.value = "❌ All stored passwords failed for ${network.ssid}"
-                    _connectionProgress.value = "All passwords failed - manual entry required"
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.value = "❌ All stored passwords failed for ${network.ssid}"
+                        _connectionProgress.value = "All passwords failed - manual entry required"
+                    }
                     delay(2000)
                     // Check if cancelled during delay
                     if (!isActive || !_connectingNetworks.value.contains(network.bssid)) {
                         android.util.Log.d("ConnectionManager", "Connection cancelled during failure message delay")
                         return@launch
                     }
-                    onShowPasswordDialog(network)
+                    withContext(Dispatchers.Main) {
+                        onShowPasswordDialog(network)
+                    }
                 }
             } catch (e: Exception) {
-                _connectionStatus.value = "Connection error: ${e.message}"
-                _connectionProgress.value = "Connection failed: ${e.message}"
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.value = "Connection error: ${e.message}"
+                    _connectionProgress.value = "Connection failed: ${e.message}"
+                }
             } finally {
-                // Clear progress data and remove this network from connecting set
-                _currentPassword.value = null
-                _currentAttempt.value = 0
-                _totalAttempts.value = 0
-                _connectingNetworkName.value = null
-                _connectingNetworks.value = _connectingNetworks.value - network.bssid
-                _isConnecting.value = _connectingNetworks.value.isNotEmpty() // Update global state
+                // Clear progress data and remove this network from connecting set on main thread
+                withContext(Dispatchers.Main) {
+                    _currentPassword.value = null
+                    _currentAttempt.value = 0
+                    _totalAttempts.value = 0
+                    _connectingNetworkName.value = null
+                    _connectingNetworks.value = _connectingNetworks.value - network.bssid
+                    _isConnecting.value = _connectingNetworks.value.isNotEmpty() // Update global state
+                }
                 // Only delay if not cancelled
                 try {
                     delay(3000)
                 } catch (e: CancellationException) {
                     // If cancelled, don't delay - clear immediately
                 }
-                _connectionProgress.value = null
+                withContext(Dispatchers.Main) {
+                    _connectionProgress.value = null
+                }
             }
         }
     }
 
     fun connectWithManualPassword(network: WifiNetwork, password: String) {
-        viewModelScope.launch {
-            // Add this network to connecting set and initialize progress data
-            _connectingNetworks.value = _connectingNetworks.value + network.bssid
-            _isConnecting.value = true
-            _connectingNetworkName.value = network.ssid
-            _currentPassword.value = password
-            _currentAttempt.value = 0
-            _connectionProgress.value = "Checking signal strength..."
+        viewModelScope.launch(Dispatchers.IO) {
+            // Update UI state on main thread
+            withContext(Dispatchers.Main) {
+                _connectingNetworks.value = _connectingNetworks.value + network.bssid
+                _isConnecting.value = true
+                _connectingNetworkName.value = network.ssid
+                _currentPassword.value = password
+                _currentAttempt.value = 0
+                _connectionProgress.value = "Checking signal strength..."
+            }
 
             val rssiThreshold = _rssiThresholdForConnection.value
             if (network.rssi < rssiThreshold) {
-                _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
-                _connectionProgress.value = "Connection aborted - weak signal"
-                // Clear progress data and remove from connecting set
-                _currentPassword.value = null
-                _currentAttempt.value = 0
-                _totalAttempts.value = 0
-                _connectingNetworkName.value = null
-                _connectingNetworks.value = _connectingNetworks.value - network.bssid
-                _isConnecting.value = _connectingNetworks.value.isNotEmpty()
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
+                    _connectionProgress.value = "Connection aborted - weak signal"
+                    // Clear progress data and remove from connecting set
+                    _currentPassword.value = null
+                    _currentAttempt.value = 0
+                    _totalAttempts.value = 0
+                    _connectingNetworkName.value = null
+                    _connectingNetworks.value = _connectingNetworks.value - network.bssid
+                    _isConnecting.value = _connectingNetworks.value.isNotEmpty()
+                }
                 delay(2000)
-                _connectionProgress.value = null
+                withContext(Dispatchers.Main) {
+                    _connectionProgress.value = null
+                }
                 return@launch
             }
 
@@ -272,23 +313,28 @@ class ConnectionManager(
             var connected = false
 
             for (retry in 1..maxRetries) {
-                _currentAttempt.value = retry
-                _connectionProgress.value = "Trying manual password, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
+                withContext(Dispatchers.Main) {
+                    _currentAttempt.value = retry
+                    _connectionProgress.value = "Trying manual password, attempt $retry/$maxRetries (timeout: ${timeoutSeconds}s)"
+                }
 
                 val success = attemptConnectionWithRetry(network, password, timeoutSeconds)
 
                 if (success) {
-                    _connectionStatus.value = "✅ Connected to ${network.ssid} with manual password!"
-                    _connectionProgress.value = "Manual connection successful! Saving password..."
+                    withContext(Dispatchers.Main) {
+                        _connectionStatus.value = "✅ Connected to ${network.ssid} with manual password!"
+                        _connectionProgress.value = "Manual connection successful! Saving password..."
 
-                    _successfulPasswords.value = _successfulPasswords.value.toMutableMap().apply {
-                        put(network.bssid, password)
+                        _successfulPasswords.value = _successfulPasswords.value.toMutableMap().apply {
+                            put(network.bssid, password)
+                        }
+
+                        if (!_passwords.value.contains(password)) {
+                            _passwords.value = _passwords.value + password
+                        }
                     }
 
-                    if (!_passwords.value.contains(password)) {
-                        _passwords.value = _passwords.value + password
-                    }
-
+                    // Database operations already on background thread
                     updatePinnedNetworkPassword(network, password)
                     updateFirebaseWithPassword(network, password)
 
@@ -297,7 +343,9 @@ class ConnectionManager(
                     break
                 } else {
                     if (retry < maxRetries) {
-                        _connectionProgress.value = "❌ Attempt $retry failed, retrying in 2s..."
+                        withContext(Dispatchers.Main) {
+                            _connectionProgress.value = "❌ Attempt $retry failed, retrying in 2s..."
+                        }
                         delay(2000)
                         // Check if cancelled during delay
                         if (!_connectingNetworks.value.contains(network.bssid)) {
@@ -305,26 +353,32 @@ class ConnectionManager(
                             return@launch
                         }
                     } else {
-                        _connectionStatus.value = "❌ Manual password failed for ${network.ssid} after $maxRetries attempts"
-                        _connectionProgress.value = "Manual password incorrect after all retries"
+                        withContext(Dispatchers.Main) {
+                            _connectionStatus.value = "❌ Manual password failed for ${network.ssid} after $maxRetries attempts"
+                            _connectionProgress.value = "Manual password incorrect after all retries"
+                        }
                     }
                 }
             }
 
-            // Clear progress data and remove from connecting set
-            _currentPassword.value = null
-            _currentAttempt.value = 0
-            _totalAttempts.value = 0
-            _connectingNetworkName.value = null
-            _connectingNetworks.value = _connectingNetworks.value - network.bssid
-            _isConnecting.value = _connectingNetworks.value.isNotEmpty()
+            // Clear progress data and remove from connecting set on main thread
+            withContext(Dispatchers.Main) {
+                _currentPassword.value = null
+                _currentAttempt.value = 0
+                _totalAttempts.value = 0
+                _connectingNetworkName.value = null
+                _connectingNetworks.value = _connectingNetworks.value - network.bssid
+                _isConnecting.value = _connectingNetworks.value.isNotEmpty()
+            }
             // Only delay if not cancelled
             try {
                 delay(2000)
             } catch (e: CancellationException) {
                 // If cancelled, don't delay - clear immediately
             }
-            _connectionProgress.value = null
+            withContext(Dispatchers.Main) {
+                _connectionProgress.value = null
+            }
         }
     }
 
@@ -477,7 +531,7 @@ class ConnectionManager(
         }
     }
 
-    private suspend fun saveWorkingPassword(network: WifiNetwork, password: String) {
+    private suspend fun saveWorkingPassword(network: WifiNetwork, password: String) = withContext(Dispatchers.IO) {
         try {
             // Save to a separate SharedPreferences for working passwords
             val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
@@ -489,14 +543,18 @@ class ConnectionManager(
                 .putLong("${network.bssid}_timestamp", System.currentTimeMillis())
                 .apply()
                 
-            _connectionProgress.value = "✅ Working password saved for future use"
+            withContext(Dispatchers.Main) {
+                _connectionProgress.value = "✅ Working password saved for future use"
+            }
         } catch (e: Exception) {
-            _connectionProgress.value = "Warning: Could not save working password: ${e.message}"
+            withContext(Dispatchers.Main) {
+                _connectionProgress.value = "Warning: Could not save working password: ${e.message}"
+            }
         }
     }
 
-    fun getWorkingPassword(network: WifiNetwork): String? {
-        return try {
+    suspend fun getWorkingPassword(network: WifiNetwork): String? = withContext(Dispatchers.IO) {
+        try {
             val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
             workingPasswordsPrefs.getString(network.bssid, null)
         } catch (e: Exception) {
@@ -504,17 +562,19 @@ class ConnectionManager(
         }
     }
 
-    fun hasWorkingPassword(network: WifiNetwork): Boolean {
+    suspend fun hasWorkingPassword(network: WifiNetwork): Boolean {
         return getWorkingPassword(network) != null
     }
 
-    private suspend fun updatePinnedNetworkPassword(network: WifiNetwork, password: String) {
+    private suspend fun updatePinnedNetworkPassword(network: WifiNetwork, password: String) = withContext(Dispatchers.IO) {
         try {
             val existingPinned = pinnedNetworkDao.getPinnedNetworkByBssid(network.bssid)
             existingPinned?.let { pinned ->
                 val updatedNetwork = pinned.copy(savedPassword = password)
                 pinnedNetworkDao.updatePinnedNetwork(updatedNetwork)
-                _connectionProgress.value = "✅ Password saved to pinned network"
+                withContext(Dispatchers.Main) {
+                    _connectionProgress.value = "✅ Password saved to pinned network"
+                }
                 delay(500)
             }
         } catch (e: Exception) {
@@ -522,12 +582,14 @@ class ConnectionManager(
         }
     }
 
-    private suspend fun updateFirebaseWithPassword(network: WifiNetwork, password: String) {
+    private suspend fun updateFirebaseWithPassword(network: WifiNetwork, password: String) = withContext(Dispatchers.IO) {
         try {
             val networkWithPassword = network.copy(password = password)
             when (val result = firebaseRepository.uploadWifiNetworks(listOf(networkWithPassword))) {
                 is Result.Success -> {
-                    _connectionProgress.value = "✅ Password updated in cloud database"
+                    withContext(Dispatchers.Main) {
+                        _connectionProgress.value = "✅ Password updated in cloud database"
+                    }
                     delay(500)
                 }
                 is Result.Failure -> {
@@ -622,7 +684,7 @@ class ConnectionManager(
 
     // Enhanced helper functions for improved connection handling
 
-    fun clearWorkingPassword(network: WifiNetwork) {
+    suspend fun clearWorkingPassword(network: WifiNetwork) = withContext(Dispatchers.IO) {
         try {
             val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
             workingPasswordsPrefs.edit()
@@ -650,8 +712,8 @@ class ConnectionManager(
     /**
      * Get all working passwords for debugging/management purposes
      */
-    fun getAllWorkingPasswords(): Map<String, String> {
-        return try {
+    suspend fun getAllWorkingPasswords(): Map<String, String> = withContext(Dispatchers.IO) {
+        try {
             val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
             val allEntries = workingPasswordsPrefs.all
             val passwords = mutableMapOf<String, String>()
@@ -671,7 +733,7 @@ class ConnectionManager(
     /**
      * Clear all working passwords (for reset/cleanup purposes)
      */
-    fun clearAllWorkingPasswords() {
+    suspend fun clearAllWorkingPasswords() = withContext(Dispatchers.IO) {
         try {
             val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
             workingPasswordsPrefs.edit().clear().apply()

@@ -79,13 +79,23 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                 } else {
                     true
                 }
-                if (success) {
-                    processScanResults()
-                } else {
-                    _wifiNetworks.postValue(emptyList())
-                }
-                if (_isScanning.value == true) {
-                    handler.postDelayed(scanRunnable, scanInterval)
+                
+                // Process scan results on background thread
+                wifiScope.launch {
+                    if (success) {
+                        processScanResults()
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            _wifiNetworks.postValue(emptyList())
+                        }
+                    }
+                    
+                    // Schedule next scan on main thread if still scanning
+                    withContext(Dispatchers.Main) {
+                        if (_isScanning.value == true) {
+                            handler.postDelayed(scanRunnable, scanInterval)
+                        }
+                    }
                 }
             }
         }
@@ -186,11 +196,14 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
         }
     }
 
-    private fun processScanResults() {
+    private suspend fun processScanResults() = withContext(Dispatchers.IO) {
         if (!hasRequiredPermissions(checkChangeWifiState = false)) {
-            _wifiNetworks.postValue(emptyList())
-            return
+            withContext(Dispatchers.Main) {
+                _wifiNetworks.postValue(emptyList())
+            }
+            return@withContext
         }
+        
         try {
             val results: List<ScanResult> = wifiManager.scanResults
             val currentLocation = currentLocationFlow.value
@@ -248,12 +261,18 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                         lastSeenTimestamp = currentTime // Update last seen time
                     )
                 }
-            }.sortedByDescending { it.rssi } 
-            _wifiNetworks.postValue(networks)
+            }.sortedByDescending { it.rssi }
+            
+            // Update UI on main thread
+            withContext(Dispatchers.Main) {
+                _wifiNetworks.postValue(networks)
+            }
         } catch (e: SecurityException) {
-            _wifiNetworks.postValue(emptyList())
-            _isScanning.value = false 
-            _connectionStatus.postValue("Permission error processing scan results.")
+            withContext(Dispatchers.Main) {
+                _wifiNetworks.postValue(emptyList())
+                _isScanning.value = false 
+                _connectionStatus.postValue("Permission error processing scan results.")
+            }
         }
     }
 

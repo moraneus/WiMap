@@ -87,6 +87,10 @@ class MainViewModel @Inject constructor(
     // Filter settings
     private val _ssidFilter = MutableStateFlow("")
     val ssidFilter: StateFlow<String> = _ssidFilter.asStateFlow()
+    
+    // Networks to show on map (for filtered map view)
+    private val _networksForMap = MutableStateFlow<List<WifiNetwork>?>(null)
+    val networksForMap: StateFlow<List<WifiNetwork>?> = _networksForMap.asStateFlow()
 
     private val _securityFilter = MutableStateFlow(emptySet<String>())
     val securityFilter: StateFlow<Set<String>> = _securityFilter.asStateFlow()
@@ -895,6 +899,15 @@ class MainViewModel @Inject constructor(
 
     fun sharePinnedNetwork(context: Context, network: PinnedNetwork) {
         exportPinnedNetwork(context, network, ExportFormat.CSV, ExportAction.SHARE_ONLY)
+    }
+    
+    // Map functions
+    fun setNetworksForMap(networks: List<WifiNetwork>) {
+        _networksForMap.value = networks
+    }
+    
+    fun clearNetworksForMap() {
+        _networksForMap.value = null
     }
 
     // Periodic network cleanup

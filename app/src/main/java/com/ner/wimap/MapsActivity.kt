@@ -540,8 +540,14 @@ fun NetworkInfoOverlay(
             )
         }
 
+        // Use current time if timestamp is invalid (0 or too old)
+        val validTimestamp = if (network.timestamp < 1000000000000L) { // Before year 2001
+            System.currentTimeMillis()
+        } else {
+            network.timestamp
+        }
         Text(
-            text = "Discovered: ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(network.timestamp))}",
+            text = "Discovered: ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.getDefault()).format(Date(validTimestamp))}",
             style = MaterialTheme.typography.bodySmall,
             color = Color(0xFF7F8C8D)
         )

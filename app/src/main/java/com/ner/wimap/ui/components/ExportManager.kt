@@ -296,13 +296,20 @@ class ExportManager(
 
             FileWriter(file).use { writer ->
                 PrintWriter(writer).use { csvWriter ->
-                    csvWriter.println("SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Frequency,Timestamp,HasPassword,IsOffline,Comment")
+                    csvWriter.println("SSID,BSSID,RSSI,Channel,Security,Latitude,Longitude,Frequency,Timestamp,Password,IsOffline,Comment")
 
                     networks.forEach { network ->
-                        val hasPassword = if (!network.password.isNullOrEmpty()) "Yes" else "No"
+                        val passwordValue = network.password ?: "N/A"
                         val frequency = if (network.channel <= 14) "2.4 GHz" else "5 GHz"
-                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(network.timestamp))
+                        // Use current time if timestamp is invalid (0 or too old)
+                        val validTimestamp = if (network.timestamp < 1000000000000L) { // Before year 2001
+                            System.currentTimeMillis()
+                        } else {
+                            network.timestamp
+                        }
+                        val timestamp = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).format(Date(validTimestamp))
                         val isOffline = if (network.isOffline) "Yes" else "No"
+                        val commentValue = if (network.comment.isNotEmpty()) network.comment else "WiFi Network found by WiMap"
 
                         csvWriter.println(
                             "\"${network.ssid.replace("\"", "\"\"")}\"," +
@@ -314,9 +321,9 @@ class ExportManager(
                                     "${network.longitude ?: ""}," +
                                     "\"$frequency\"," +
                                     "\"$timestamp\"," +
-                                    "$hasPassword," +
+                                    "\"$passwordValue\"," +
                                     "$isOffline," +
-                                    "\"WiFi Network found by WiMap\""
+                                    "\"$commentValue\""
                         )
                     }
                     csvWriter.flush()
@@ -397,9 +404,18 @@ class ExportManager(
                         appendLine("        <b>Signal:</b> ${network.rssi} dBm ($signalStrength)<br/>")
                         appendLine("        <b>Channel:</b> ${network.channel}<br/>")
                         appendLine("        <b>Frequency:</b> ${if (network.channel <= 14) "2.4 GHz" else "5 GHz"}<br/>")
-                        appendLine("        <b>Discovered:</b> ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(network.timestamp))}<br/>")
+                        // Use current time if timestamp is invalid (0 or too old)
+                        val validTimestamp = if (network.timestamp < 1000000000000L) { // Before year 2001
+                            System.currentTimeMillis()
+                        } else {
+                            network.timestamp
+                        }
+                        appendLine("        <b>Discovered:</b> ${SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(validTimestamp))}<br/>")
                         if (!network.password.isNullOrEmpty()) {
-                            appendLine("        <b>Password Known:</b> Yes<br/>")
+                            appendLine("        <b>Password:</b> ${network.password}<br/>")
+                        }
+                        if (network.comment.isNotEmpty()) {
+                            appendLine("        <b>Comment:</b> ${network.comment.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")}<br/>")
                         }
                         if (network.isOffline) {
                             appendLine("        <b>Status:</b> Offline (not currently visible)<br/>")
@@ -548,7 +564,7 @@ class ExportManager(
                 }
 
                 if (!network.password.isNullOrEmpty()) {
-                    canvas.drawText("Password: Available", leftMargin + 20f, yPosition, bodyPaint)
+                    canvas.drawText("Password: ${network.password}", leftMargin + 20f, yPosition, bodyPaint)
                     yPosition += 15f
                 }
 
@@ -556,9 +572,22 @@ class ExportManager(
                 canvas.drawText("Status: $status", leftMargin + 20f, yPosition, bodyPaint)
                 yPosition += 15f
 
-                val discoveryTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(network.timestamp))
+                // Use current time if timestamp is invalid (0 or too old)
+                val validTimestamp = if (network.timestamp < 1000000000000L) { // Before year 2001
+                    System.currentTimeMillis()
+                } else {
+                    network.timestamp
+                }
+                val discoveryTime = SimpleDateFormat("MMM dd, yyyy HH:mm", Locale.US).format(Date(validTimestamp))
                 canvas.drawText("Discovered: $discoveryTime", leftMargin + 20f, yPosition, smallPaint)
-                yPosition += 25f
+                yPosition += 15f
+                
+                if (network.comment.isNotEmpty()) {
+                    canvas.drawText("Comment: ${network.comment}", leftMargin + 20f, yPosition, smallPaint)
+                    yPosition += 15f
+                }
+                
+                yPosition += 10f // Extra spacing after each network
             }
 
             if (yPosition > 800f) {

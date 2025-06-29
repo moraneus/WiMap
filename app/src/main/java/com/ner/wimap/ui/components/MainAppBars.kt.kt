@@ -539,6 +539,96 @@ fun UnifiedTopBarActionButton(
 }
 
 /**
+ * Multi-select mode overflow menu button
+ */
+@Composable
+private fun MultiSelectOverflowMenuButton(
+    onClearSelection: () -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "multi_select_overflow_button_scale"
+    )
+    
+    Box {
+        IconButton(
+            onClick = {
+                isPressed = true
+                expanded = true
+                isPressed = false
+            },
+            modifier = Modifier
+                .size(48.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+        ) {
+            Icon(
+                imageVector = Icons.Default.MoreVert,
+                contentDescription = "More options",
+                tint = Color.White,
+                modifier = Modifier.size(26.dp)
+            )
+        }
+        
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(200.dp)
+                .clip(RoundedCornerShape(20.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            Color(0xFF667eea).copy(alpha = 0.95f),
+                            Color(0xFF764ba2).copy(alpha = 0.95f)
+                        )
+                    )
+                )
+                .padding(4.dp),
+            shape = RoundedCornerShape(20.dp)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = null,
+                            tint = Color.White,
+                            modifier = Modifier.size(22.dp)
+                        )
+                        Text(
+                            text = "Clear Selection",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = Color.White
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onClearSelection()
+                },
+                modifier = Modifier
+                    .background(
+                        Color.White.copy(alpha = 0.1f),
+                        RoundedCornerShape(12.dp)
+                    )
+                    .padding(vertical = 6.dp, horizontal = 4.dp)
+            )
+        }
+    }
+}
+
+/**
  * Modern overflow menu button with Material 3 styling
  */
 @Composable

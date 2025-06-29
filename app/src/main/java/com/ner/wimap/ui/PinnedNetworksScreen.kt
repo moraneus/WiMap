@@ -2,6 +2,7 @@ package com.ner.wimap.ui
 
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -52,9 +53,13 @@ fun PinnedNetworksScreen(
     connectingNetworks: Set<String> = emptySet(),
     onBack: () -> Unit,
     onDeletePinnedNetwork: (PinnedNetwork) -> Unit,
+    onDeletePinnedNetworks: (List<PinnedNetwork>) -> Unit,
     onConnectToPinnedNetwork: (PinnedNetwork) -> Unit,
-    onSharePinnedNetwork: (PinnedNetwork) -> Unit = { },
-    onExportPinnedNetwork: (PinnedNetwork, ExportFormat, ExportAction) -> Unit = { _, _, _ -> },
+    onSharePinnedNetwork: (PinnedNetwork) -> Unit,
+    onSharePinnedNetworks: (List<PinnedNetwork>) -> Unit,
+    onExportPinnedNetwork: (PinnedNetwork, ExportFormat, ExportAction) -> Unit,
+    onExportPinnedNetworks: (List<PinnedNetwork>, ExportFormat, ExportAction) -> Unit,
+    onShowNetworksOnMap: (List<PinnedNetwork>) -> Unit,
     onUpdatePinnedNetworkData: (bssid: String, ssid: String, comment: String?, password: String?, photoPath: String?, clearPhoto: Boolean) -> Unit = { _, _, _, _, _, _ -> },
     onNavigateToPage: (Int) -> Unit = {},
     currentPage: Int = 0
@@ -62,30 +67,52 @@ fun PinnedNetworksScreen(
     var showActionMenu by remember { mutableStateOf(false) }
     var selectedNetwork by remember { mutableStateOf<PinnedNetwork?>(null) }
     var showExportDialog by remember { mutableStateOf(false) }
+    
+    // Multi-selection state
+    var isMultiSelectMode by remember { mutableStateOf(false) }
+    var selectedNetworks by remember { mutableStateOf<Set<String>>(emptySet()) }
+    var showBulkExportDialog by remember { mutableStateOf(false) }
+    
+    val hapticFeedback = LocalHapticFeedback.current
+    
+    // Clear selection when leaving the screen
+    DisposableEffect(Unit) {
+        onDispose {
+            // Clear any selection state when the composable is disposed
+            isMultiSelectMode = false
+            selectedNetworks = emptySet()
+        }
+    }
 
     Column(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFFF8F9FA))
     ) {
-        // Unified Material 3 top bar
+        // Always show the regular top bar
         UnifiedTopAppBar(
-            title = stringResource(R.string.title_pinned_networks),
-            icon = Icons.Default.PushPin,
-            onBack = onBack,
+            title = if (isMultiSelectMode) "${selectedNetworks.size} selected" else stringResource(R.string.title_pinned_networks),
+            icon = if (isMultiSelectMode) Icons.Default.Close else Icons.Default.PushPin,
+            onBack = if (isMultiSelectMode) {
+                {
+                    isMultiSelectMode = false
+                    selectedNetworks = emptySet()
+                }
+            } else onBack,
             currentPage = currentPage,
             onNavigateToPage = onNavigateToPage,
-            showNavigationActions = true
+            showNavigationActions = !isMultiSelectMode
         )
 
-        // Content
-        LazyColumn(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(horizontal = 20.dp)
-                .padding(top = 20.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
+        // Content with Box for bottom bar positioning
+        Box(modifier = Modifier.fillMaxSize()) {
+            LazyColumn(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(horizontal = 20.dp)
+                    .padding(top = 20.dp),
+                verticalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
             // Header with count
             item {
                 Row(
@@ -117,7 +144,10 @@ fun PinnedNetworksScreen(
             } else {
                 item {
                     Text(
-                        text = "Long press on any network for more options",
+                        text = if (isMultiSelectMode) 
+                            "Tap to select/deselect networks" 
+                        else 
+                            "Long press on any network for multi-selection",
                         style = MaterialTheme.typography.bodyMedium,
                         color = Color(0xFF7F8C8D),
                         modifier = Modifier.padding(bottom = 8.dp)
@@ -126,6 +156,13 @@ fun PinnedNetworksScreen(
 
                 items(pinnedNetworks) { network ->
                     // Convert PinnedNetwork to WifiNetwork for EnhancedWifiNetworkCard
+                    // Validate timestamp - if it's too old or invalid, use current time
+                    val validTimestamp = if (network.timestamp < 1000000000000L) {
+                        System.currentTimeMillis()
+                    } else {
+                        network.timestamp
+                    }
+                    
                     val wifiNetwork = WifiNetwork(
                         ssid = network.ssid,
                         bssid = network.bssid,
@@ -134,18 +171,45 @@ fun PinnedNetworksScreen(
                         security = network.security,
                         latitude = network.latitude,
                         longitude = network.longitude,
-                        timestamp = network.timestamp,
+                        timestamp = validTimestamp, // Use validated timestamp
                         comment = network.comment ?: "",
                         password = network.savedPassword,
                         photoPath = network.photoUri,
                         isPinned = true, // Always true for pinned networks screen
-                        lastSeenTimestamp = network.timestamp // Use timestamp as last seen time for pinned networks
+                        // For pinned networks, we don't have peak RSSI data, so use current values
+                        peakRssi = network.rssi,
+                        peakRssiLatitude = network.latitude,
+                        peakRssiLongitude = network.longitude,
+                        lastSeenTimestamp = validTimestamp
                     )
                     
-                    EnhancedWifiNetworkCard(
+                    SelectableEnhancedWifiNetworkCard(
                         network = wifiNetwork,
                         isConnecting = connectingNetworks.contains(network.bssid),
                         connectionStatus = null,
+                        isMultiSelectMode = isMultiSelectMode,
+                        isSelected = selectedNetworks.contains(network.bssid),
+                        onCardClick = {
+                            if (isMultiSelectMode) {
+                                selectedNetworks = if (selectedNetworks.contains(network.bssid)) {
+                                    selectedNetworks - network.bssid
+                                } else {
+                                    selectedNetworks + network.bssid
+                                }
+                                
+                                // Exit multi-select mode if no items selected
+                                if (selectedNetworks.isEmpty()) {
+                                    isMultiSelectMode = false
+                                }
+                            }
+                        },
+                        onCardLongClick = {
+                            if (!isMultiSelectMode) {
+                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                isMultiSelectMode = true
+                                selectedNetworks = setOf(network.bssid)
+                            }
+                        },
                         onPinClick = { bssid, isPinned ->
                             // On unpin, delete the network
                             if (!isPinned) {
@@ -157,8 +221,13 @@ fun PinnedNetworksScreen(
                         },
                         onCancelConnectionClick = { /* Not needed for pinned networks */ },
                         onMoreInfoClick = { _ ->
-                            selectedNetwork = network
-                            showActionMenu = true
+                            if (!isMultiSelectMode) {
+                                selectedNetwork = network
+                                showActionMenu = true
+                            }
+                        },
+                        onShowOnMapClick = {
+                            onShowNetworksOnMap(listOf(network))
                         },
                         onUpdateData = { bssid, ssid, comment, password, photoPath ->
                             onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, false)
@@ -170,7 +239,37 @@ fun PinnedNetworksScreen(
                 }
             }
 
-            item { Spacer(modifier = Modifier.height(20.dp)) }
+                item { 
+                    Spacer(modifier = Modifier.height(if (isMultiSelectMode) 80.dp else 20.dp)) 
+                }
+            }
+            
+            // Multi-select bottom action bar
+            if (isMultiSelectMode) {
+                MultiSelectBottomBar(
+                    selectedCount = selectedNetworks.size,
+                    onSelectAll = {
+                        selectedNetworks = pinnedNetworks.map { it.bssid }.toSet()
+                    },
+                    onDelete = {
+                        val networksToDelete = pinnedNetworks.filter { selectedNetworks.contains(it.bssid) }
+                        onDeletePinnedNetworks(networksToDelete)
+                        isMultiSelectMode = false
+                        selectedNetworks = emptySet()
+                    },
+                    onExport = {
+                        showBulkExportDialog = true
+                    },
+                    onShowOnMap = {
+                        val networksToShow = pinnedNetworks.filter { selectedNetworks.contains(it.bssid) }
+                        if (networksToShow.isNotEmpty()) {
+                            onShowNetworksOnMap(networksToShow)
+                            // Don't clear selection here - let it be cleared when navigating away
+                        }
+                    },
+                    modifier = Modifier.align(Alignment.BottomCenter)
+                )
+            }
         }
     }
 
@@ -241,6 +340,23 @@ fun PinnedNetworksScreen(
             onDismiss = {
                 showExportDialog = false
                 selectedNetwork = null
+            }
+        )
+    }
+    
+    // Bulk export dialog
+    if (showBulkExportDialog) {
+        val selectedNetworksList = pinnedNetworks.filter { selectedNetworks.contains(it.bssid) }
+        ExportFormatDialog(
+            title = "Export ${selectedNetworksList.size} networks",
+            onFormatAndActionSelected = { format, action ->
+                onExportPinnedNetworks(selectedNetworksList, format, action)
+                showBulkExportDialog = false
+                isMultiSelectMode = false
+                selectedNetworks = emptySet()
+            },
+            onDismiss = {
+                showBulkExportDialog = false
             }
         )
     }
@@ -468,7 +584,13 @@ fun ModernPinnedNetworkCard(
                         }
 
                         DetailRow("Frequency", "${if (network.channel <= 14) "2.4" else "5"} GHz")
-                        DetailRow("Timestamp", SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()).format(Date(network.timestamp)))
+                        // Use current time if timestamp is invalid (0 or too old)
+                        val validTimestamp = if (network.timestamp < 1000000000000L) { // Before year 2001
+                            System.currentTimeMillis()
+                        } else {
+                            network.timestamp
+                        }
+                        DetailRow("Timestamp", SimpleDateFormat("MMM dd, HH:mm:ss", Locale.getDefault()).format(Date(validTimestamp)))
                         if (!network.photoUri.isNullOrEmpty()) {
                             DetailRow("Photo", "Attached")
                         }
@@ -557,5 +679,215 @@ fun EmptyPinnedNetworksState() {
             color = Color(0xFFBDC3C7),
             textAlign = androidx.compose.ui.text.style.TextAlign.Center
         )
+    }
+}
+
+@Composable
+fun MultiSelectBottomBar(
+    selectedCount: Int,
+    onSelectAll: () -> Unit,
+    onDelete: () -> Unit,
+    onExport: () -> Unit,
+    onShowOnMap: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    Surface(
+        modifier = modifier
+            .fillMaxWidth()
+            .shadow(8.dp),
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 8.dp
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            // Left side - Selection info and select all
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                Text(
+                    text = "$selectedCount selected",
+                    style = MaterialTheme.typography.titleMedium.copy(
+                        fontWeight = FontWeight.Bold
+                    ),
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                
+                TextButton(onClick = onSelectAll) {
+                    Text(
+                        "Select All",
+                        color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.labelLarge
+                    )
+                }
+            }
+            
+            // Right side - Action buttons
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                // Show on map
+                IconButton(
+                    onClick = onShowOnMap,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Map,
+                        contentDescription = "Show on map",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                // Export (includes sharing options)
+                IconButton(
+                    onClick = onExport,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Save,
+                        contentDescription = "Export",
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                }
+                
+                // Delete
+                IconButton(
+                    onClick = onDelete,
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete",
+                        tint = MaterialTheme.colorScheme.error
+                    )
+                }
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+fun SelectableEnhancedWifiNetworkCard(
+    network: WifiNetwork,
+    isConnecting: Boolean,
+    connectionStatus: String?,
+    isMultiSelectMode: Boolean,
+    isSelected: Boolean,
+    onCardClick: () -> Unit,
+    onCardLongClick: () -> Unit,
+    onPinClick: (String, Boolean) -> Unit,
+    onConnectClick: (WifiNetwork) -> Unit,
+    onCancelConnectionClick: (String) -> Unit,
+    onMoreInfoClick: (WifiNetwork) -> Unit,
+    onShowOnMapClick: () -> Unit,
+    onUpdateData: (String, String, String?, String?, String?) -> Unit,
+    onUpdateDataWithPhotoDeletion: (String, String, String?, String?, String?, Boolean) -> Unit
+) {
+    // Create a wrapper around EnhancedWifiNetworkCard that handles selection
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(
+                // Add long press detection for initiating multi-select, and selection clicks when already in multi-select
+                Modifier.combinedClickable(
+                    onClick = {
+                        if (isMultiSelectMode) {
+                            onCardClick()
+                        }
+                        // When not in multi-select mode, let the EnhancedWifiNetworkCard handle its own clicks
+                    },
+                    onLongClick = {
+                        if (!isMultiSelectMode) {
+                            onCardLongClick()
+                        }
+                        // When already in multi-select mode, ignore long press
+                    }
+                )
+            )
+            .background(
+                Color.Transparent, // Let the card handle its own background
+                RoundedCornerShape(16.dp)
+            )
+    ) {
+        // Apply selection styling with solid background
+        if (isSelected && isMultiSelectMode) {
+            // Wrap in a card with solid light green background
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .shadow(12.dp, RoundedCornerShape(16.dp)),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFE8F5E8) // Solid light green for selected
+                ),
+                border = BorderStroke(2.dp, Color(0xFF4CAF50)) // Green border
+            ) {
+                Box(modifier = Modifier.padding(4.dp)) {
+                    EnhancedWifiNetworkCard(
+                        network = network,
+                        isConnecting = isConnecting,
+                        connectionStatus = connectionStatus,
+                        onPinClick = onPinClick,
+                        onConnectClick = onConnectClick,
+                        onCancelConnectionClick = { onCancelConnectionClick(network.bssid) },
+                        onMoreInfoClick = onMoreInfoClick,
+                        onUpdateData = onUpdateData,
+                        onUpdateDataWithPhotoDeletion = onUpdateDataWithPhotoDeletion
+                    )
+                }
+            }
+        } else {
+            // Normal card without selection styling
+            EnhancedWifiNetworkCard(
+                network = network,
+                isConnecting = isConnecting,
+                connectionStatus = connectionStatus,
+                onPinClick = onPinClick,
+                onConnectClick = onConnectClick,
+                onCancelConnectionClick = { onCancelConnectionClick(network.bssid) },
+                onMoreInfoClick = onMoreInfoClick,
+                onUpdateData = onUpdateData,
+                onUpdateDataWithPhotoDeletion = onUpdateDataWithPhotoDeletion
+            )
+        }
+        
+        // Show checkmark in top-left corner when in multi-select mode
+        if (isMultiSelectMode) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopStart)
+                    .padding(16.dp)
+                    .size(20.dp)
+                    .background(
+                        if (isSelected) Color(0xFF4CAF50) else Color.White.copy(alpha = 0.95f),
+                        CircleShape
+                    )
+                    .shadow(3.dp, CircleShape)
+                    .then(
+                        if (!isSelected) {
+                            Modifier.border(1.5.dp, Color.Gray.copy(alpha = 0.4f), CircleShape)
+                        } else {
+                            Modifier
+                        }
+                    ),
+                contentAlignment = Alignment.Center
+            ) {
+                if (isSelected) {
+                    Icon(
+                        imageVector = Icons.Default.Check,
+                        contentDescription = "Selected",
+                        tint = Color.White,
+                        modifier = Modifier.size(14.dp)
+                    )
+                }
+            }
+        }
     }
 }

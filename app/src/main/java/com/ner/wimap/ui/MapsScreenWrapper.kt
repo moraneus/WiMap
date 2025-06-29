@@ -49,7 +49,9 @@ fun MapsScreenWrapper(
     wifiNetworks: List<WifiNetwork>,
     onBack: () -> Unit,
     onNavigateToPage: (Int) -> Unit = {},
-    currentPage: Int = 2
+    currentPage: Int = 2,
+    isFilteredView: Boolean = false, // Indicates if showing selected networks only
+    onClearSelection: () -> Unit = {} // Clear selection callback
 ) {
     val context = LocalContext.current
     var showNetworkList by remember { mutableStateOf(false) }
@@ -87,12 +89,12 @@ fun MapsScreenWrapper(
     ) {
         // Unified top app bar
         UnifiedTopAppBar(
-            title = "Network Map",
+            title = if (isFilteredView) "Selected Networks Map" else "Network Map",
             icon = Icons.Default.Map,
             onBack = onBack,
             currentPage = currentPage,
             onNavigateToPage = onNavigateToPage,
-            showNavigationActions = true
+            showNavigationActions = !isFilteredView // Hide navigation when showing selected networks
         )
         
         // Map content with overlay
@@ -187,20 +189,34 @@ fun MapsScreenWrapper(
             NetworkCountCard(
                 totalNetworks = wifiNetworks.size,
                 mappedNetworks = networksWithLocation.size,
+                isFilteredView = isFilteredView,
                 modifier = Modifier
-                    .align(Alignment.TopStart)
+                    .align(Alignment.BottomStart)
                     .padding(16.dp)
             )
             
-            // Floating List Button
+            // Floating Action Button - either menu or list
             if (networksWithLocation.isNotEmpty()) {
-                FloatingNetworkListButton(
-                    onClick = { showNetworkList = true },
-                    modifier = Modifier
-                        .align(Alignment.BottomEnd)
-                        .padding(16.dp)
-                        .zIndex(1f)
-                )
+                if (isFilteredView) {
+                    // Show hamburger menu with options when in filtered view
+                    FloatingMapMenuButton(
+                        onShowNetworkList = { showNetworkList = true },
+                        onClearSelection = onClearSelection,
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .zIndex(1f)
+                    )
+                } else {
+                    // Show simple list button when showing all networks
+                    FloatingNetworkListButton(
+                        onClick = { showNetworkList = true },
+                        modifier = Modifier
+                            .align(Alignment.BottomEnd)
+                            .padding(16.dp)
+                            .zIndex(1f)
+                    )
+                }
             }
             
             // Selected network auto-clear effect
@@ -250,7 +266,13 @@ private fun createCustomWiFiMarker(network: WifiNetwork): BitmapDescriptor {
  */
 private fun buildMarkerSnippet(network: WifiNetwork): String {
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
-    val lastSeen = timeFormat.format(Date(network.lastSeenTimestamp))
+    // Use current time if timestamp is invalid (0 or too old)
+    val validTimestamp = if (network.lastSeenTimestamp < 1000000000000L) { // Before year 2001
+        System.currentTimeMillis()
+    } else {
+        network.lastSeenTimestamp
+    }
+    val lastSeen = timeFormat.format(Date(validTimestamp))
     val vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
     
     return buildString {
@@ -272,6 +294,7 @@ private fun buildMarkerSnippet(network: WifiNetwork): String {
 private fun NetworkCountCard(
     totalNetworks: Int,
     mappedNetworks: Int,
+    isFilteredView: Boolean = false,
     modifier: Modifier = Modifier
 ) {
     Card(
@@ -286,6 +309,26 @@ private fun NetworkCountCard(
             modifier = Modifier.padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
+            if (isFilteredView) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.FilterList,
+                        contentDescription = "Filtered",
+                        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+                        modifier = Modifier.size(16.dp)
+                    )
+                    Text(
+                        text = "Selected",
+                        style = MaterialTheme.typography.labelSmall.copy(
+                            fontWeight = FontWeight.Bold
+                        ),
+                        color = MaterialTheme.colorScheme.onPrimaryContainer
+                    )
+                }
+            }
             Text(
                 text = "$mappedNetworks",
                 style = MaterialTheme.typography.headlineMedium.copy(
@@ -294,17 +337,146 @@ private fun NetworkCountCard(
                 color = MaterialTheme.colorScheme.onPrimaryContainer
             )
             Text(
-                text = "Mapped",
+                text = if (isFilteredView) "Selected" else "Mapped",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.8f)
             )
-            if (totalNetworks > mappedNetworks) {
+            if (totalNetworks > mappedNetworks && !isFilteredView) {
                 Text(
                     text = "of $totalNetworks total",
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.6f)
                 )
             }
+        }
+    }
+}
+
+/**
+ * Floating Map Menu Button with hamburger menu (for filtered view)
+ */
+@Composable
+private fun FloatingMapMenuButton(
+    onShowNetworkList: () -> Unit,
+    onClearSelection: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    var expanded by remember { mutableStateOf(false) }
+    var isPressed by remember { mutableStateOf(false) }
+    val scale by animateFloatAsState(
+        targetValue = if (isPressed) 0.9f else 1f,
+        animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
+        label = "fab_menu_scale"
+    )
+    
+    Box(modifier = modifier) {
+        FloatingActionButton(
+            onClick = {
+                isPressed = true
+                expanded = true
+                isPressed = false
+            },
+            modifier = Modifier
+                .size(64.dp)
+                .graphicsLayer {
+                    scaleX = scale
+                    scaleY = scale
+                }
+                .shadow(
+                    elevation = 12.dp,
+                    shape = CircleShape,
+                    ambientColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.3f),
+                    spotColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.5f)
+                ),
+            containerColor = MaterialTheme.colorScheme.primary,
+            contentColor = MaterialTheme.colorScheme.onPrimary,
+            elevation = FloatingActionButtonDefaults.elevation(
+                defaultElevation = 8.dp,
+                pressedElevation = 12.dp
+            )
+        ) {
+            Icon(
+                imageVector = Icons.Default.Menu,
+                contentDescription = "Map options",
+                modifier = Modifier.size(28.dp)
+            )
+        }
+        
+        // Dropdown menu
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false },
+            modifier = Modifier
+                .width(200.dp)
+                .clip(RoundedCornerShape(16.dp))
+                .background(
+                    brush = Brush.verticalGradient(
+                        colors = listOf(
+                            MaterialTheme.colorScheme.surface,
+                            MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
+                        )
+                    )
+                ),
+            shape = RoundedCornerShape(16.dp)
+        ) {
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.List,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Network List",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.onSurface
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onShowNetworkList()
+                }
+            )
+            
+            HorizontalDivider(
+                color = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f),
+                thickness = 1.dp
+            )
+            
+            DropdownMenuItem(
+                text = {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Clear,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.error,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Text(
+                            text = "Clear Selection",
+                            style = MaterialTheme.typography.bodyMedium.copy(
+                                fontWeight = FontWeight.Medium
+                            ),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                    }
+                },
+                onClick = {
+                    expanded = false
+                    onClearSelection()
+                }
+            )
         }
     }
 }

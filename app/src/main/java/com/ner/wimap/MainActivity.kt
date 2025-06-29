@@ -18,7 +18,9 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.ner.wimap.model.WifiNetwork
 import kotlinx.coroutines.launch
+import androidx.lifecycle.lifecycleScope
 import com.ner.wimap.presentation.viewmodel.MainViewModel
 import com.ner.wimap.ui.MainScreen
 import com.ner.wimap.ui.MapsScreenWrapper
@@ -100,6 +102,9 @@ class MainActivity : ComponentActivity() {
         val ssidFilter by viewModel.ssidFilter.collectAsState()
         val securityFilter by viewModel.securityFilter.collectAsState()
         val rssiThreshold by viewModel.rssiThreshold.collectAsState()
+        
+        // Map state
+        val networksForMap by viewModel.networksForMap.collectAsState()
         val bssidFilter by viewModel.bssidFilter.collectAsState()
         val sortingMode by viewModel.sortingMode.collectAsState()
         val passwords by viewModel.passwords.collectAsState()
@@ -159,10 +164,6 @@ class MainActivity : ComponentActivity() {
         var currentScreen by remember { mutableStateOf("main") }
         var currentPage by remember { mutableStateOf(SwipeDestination.MAIN.index) }
         val coroutineScope = rememberCoroutineScope()
-        val pagerState = rememberPagerState(
-            initialPage = SwipeDestination.MAIN.index,
-            pageCount = { 3 }
-        )
         
         if (currentScreen == "settings") {
             SettingsScreen(
@@ -199,7 +200,7 @@ class MainActivity : ComponentActivity() {
                 onPageChanged = { pageIndex ->
                     currentPage = pageIndex
                 }
-            ) { pageIndex, _ ->
+            ) { pageIndex, pagerState ->
                 when (pageIndex) {
                     SwipeDestination.PINNED.index -> {
                         PinnedNetworksScreen(
@@ -215,14 +216,96 @@ class MainActivity : ComponentActivity() {
                             onDeletePinnedNetwork = { network ->
                                 viewModel.deletePinnedNetwork(network)
                             },
+                            onDeletePinnedNetworks = { networks ->
+                                networks.forEach { network ->
+                                    viewModel.deletePinnedNetwork(network)
+                                }
+                            },
                             onConnectToPinnedNetwork = { network ->
                                 viewModel.connectToPinnedNetwork(network)
                             },
                             onSharePinnedNetwork = { network ->
                                 viewModel.sharePinnedNetwork(this@MainActivity, network)
                             },
+                            onSharePinnedNetworks = { networks ->
+                                // For now, share functionality is included in the Export dialog
+                                // Users can select "Share Only" option in the export dialog
+                            },
                             onExportPinnedNetwork = { network, format, action ->
                                 viewModel.exportPinnedNetwork(this@MainActivity, network, format, action)
+                            },
+                            onExportPinnedNetworks = { networks, format, action ->
+                                // Convert PinnedNetworks to WifiNetworks for bulk export
+                                val wifiNetworks = networks.map { network ->
+                                    // Validate timestamp
+                                    val validTimestamp = if (network.timestamp < 1000000000000L) {
+                                        System.currentTimeMillis()
+                                    } else {
+                                        network.timestamp
+                                    }
+                                    
+                                    WifiNetwork(
+                                        ssid = network.ssid,
+                                        bssid = network.bssid,
+                                        rssi = network.rssi,
+                                        channel = network.channel,
+                                        security = network.security,
+                                        latitude = network.latitude,
+                                        longitude = network.longitude,
+                                        timestamp = validTimestamp,
+                                        password = network.savedPassword,
+                                        comment = network.comment ?: "",
+                                        photoPath = network.photoUri,
+                                        isPinned = true,
+                                        peakRssi = network.rssi,
+                                        peakRssiLatitude = network.latitude,
+                                        peakRssiLongitude = network.longitude,
+                                        lastSeenTimestamp = validTimestamp
+                                    )
+                                }
+                                // Use ExportManager directly for bulk export
+                                val exportManager = com.ner.wimap.ui.viewmodel.ExportManager(lifecycleScope)
+                                exportManager.exportWifiNetworks(this@MainActivity, wifiNetworks, format, action)
+                            },
+                            onShowNetworksOnMap = { networks ->
+                                // Convert PinnedNetworks to WifiNetworks and set them for map display
+                                val wifiNetworks = networks.map { network ->
+                                    // Validate timestamp
+                                    val validTimestamp = if (network.timestamp < 1000000000000L) {
+                                        System.currentTimeMillis()
+                                    } else {
+                                        network.timestamp
+                                    }
+                                    
+                                    WifiNetwork(
+                                        ssid = network.ssid,
+                                        bssid = network.bssid,
+                                        rssi = network.rssi,
+                                        channel = network.channel,
+                                        security = network.security,
+                                        latitude = network.latitude,
+                                        longitude = network.longitude,
+                                        timestamp = validTimestamp,
+                                        password = network.savedPassword,
+                                        comment = network.comment ?: "",
+                                        photoPath = network.photoUri,
+                                        isPinned = true,
+                                        peakRssi = network.rssi,
+                                        peakRssiLatitude = network.latitude,
+                                        peakRssiLongitude = network.longitude,
+                                        lastSeenTimestamp = validTimestamp
+                                    )
+                                }
+                                
+                                // Set the selected networks for map display
+                                viewModel.setNetworksForMap(wifiNetworks)
+                                
+                                // Navigate to the Maps page in the swipeable navigation
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAPS.index)
+                                    // Force page update
+                                    currentPage = SwipeDestination.MAPS.index
+                                }
                             },
                             onUpdatePinnedNetworkData = { bssid, ssid, comment, password, photoPath, clearPhoto ->
                                 viewModel.updateTemporaryNetworkDataWithPhotoDeletion(bssid, ssid, comment, password, photoPath, clearPhoto)
@@ -323,8 +406,11 @@ class MainActivity : ComponentActivity() {
                     SwipeDestination.MAPS.index -> {
                         // Create a Maps screen composition that integrates with the swipe navigation
                         MapsScreenWrapper(
-                            wifiNetworks = wifiNetworks,
+                            wifiNetworks = networksForMap ?: wifiNetworks, // Use selected networks if available, otherwise all networks
+                            isFilteredView = networksForMap != null, // Show indicator when displaying selected networks
                             onBack = {
+                                // Clear the selected networks when leaving map
+                                viewModel.clearNetworksForMap()
                                 // Navigate back to main screen (center page)
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
@@ -336,7 +422,11 @@ class MainActivity : ComponentActivity() {
                                     pagerState.animateScrollToPage(pageIndex)
                                 }
                             },
-                            currentPage = currentPage
+                            currentPage = currentPage,
+                            onClearSelection = {
+                                // Clear the selected networks but stay on map screen
+                                viewModel.clearNetworksForMap()
+                            }
                         )
                     }
                 }
