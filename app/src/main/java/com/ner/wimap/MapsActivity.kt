@@ -34,6 +34,7 @@ import com.ner.wimap.ui.components.InfoChip
 import com.ner.wimap.ui.components.UnifiedTopAppBar
 import com.ner.wimap.ui.components.UnifiedTopBarActionButton
 import com.ner.wimap.ui.getSignalColor
+import com.ner.wimap.utils.OUILookupManager
 import java.text.SimpleDateFormat
 import java.util.*
 import android.view.LayoutInflater
@@ -407,8 +408,40 @@ fun NetworkMapCard(
                 )
             }
 
+            // BSSID with Vendor - real lookup with fallback
+            var vendor by remember { mutableStateOf<String?>(null) }
+            
+            LaunchedEffect(network.bssid) {
+                // Wait for database to initialize if needed
+                var attempts = 0
+                while (attempts < 5 && !OUILookupManager.getInstance().isReady()) {
+                    kotlinx.coroutines.delay(500)
+                    attempts++
+                }
+                
+                if (OUILookupManager.getInstance().isReady()) {
+                    vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
+                } else {
+                    // Fallback to hardcoded for common vendors
+                    vendor = when {
+                        network.bssid.startsWith("00:00:0C", ignoreCase = true) -> "Cisco"
+                        network.bssid.startsWith("3C:5A:B4", ignoreCase = true) -> "Google"
+                        network.bssid.startsWith("A4:2B:B0", ignoreCase = true) -> "TP-Link"
+                        network.bssid.startsWith("00:03:93", ignoreCase = true) -> "Apple"
+                        network.bssid.startsWith("F8:32:E4", ignoreCase = true) -> "Apple"
+                        else -> null
+                    }
+                }
+            }
+            
+            val bssidText = if (vendor != null) {
+                "${network.bssid} ($vendor)"
+            } else {
+                network.bssid
+            }
+            
             Text(
-                text = network.bssid,
+                text = bssidText,
                 style = MaterialTheme.typography.bodySmall,
                 color = Color(0xFF7F8C8D)
             )
@@ -470,8 +503,16 @@ fun NetworkInfoOverlay(
             }
         }
 
+        // BSSID with Vendor - use direct lookup since this is not in a composable
+        val vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
+        val bssidText = if (vendor != null) {
+            "${network.bssid} ($vendor)"
+        } else {
+            network.bssid
+        }
+        
         Text(
-            text = network.bssid,
+            text = bssidText,
             style = MaterialTheme.typography.bodyMedium,
             color = Color(0xFF7F8C8D)
         )

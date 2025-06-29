@@ -41,6 +41,13 @@ import com.ner.wimap.ui.getSignalColor
 // Removed EnhancedPermissionUIHandler imports - camera permissions handled by AutoPermissionCameraLauncher
 import com.ner.wimap.ui.dialogs.ImageViewerDialog
 import com.ner.wimap.ui.dialogs.CameraPermissionRationaleDialog
+import com.ner.wimap.utils.OUILookupManager
+import android.util.Log
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import kotlinx.coroutines.delay
 import com.ner.wimap.R
 
 @Composable
@@ -161,9 +168,42 @@ fun EnhancedWifiNetworkCard(
                 }
             )
 
-            // BSSID
+            // BSSID with Vendor - real lookup with fallback
+            var vendor by remember { mutableStateOf<String?>(null) }
+            
+            LaunchedEffect(network.bssid) {
+                // Wait a bit for database to initialize if needed
+                var attempts = 0
+                while (attempts < 5 && !OUILookupManager.getInstance().isReady()) {
+                    delay(500)
+                    attempts++
+                }
+                
+                if (OUILookupManager.getInstance().isReady()) {
+                    vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
+                    Log.d("VendorLookup", "BSSID: ${network.bssid}, Vendor: $vendor")
+                } else {
+                    Log.e("VendorLookup", "Database not ready after ${attempts * 500}ms for BSSID: ${network.bssid}")
+                    // Fallback to hardcoded for common vendors
+                    vendor = when {
+                        network.bssid.startsWith("00:00:0C", ignoreCase = true) -> "Cisco"
+                        network.bssid.startsWith("3C:5A:B4", ignoreCase = true) -> "Google"
+                        network.bssid.startsWith("A4:2B:B0", ignoreCase = true) -> "TP-Link"
+                        network.bssid.startsWith("00:03:93", ignoreCase = true) -> "Apple"
+                        network.bssid.startsWith("F8:32:E4", ignoreCase = true) -> "Apple"
+                        else -> null
+                    }
+                }
+            }
+            
+            val bssidText = if (vendor != null) {
+                "${network.bssid} ($vendor)"
+            } else {
+                network.bssid
+            }
+            
             Text(
-                text = network.bssid,
+                text = bssidText,
                 style = MaterialTheme.typography.bodySmall,
                 color = if (network.isOffline) Color(0xFFB0B0B0) else Color(0xFF7F8C8D), // More muted for offline
                 maxLines = 1,

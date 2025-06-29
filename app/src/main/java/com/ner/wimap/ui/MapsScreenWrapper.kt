@@ -33,6 +33,7 @@ import com.google.android.gms.maps.model.*
 import com.google.maps.android.compose.*
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.ui.components.UnifiedTopAppBar
+import com.ner.wimap.utils.OUILookupManager
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -250,9 +251,11 @@ private fun createCustomWiFiMarker(network: WifiNetwork): BitmapDescriptor {
 private fun buildMarkerSnippet(network: WifiNetwork): String {
     val timeFormat = SimpleDateFormat("HH:mm:ss", Locale.getDefault())
     val lastSeen = timeFormat.format(Date(network.lastSeenTimestamp))
+    val vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
     
     return buildString {
         append("BSSID: ${network.bssid}\n")
+        vendor?.let { append("Vendor: $it\n") }
         append("Signal: ${network.rssi} dBm\n")
         append("Security: ${network.security}\n")
         append("Channel: ${network.channel}\n")
@@ -472,8 +475,40 @@ private fun NetworkListItem(
                     overflow = TextOverflow.Ellipsis
                 )
                 
+                // BSSID with Vendor - real lookup with fallback
+                var vendor by remember { mutableStateOf<String?>(null) }
+                
+                LaunchedEffect(network.bssid) {
+                    // Wait for database to initialize if needed
+                    var attempts = 0
+                    while (attempts < 5 && !OUILookupManager.getInstance().isReady()) {
+                        delay(500)
+                        attempts++
+                    }
+                    
+                    if (OUILookupManager.getInstance().isReady()) {
+                        vendor = OUILookupManager.getInstance().lookupVendorShort(network.bssid)
+                    } else {
+                        // Fallback to hardcoded for common vendors
+                        vendor = when {
+                            network.bssid.startsWith("00:00:0C", ignoreCase = true) -> "Cisco"
+                            network.bssid.startsWith("3C:5A:B4", ignoreCase = true) -> "Google"
+                            network.bssid.startsWith("A4:2B:B0", ignoreCase = true) -> "TP-Link"
+                            network.bssid.startsWith("00:03:93", ignoreCase = true) -> "Apple"
+                            network.bssid.startsWith("F8:32:E4", ignoreCase = true) -> "Apple"
+                            else -> null
+                        }
+                    }
+                }
+                
+                val bssidText = if (vendor != null) {
+                    "${network.bssid} ($vendor)"
+                } else {
+                    network.bssid
+                }
+                
                 Text(
-                    text = network.bssid,
+                    text = bssidText,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.7f),
                     maxLines = 1,
