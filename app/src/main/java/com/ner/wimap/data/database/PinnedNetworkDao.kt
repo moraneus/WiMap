@@ -29,4 +29,7 @@ interface PinnedNetworkDao {
 
     @Query("DELETE FROM pinned_networks")
     suspend fun deleteAllPinnedNetworks(): Int
+
+    @Query("UPDATE pinned_networks SET isOffline = :isOffline, lastSeenTimestamp = :lastSeenTimestamp WHERE bssid = :bssid")
+    suspend fun updateOfflineStatus(bssid: String, isOffline: Boolean, lastSeenTimestamp: Long): Int
 }

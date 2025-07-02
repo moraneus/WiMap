@@ -130,26 +130,21 @@ fun EnhancedWifiNetworkCard(
     // Modern card design with subtle shadow for better separation
     Card(
         modifier = Modifier
-            .fillMaxWidth()
-            .then(
-                when {
-                    network.isOffline && actuallyPinned -> Modifier.alpha(0.85f)
-                    network.isOffline -> Modifier.alpha(0.75f)
-                    else -> Modifier
-                }
-            ),
+            .fillMaxWidth(),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
-                network.isOffline && actuallyPinned -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f)
-                network.isOffline -> MaterialTheme.colorScheme.surface
+                network.isOffline -> Color(0xFFE8E8E8) // Uniform gray for all offline networks
                 actuallyPinned -> MaterialTheme.colorScheme.surface
                 hasAttachedData -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                 else -> MaterialTheme.colorScheme.surface
             }
         ),
-        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        elevation = CardDefaults.cardElevation(
+            defaultElevation = if (network.isOffline) 1.dp else 2.dp
+        ),
         border = when {
+            network.isOffline -> BorderStroke(1.5.dp, Color(0xFF95A5A6)) // Gray border for offline
             isSelected -> BorderStroke(3.dp, Color(0xFF4CAF50)) // Green border for selected
             actuallyPinned -> BorderStroke(2.5.dp, MaterialTheme.colorScheme.primary)
             else -> null
@@ -180,7 +175,7 @@ fun EnhancedWifiNetworkCard(
             Text(
                 text = bssidText,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (network.isOffline) Color(0xFFB0B0B0) else Color(0xFF7F8C8D), // More muted for offline
+                color = if (network.isOffline) Color(0xFF95A5A6) else Color(0xFF7F8C8D), // Gray when offline
                 maxLines = 1,
                 modifier = Modifier.padding(top = 4.dp)
             )

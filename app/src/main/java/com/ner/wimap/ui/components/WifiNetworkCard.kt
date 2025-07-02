@@ -126,6 +126,7 @@ fun WifiNetworkCard(
             .fillMaxSize()
             .shadow(
                 elevation = when {
+                    network.isOffline -> 2.dp // Reduced shadow for offline
                     isPinned -> 12.dp
                     hasAttachedData -> 6.dp
                     else -> 4.dp
@@ -135,12 +136,14 @@ fun WifiNetworkCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
+                network.isOffline -> Color(0xFFE8E8E8) // Uniform gray for offline networks
                 isPinned -> Color(0xFFFFF3E0) // Orange tint for pinned
                 hasAttachedData -> Color(0xFFF0F8FF) // Light blue tint for attached data
                 else -> Color.White
             }
         ),
         border = when {
+            network.isOffline -> BorderStroke(1.5.dp, Color(0xFF95A5A6)) // Gray border for offline
             isPinned -> BorderStroke(2.dp, Color(0xFF667eea)) // Blue border for pinned
             hasAttachedData -> BorderStroke(1.dp, Color(0xFF87CEEB)) // Light blue border for attached data
             else -> null
@@ -161,7 +164,7 @@ fun WifiNetworkCard(
             Text(
                 text = network.bssid,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF7F8C8D),
+                color = if (network.isOffline) Color(0xFF95A5A6) else Color(0xFF7F8C8D), // Gray when offline
                 maxLines = 1,
                 modifier = Modifier.padding(top = 4.dp)
             )

@@ -188,14 +188,52 @@ class MainViewModel @Inject constructor(
     val connectingNetworkName = connectToNetworkUseCase.getConnectingNetworkName()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
-    // Enhanced pinned networks that combine pinned data with temporary modifications
+    // Enhanced pinned networks that combine pinned data with temporary modifications and availability status
     val pinnedNetworks = combine(
         managePinnedNetworksUseCase.getAllPinnedNetworks(),
-        manageTemporaryNetworkDataUseCase.getAllTemporaryData()
-    ) { pinnedNetworksList, temporaryDataList ->
+        manageTemporaryNetworkDataUseCase.getAllTemporaryData(),
+        wifiNetworks
+    ) { pinnedNetworksList, temporaryDataList, currentNetworks ->
         val temporaryDataMap = temporaryDataList.associateBy { it.bssid }
+        val currentNetworksMap = currentNetworks.associateBy { it.bssid }
+        val currentTimestamp = System.currentTimeMillis()
+        val hideTimeout = _hideNetworksUnseenForSeconds.value * 1000L
+        
         pinnedNetworksList.map { pinnedNetwork ->
             val temporaryData = temporaryDataMap[pinnedNetwork.bssid]
+            val currentNetwork = currentNetworksMap[pinnedNetwork.bssid]
+            
+            // Determine if network is offline
+            val isOffline = when {
+                currentNetwork != null -> {
+                    // Network is in current scan, check if it's marked as offline
+                    currentNetwork.isOffline
+                }
+                else -> {
+                    // Network not in current scan, check if it's timed out
+                    val lastSeen = pinnedNetwork.lastSeenTimestamp
+                    (currentTimestamp - lastSeen) > hideTimeout
+                }
+            }
+            
+            // Update last seen timestamp if network is currently visible
+            val updatedLastSeen = if (currentNetwork != null && !currentNetwork.isOffline) {
+                currentTimestamp
+            } else {
+                pinnedNetwork.lastSeenTimestamp
+            }
+            
+            // Update database if offline status or timestamp changed
+            if (isOffline != pinnedNetwork.isOffline || updatedLastSeen != pinnedNetwork.lastSeenTimestamp) {
+                viewModelScope.launch {
+                    managePinnedNetworksUseCase.updateOfflineStatus(
+                        pinnedNetwork.bssid, 
+                        isOffline, 
+                        updatedLastSeen
+                    )
+                }
+            }
+            
             if (temporaryData != null) {
                 // Merge temporary data into pinned network for live updates
                 // CRITICAL: Handle photo deletion properly - if either source has null photo, use null
@@ -209,10 +247,15 @@ class MainViewModel @Inject constructor(
                 pinnedNetwork.copy(
                     comment = temporaryData.comment.takeIf { it.isNotEmpty() } ?: pinnedNetwork.comment,
                     savedPassword = temporaryData.savedPassword ?: pinnedNetwork.savedPassword,
-                    photoUri = mergedPhotoUri
+                    photoUri = mergedPhotoUri,
+                    isOffline = isOffline,
+                    lastSeenTimestamp = updatedLastSeen
                 )
             } else {
-                pinnedNetwork
+                pinnedNetwork.copy(
+                    isOffline = isOffline,
+                    lastSeenTimestamp = updatedLastSeen
+                )
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())

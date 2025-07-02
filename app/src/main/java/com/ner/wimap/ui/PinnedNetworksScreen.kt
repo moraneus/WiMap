@@ -208,11 +208,12 @@ fun PinnedNetworksScreen(
                                 password = network.savedPassword,
                                 photoPath = network.photoUri,
                                 isPinned = true, // Always true for pinned networks screen
+                                isOffline = network.isOffline, // Pass offline status
                                 // For pinned networks, we don't have peak RSSI data, so use current values
                                 peakRssi = network.rssi,
                                 peakRssiLatitude = network.latitude,
                                 peakRssiLongitude = network.longitude,
-                                lastSeenTimestamp = validTimestamp
+                                lastSeenTimestamp = network.lastSeenTimestamp
                             )
                             
                             SelectableEnhancedWifiNetworkCard(
@@ -249,7 +250,9 @@ fun PinnedNetworksScreen(
                                     }
                                 },
                                 onConnectClick = { _ ->
-                                    onConnectToPinnedNetwork(network)
+                                    if (!network.isOffline) {
+                                        onConnectToPinnedNetwork(network)
+                                    }
                                 },
                                 onCancelConnectionClick = { /* Not needed for pinned networks */ },
                                 onMoreInfoClick = { _ ->
@@ -426,6 +429,7 @@ fun ModernPinnedNetworkCard(
     // Check both saved password and successful passwords from connection attempts
     val hasValidPassword = !network.savedPassword.isNullOrEmpty() || successfulPasswords.containsKey(network.bssid)
     val isConnecting = connectingNetworks.contains(network.bssid)
+    val isOffline = network.isOffline
 
     // Get the actual password to display (prefer successful password over saved)
     val displayPassword = successfulPasswords[network.bssid] ?: network.savedPassword ?: ""
@@ -434,9 +438,9 @@ fun ModernPinnedNetworkCard(
     Card(
         modifier = Modifier
             .fillMaxWidth()
-            .shadow(12.dp, RoundedCornerShape(16.dp)) // Same shadow as pinned cards in main
+            .shadow(if (isOffline) 4.dp else 12.dp, RoundedCornerShape(16.dp)) // Reduced shadow when offline
             .combinedClickable(
-                onClick = onConnect,
+                onClick = if (isOffline) { {} } else onConnect, // Disable click when offline
                 onLongClick = {
                     haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                     onLongPress()
@@ -444,9 +448,12 @@ fun ModernPinnedNetworkCard(
             ),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFFFF3E0) // Same orange tinted background
+            containerColor = if (isOffline) Color(0xFFE8E8E8) else Color(0xFFFFF3E0) // Grey when offline
         ),
-        border = BorderStroke(2.dp, Color(0xFF667eea)) // Use main app color instead of orange
+        border = BorderStroke(
+            2.dp, 
+            if (isOffline) Color(0xFF95A5A6) else Color(0xFF667eea) // Grey border when offline
+        )
     ) {
         Column(modifier = Modifier.padding(16.dp)) {
             // Header Section - same as main screen
@@ -472,7 +479,7 @@ fun ModernPinnedNetworkCard(
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Color(0xFF2C3E50),
+                        color = if (isOffline) Color(0xFF95A5A6) else Color(0xFF2C3E50), // Grey when offline
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -480,7 +487,7 @@ fun ModernPinnedNetworkCard(
                     Icon(
                         imageVector = getSignalIcon(network.rssi),
                         contentDescription = "Signal Strength",
-                        tint = getSignalColor(network.rssi),
+                        tint = if (isOffline) Color(0xFF95A5A6) else getSignalColor(network.rssi), // Grey when offline
                         modifier = Modifier.size(16.dp)
                     )
 
@@ -515,6 +522,7 @@ fun ModernPinnedNetworkCard(
                         .size(40.dp)
                         .background(
                             when {
+                                isOffline -> Color(0xFF95A5A6) // Grey when offline
                                 isConnecting -> Color(0xFFBDC3C7) // Gray when connecting
                                 hasValidPassword -> Color(0xFF27AE60) // Green when password known
                                 else -> Color(0xFFE74C3C) // Red when password unknown
@@ -531,12 +539,16 @@ fun ModernPinnedNetworkCard(
                         )
                     } else {
                         Icon(
-                            imageVector = if (hasValidPassword) {
-                                Icons.Default.CheckCircle // Green checkmark when password is known
-                            } else {
-                                Icons.Default.VpnKey // Red key when trying to break password
+                            imageVector = when {
+                                isOffline -> Icons.Default.SignalWifiOff // WiFi off icon when offline
+                                hasValidPassword -> Icons.Default.CheckCircle // Green checkmark when password is known
+                                else -> Icons.Default.VpnKey // Red key when trying to break password
                             },
-                            contentDescription = if (hasValidPassword) "Connect with Known Password" else "Break Password",
+                            contentDescription = when {
+                                isOffline -> "Network Offline"
+                                hasValidPassword -> "Connect with Known Password"
+                                else -> "Break Password"
+                            },
                             tint = Color.White,
                             modifier = Modifier.size(20.dp)
                         )
@@ -544,11 +556,44 @@ fun ModernPinnedNetworkCard(
                 }
             }
 
+            // Offline status indicator
+            if (isOffline) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(4.dp),
+                    modifier = Modifier.padding(top = 4.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.SignalWifiOff,
+                        contentDescription = "Offline",
+                        tint = Color(0xFF95A5A6),
+                        modifier = Modifier.size(12.dp)
+                    )
+                    Text(
+                        text = "Not seen recently",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF95A5A6),
+                        fontWeight = FontWeight.Medium
+                    )
+                    
+                    // Show last seen timestamp
+                    val lastSeenText = remember(network.lastSeenTimestamp) {
+                        val formatter = SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault())
+                        formatter.format(Date(network.lastSeenTimestamp))
+                    }
+                    Text(
+                        text = "• Last seen: $lastSeenText",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color(0xFF95A5A6)
+                    )
+                }
+            }
+
             // BSSID
             Text(
                 text = network.bssid,
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF7F8C8D),
+                color = if (isOffline) Color(0xFF95A5A6) else Color(0xFF7F8C8D), // Grey when offline
                 maxLines = 1,
                 modifier = Modifier.padding(top = 4.dp)
             )

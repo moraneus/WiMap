@@ -12,4 +12,5 @@ interface PinnedNetworkRepository {
     suspend fun updateNetworkData(network: WifiNetwork, comment: String?, password: String?, photoUri: String?): kotlin.Result<Unit>
     suspend fun updatePinnedNetwork(network: PinnedNetwork): kotlin.Result<Unit>
     suspend fun clearAllPinnedNetworks(): kotlin.Result<Unit>
+    suspend fun updateOfflineStatus(bssid: String, isOffline: Boolean, lastSeenTimestamp: Long): kotlin.Result<Unit>
 }

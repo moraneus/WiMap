@@ -102,4 +102,13 @@ class PinnedNetworkRepositoryImpl @Inject constructor(
             kotlin.Result.failure(e)
         }
     }
+    
+    override suspend fun updateOfflineStatus(bssid: String, isOffline: Boolean, lastSeenTimestamp: Long): kotlin.Result<Unit> {
+        return try {
+            pinnedNetworkDao.updateOfflineStatus(bssid, isOffline, lastSeenTimestamp)
+            kotlin.Result.success(Unit)
+        } catch (e: Exception) {
+            kotlin.Result.failure(e)
+        }
+    }
 }

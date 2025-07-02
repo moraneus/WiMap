@@ -9,7 +9,7 @@ import android.content.Context
 
 @Database(
     entities = [PinnedNetwork::class, TemporaryNetworkData::class],
-    version = 3, // Incremented version to include TemporaryNetworkData
+    version = 4, // Incremented version to include offline status tracking
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -50,6 +50,14 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        // Migration from version 3 to 4 to add offline status tracking
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("ALTER TABLE pinned_networks ADD COLUMN isOffline INTEGER NOT NULL DEFAULT 0")
+                database.execSQL("ALTER TABLE pinned_networks ADD COLUMN lastSeenTimestamp INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -57,7 +65,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "wifi_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
                     .fallbackToDestructiveMigration() // For development - remove in production
                     .build()
                 INSTANCE = instance

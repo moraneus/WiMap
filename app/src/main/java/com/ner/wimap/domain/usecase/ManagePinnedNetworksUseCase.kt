@@ -60,6 +60,9 @@ class ManagePinnedNetworksUseCase @Inject constructor(
     
     suspend fun clearAllPinnedNetworks(): kotlin.Result<Unit> = 
         pinnedNetworkRepository.clearAllPinnedNetworks()
+        
+    suspend fun updateOfflineStatus(bssid: String, isOffline: Boolean, lastSeenTimestamp: Long): kotlin.Result<Unit> = 
+        pinnedNetworkRepository.updateOfflineStatus(bssid, isOffline, lastSeenTimestamp)
 
     /**
      * Deletes a photo file from the filesystem

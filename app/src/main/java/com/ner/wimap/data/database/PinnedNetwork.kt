@@ -18,5 +18,7 @@ data class PinnedNetwork(
     val comment: String? = null,
     val savedPassword: String? = null,
     val photoUri: String? = null,
-    val pinnedAt: Long = System.currentTimeMillis()
+    val pinnedAt: Long = System.currentTimeMillis(),
+    val isOffline: Boolean = false, // Track if network is currently offline/unavailable
+    val lastSeenTimestamp: Long = timestamp // Track when network was last seen in scans
 )
