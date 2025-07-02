@@ -136,17 +136,17 @@ class AdManager @Inject constructor(
     /**
      * Call this when scan starts - shows ad every 3 scans
      */
-    fun onScanStarted(onAdShown: () -> Unit = {}) {
+    fun onScanStarted(onContinue: () -> Unit) {
         Log.d(TAG, "AdManager.onScanStarted called")
-        interstitialAdManager.onScanStarted(onAdShown)
+        interstitialAdManager.onScanStarted(onContinue)
     }
     
     /**
      * Show interstitial ad for export/share actions
      */
-    fun showAdForExport(onAdShown: () -> Unit = {}) {
+    fun showAdForExport(onContinue: () -> Unit) {
         Log.d(TAG, "AdManager.showAdForExport called")
-        interstitialAdManager.showAdForExport(onAdShown)
+        interstitialAdManager.showAdForExport(onContinue)
     }
     
     /**
@@ -157,9 +157,23 @@ class AdManager @Inject constructor(
     }
     
     /**
+     * Reset scan counter for testing
+     */
+    fun resetScanCounter() {
+        interstitialAdManager.resetScanCounter()
+    }
+    
+    /**
      * Set the current activity for showing interstitial ads
      */
     fun setCurrentActivity(activity: androidx.activity.ComponentActivity?) {
-        interstitialAdManager.setCurrentActivity(activity)
+        interstitialAdManager.setCurrentActivity(activity as? Activity)
+    }
+    
+    /**
+     * Preload interstitial ad on app startup
+     */
+    fun preloadInterstitialAd(context: Context) {
+        interstitialAdManager.preloadAd()
     }
 }

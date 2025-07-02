@@ -231,9 +231,9 @@ class MainViewModel @Inject constructor(
     fun startScan() {
         viewModelScope.launch {
             try {
-                // Call ad manager for scan counter (may show interstitial ad every 3 scans)
+                // Handle scan with potential ad display every 3rd scan
                 adManager.onScanStarted {
-                    // This callback is called after the ad is shown (or immediately if no ad)
+                    // This runs after ad is shown (or immediately if no ad)
                     viewModelScope.launch {
                         try {
                             // Clear previous results before starting a fresh scan
@@ -242,6 +242,7 @@ class MainViewModel @Inject constructor(
                             // Mark that a scan has been started
                             _hasEverScanned.value = true
                             
+                            // Start the scan
                             val result = scanWifiNetworksUseCase.startScan()
                             if (result.isFailure) {
                                 val exception = result.exceptionOrNull()
@@ -260,7 +261,7 @@ class MainViewModel @Inject constructor(
                     }
                 }
             } catch (e: Exception) {
-                _permissionsRationaleMessage.value = "Error with ad manager: ${e.message}"
+                _permissionsRationaleMessage.value = "Error with scan initialization: ${e.message}"
                 _showPermissionRationaleDialog.value = true
             }
         }

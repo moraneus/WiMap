@@ -59,6 +59,9 @@ class MainActivity : ComponentActivity() {
         
         // Set this activity for interstitial ads
         adManager.setCurrentActivity(this)
+        
+        // Preload interstitial ad
+        adManager.preloadInterstitialAd(this)
 
         setContent {
             WiMapTheme {
