@@ -14,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -35,21 +36,29 @@ import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
 import com.ner.wimap.ads.AdMobManager
 import com.ner.wimap.ui.dialogs.PrivacyConsentDialog
+import com.ner.wimap.ui.dialogs.ExportSuccessDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
 
+    @Inject
+    lateinit var adManager: com.ner.wimap.ads.AdManager
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
-        // Preload interstitial ad
-        AdMobManager.loadInterstitialAd(this)
+        // Initialize AdMob SDK
+        adManager.initialize(this)
+        
+        // Set this activity for interstitial ads
+        adManager.setCurrentActivity(this)
 
         setContent {
             WiMapTheme {
@@ -61,6 +70,24 @@ class MainActivity : ComponentActivity() {
                 }
             }
         }
+    }
+    
+    override fun onResume() {
+        super.onResume()
+        // Update the activity reference when resuming
+        adManager.setCurrentActivity(this)
+    }
+    
+    override fun onPause() {
+        super.onPause()
+        // Clear the activity reference when pausing
+        adManager.setCurrentActivity(null)
+    }
+    
+    override fun onDestroy() {
+        super.onDestroy()
+        // Clear the activity reference
+        adManager.setCurrentActivity(null)
     }
 
     @Composable
@@ -129,17 +156,25 @@ class MainActivity : ComponentActivity() {
         val requestPermissionsAction by viewModel.requestPermissionsAction.collectAsState()
         val navigateToAppSettingsAction by viewModel.navigateToAppSettingsAction.collectAsState()
 
-        // Handle export status/error feedback
+        // Export success/error dialog state
+        var showExportSuccessDialog by remember { mutableStateOf(false) }
+        var exportSuccessMessage by remember { mutableStateOf("") }
+        var showExportErrorDialog by remember { mutableStateOf(false) }
+        var exportErrorMessage by remember { mutableStateOf("") }
+
+        // Handle export status/error feedback with dialogs
         LaunchedEffect(exportStatus) {
             exportStatus?.let {
-                snackbarHostState.showSnackbar(it)
+                exportSuccessMessage = it
+                showExportSuccessDialog = true
                 viewModel.clearExportStatus()
             }
         }
 
         LaunchedEffect(exportError) {
             exportError?.let {
-                snackbarHostState.showSnackbar("Export Error: $it")
+                exportErrorMessage = it
+                showExportErrorDialog = true
                 viewModel.clearExportError()
             }
         }
@@ -476,5 +511,37 @@ class MainActivity : ComponentActivity() {
             onConsentDenied = { viewModel.onPrivacyConsentDenied() },
             onDismiss = { viewModel.dismissPrivacyConsentDialog() }
         )
+        
+        // Export Success Dialog
+        if (showExportSuccessDialog) {
+            ExportSuccessDialog(
+                message = exportSuccessMessage,
+                onDismiss = { showExportSuccessDialog = false }
+            )
+        }
+        
+        // Export Error Dialog
+        if (showExportErrorDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { showExportErrorDialog = false },
+                title = {
+                    androidx.compose.material3.Text(
+                        text = "Export Error",
+                        style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
+                    )
+                },
+                text = {
+                    androidx.compose.material3.Text(text = exportErrorMessage)
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { showExportErrorDialog = false }
+                    ) {
+                        androidx.compose.material3.Text("OK")
+                    }
+                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            )
+        }
     }
 }

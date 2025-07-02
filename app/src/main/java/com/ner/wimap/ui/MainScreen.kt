@@ -30,6 +30,10 @@ import com.ner.wimap.ui.dialogs.*
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
 import com.ner.wimap.ads.NativeAdCard
+import com.ner.wimap.ads.WorkingNativeAdCard
+import com.ner.wimap.ads.ClickableNativeAdCard
+import com.ner.wimap.ads.WorkingClickableNativeAd
+import com.ner.wimap.ads.StableNativeAdCard
 
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -200,6 +204,17 @@ fun MainScreen(
                             )
                         }
                     }
+                    
+                    // Persistent native ad as first card
+                    item {
+                        key("persistent_native_ad") {
+                            StableNativeAdCard(
+                                modifier = Modifier.padding(vertical = 8.dp),
+                                isPersistent = true
+                            )
+                        }
+                    }
+                    
                     // Separate online and offline networks
                     val onlineNetworks = wifiNetworks.filter { !it.isOffline }
                     val offlineNetworks = wifiNetworks.filter { it.isOffline }
@@ -209,9 +224,9 @@ fun MainScreen(
                         items = onlineNetworks,
                         key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
                     ) { index, network ->
-                        // Show native ad after every 6 cards
-                        if (index > 0 && index % 6 == 0) {
-                            NativeAdCard(
+                        // Show native ad after every 3 cards exactly
+                        if (index > 0 && index % 3 == 0) {
+                            StableNativeAdCard(
                                 modifier = Modifier.padding(vertical = 8.dp)
                             )
                         }
@@ -254,10 +269,16 @@ fun MainScreen(
                             }
                         }
                         
-                        items(
+                        itemsIndexed(
                             items = offlineNetworks,
-                            key = { network -> "${network.bssid}_${network.ssid}_${network.rssi}_offline" }
-                        ) { network ->
+                            key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_offline" }
+                        ) { index, network ->
+                            // Show native ad after every 3 cards exactly
+                            if (index > 0 && index % 3 == 0) {
+                                StableNativeAdCard(
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
                             // Check if this network is currently pinned
                             val isCurrentlyPinned = pinnedNetworks.any { it.bssid == network.bssid }
                             

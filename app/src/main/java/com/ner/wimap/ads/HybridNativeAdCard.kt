@@ -3,6 +3,7 @@ package com.ner.wimap.ads
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -25,17 +26,16 @@ import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.ner.wimap.BuildConfig
-import com.ner.wimap.ads.AdManager
 import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
 
 /**
- * Native Ad Card that matches the Wi-Fi network card styling
+ * Hybrid Native Ad Card that combines caching with fallback loading
+ * This ensures ads are always displayed, either from cache or loaded on-demand
  */
 @Composable
-fun NativeAdCard(
+fun HybridNativeAdCard(
     modifier: Modifier = Modifier,
     isPersistent: Boolean = false
 ) {
@@ -45,53 +45,68 @@ fun NativeAdCard(
     var hasError by remember { mutableStateOf(false) }
     val coroutineScope = rememberCoroutineScope()
     
-    // Get AdManager instance
-    val adManager = remember {
+    // Get AdManager and NativeAdCache instances
+    val (adManager, adCache) = remember {
         val hiltEntryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             AdManagerEntryPoint::class.java
         )
-        hiltEntryPoint.adManager()
+        Pair(hiltEntryPoint.adManager(), hiltEntryPoint.nativeAdCache())
     }
     
-    // Load native ad
+    val cacheSize by adCache.cacheSize.collectAsState()
+    
+    // Initialize cache on first composition
     LaunchedEffect(Unit) {
-        android.util.Log.d("NativeAdCard", "Loading native ad (isPersistent: $isPersistent)")
-        adManager.loadNativeAd(
-            context = context,
-            onAdLoaded = { ad ->
-                android.util.Log.d("NativeAdCard", "Native ad loaded successfully (isPersistent: $isPersistent)")
-                nativeAd = ad
+        adCache.initialize(context)
+    }
+    
+    // Try to get ad from cache first, then fall back to loading
+    LaunchedEffect(cacheSize) {
+        if (nativeAd == null) {
+            // Try to get from cache
+            val cachedAd = adCache.getAd()
+            if (cachedAd != null) {
+                android.util.Log.d("HybridNativeAdCard", "Got ad from cache")
+                nativeAd = cachedAd
                 isLoading = false
                 hasError = false
-            },
-            onAdFailedToLoad = { error ->
-                android.util.Log.e("NativeAdCard", "Native ad failed to load (isPersistent: $isPersistent): ${error.message}")
-                isLoading = false
-                hasError = true
+            } else {
+                // No cached ad available, load one directly
+                android.util.Log.d("HybridNativeAdCard", "No cached ad, loading directly")
+                isLoading = true
                 
-                // Retry after a delay for both persistent and regular ads
-                coroutineScope.launch {
-                    val retryDelay = if (isPersistent) 3000L else 2000L // Faster retry for regular ads
-                    delay(retryDelay)
-                    android.util.Log.d("NativeAdCard", "Retrying native ad (isPersistent: $isPersistent)...")
-                    
-                    // Try loading again
-                    adManager.loadNativeAd(
-                        context = context,
-                        onAdLoaded = { ad ->
-                            android.util.Log.d("NativeAdCard", "Native ad retry successful (isPersistent: $isPersistent)")
-                            nativeAd = ad
-                            hasError = false
-                        },
-                        onAdFailedToLoad = { retryError ->
-                            android.util.Log.e("NativeAdCard", "Native ad retry failed (isPersistent: $isPersistent): ${retryError.message}")
-                            // Final failure, show placeholder
+                adManager.loadNativeAd(
+                    context = context,
+                    onAdLoaded = { ad ->
+                        android.util.Log.d("HybridNativeAdCard", "Direct ad loaded successfully")
+                        nativeAd = ad
+                        isLoading = false
+                        hasError = false
+                    },
+                    onAdFailedToLoad = { error ->
+                        android.util.Log.e("HybridNativeAdCard", "Direct ad failed to load: ${error.message}")
+                        isLoading = false
+                        hasError = true
+                        
+                        // Retry for persistent ads
+                        if (isPersistent) {
+                            coroutineScope.launch {
+                                delay(3000)
+                                if (nativeAd == null) {
+                                    // Try cache again
+                                    val retryAd = adCache.getAd()
+                                    if (retryAd != null) {
+                                        nativeAd = retryAd
+                                        hasError = false
+                                    }
+                                }
+                            }
                         }
-                    )
-                }
+                    }
+                )
             }
-        )
+        }
     }
     
     // Dispose of ad when composable is removed
@@ -102,54 +117,24 @@ fun NativeAdCard(
     }
     
     when {
-        isLoading -> {
-            NativeAdLoadingCard(modifier = modifier)
-        }
-        hasError -> {
-            if (isPersistent) {
-                // For persistent ads, show a placeholder card instead of disappearing
-                NativeAdPlaceholderCard(modifier = modifier)
-            } else {
-                // For regular ads, show a minimal placeholder to avoid gaps
-                Card(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .shadow(1.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (BuildConfig.DEBUG) Color(0xFFFFEBEE) else Color(0xFFF8F9FA) // Light red in debug, light gray in release
-                    ),
-                    border = BorderStroke(1.dp, if (BuildConfig.DEBUG) Color(0xFFE57373) else Color(0xFFE0E0E0)) // Red in debug, gray in release
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (BuildConfig.DEBUG) {
-                            Text(
-                                text = "Ad Failed to Load",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFD32F2F)
-                            )
-                        } else {
-                            // Show a subtle "Sponsored" placeholder in release
-                            Text(
-                                text = "Sponsored Content",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
         nativeAd != null -> {
+            // We have an ad - show it immediately
             NativeAdContent(
                 nativeAd = nativeAd!!,
                 modifier = modifier
             )
+        }
+        isLoading && isPersistent -> {
+            // Only show loading for persistent ads
+            NativeAdLoadingCard(modifier = modifier)
+        }
+        hasError && isPersistent -> {
+            // Only show placeholder for persistent ads
+            NativeAdPlaceholderCard(modifier = modifier)
+        }
+        else -> {
+            // For regular ads, don't show anything if no ad is available
+            Box(modifier = modifier)
         }
     }
 }
@@ -165,9 +150,9 @@ private fun NativeAdPlaceholderCard(modifier: Modifier = Modifier) {
             .shadow(2.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF0F8FF) // Light blue background like regular native ads
+            containerColor = Color(0xFFF0F8FF)
         ),
-        border = BorderStroke(1.dp, Color(0xFF4CAF50)) // Green border to match native ads
+        border = BorderStroke(1.dp, Color(0xFF4CAF50))
     ) {
         Column(
             modifier = Modifier
@@ -175,7 +160,6 @@ private fun NativeAdPlaceholderCard(modifier: Modifier = Modifier) {
                 .padding(16.dp),
             horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            // Sponsored label
             Row(
                 modifier = Modifier
                     .background(
@@ -222,7 +206,6 @@ private fun NativeAdPlaceholderCard(modifier: Modifier = Modifier) {
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Fake CTA button
             Surface(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(8.dp),
@@ -253,7 +236,7 @@ private fun NativeAdLoadingCard(modifier: Modifier = Modifier) {
             .shadow(8.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF0F8FF) // Light blue background
+            containerColor = Color(0xFFF0F8FF)
         ),
         border = BorderStroke(1.dp, Color(0xFFE0E0E0))
     ) {
@@ -286,14 +269,13 @@ private fun NativeAdContent(
             .shadow(8.dp, RoundedCornerShape(16.dp)),
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
-            containerColor = Color(0xFFF0F8FF) // Light blue background to distinguish from Wi-Fi cards
+            containerColor = Color(0xFFF0F8FF)
         ),
-        border = BorderStroke(1.dp, Color(0xFF4CAF50)) // Green border like selected cards
+        border = BorderStroke(1.dp, Color(0xFF4CAF50))
     ) {
         Column(
             modifier = Modifier.padding(16.dp)
         ) {
-            // Sponsored label
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
@@ -328,17 +310,47 @@ private fun NativeAdContent(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Native ad content using XML layout
+            // Test button outside native ad to verify touch events work in Compose
+            Button(
+                onClick = {
+                    android.util.Log.d("ComposeTest", "COMPOSE BUTTON CLICKED! Touch events work in Compose.")
+                },
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("TEST COMPOSE BUTTON - Should Work")
+            }
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
             AndroidView(
                 factory = { context ->
-                    // Inflate the native ad layout
-                    val inflater = android.view.LayoutInflater.from(context)
-                    inflater.inflate(com.ner.wimap.R.layout.native_ad_layout, null) as NativeAdView
+                    NativeAdView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                        
+                        // Critical: Ensure this view intercepts touch events
+                        isClickable = true
+                        isFocusable = true
+                        
+                        // Override touch handling to ensure events reach this view
+                        setOnTouchListener { view, event ->
+                            android.util.Log.d("NativeAdView", "Touch event received: ${event.action}")
+                            false // Let the native ad handle the touch
+                        }
+                        
+                        // Set up click listener
+                        setOnClickListener {
+                            android.util.Log.d("NativeAdView", "NativeAdView clicked!")
+                        }
+                    }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                update = { adView ->
-                    // Populate the native ad view
-                    populateNativeAdView(nativeAd, adView)
+                modifier = Modifier
+                    .fillMaxWidth(),
+                update = { nativeAdView ->
+                    // Re-populate the ad view when it updates
+                    populateNativeAdView(nativeAd, nativeAdView)
                 }
             )
         }
@@ -349,48 +361,90 @@ private fun NativeAdContent(
  * Populate the native ad view with ad content
  */
 private fun populateNativeAdView(nativeAd: NativeAd, nativeAdView: NativeAdView) {
-    // Find views from the inflated layout
-    val headlineView = nativeAdView.findViewById<android.widget.TextView>(com.ner.wimap.R.id.ad_headline)
-    val bodyView = nativeAdView.findViewById<android.widget.TextView>(com.ner.wimap.R.id.ad_body)
-    val callToActionView = nativeAdView.findViewById<android.widget.Button>(com.ner.wimap.R.id.ad_call_to_action)
-    val mediaView = nativeAdView.findViewById<MediaView>(com.ner.wimap.R.id.ad_media)
+    android.util.Log.d("NativeAd", "Starting to populate native ad view")
     
-    // Set the text for each view
-    headlineView.text = nativeAd.headline
-    bodyView.text = nativeAd.body
-    callToActionView.text = nativeAd.callToAction
+    // Clear any existing content
+    nativeAdView.removeAllViews()
     
-    // Handle media content
-    nativeAd.mediaContent?.let { content ->
-        if (content.hasVideoContent() || content.aspectRatio > 0) {
-            mediaView.visibility = android.view.View.VISIBLE
-            mediaView.mediaContent = content
-            nativeAdView.mediaView = mediaView
-        } else {
-            mediaView.visibility = android.view.View.GONE
+    val context = nativeAdView.context
+    
+    // Create a simple, definitely clickable button for testing
+    val testClickView = android.widget.Button(context).apply {
+        text = "TEST CLICK - ${nativeAd.callToAction ?: "Learn More"}"
+        textSize = 14f
+        setBackgroundColor(android.graphics.Color.parseColor("#FF0000")) // Red for visibility
+        setTextColor(android.graphics.Color.WHITE)
+        setPadding(32, 16, 32, 16)
+        
+        // Ensure it's clickable
+        isClickable = true
+        isFocusable = true
+        
+        // Add explicit click listener
+        setOnClickListener {
+            android.util.Log.d("NativeAd", "TEST BUTTON CLICKED!")
         }
-    } ?: run {
-        mediaView.visibility = android.view.View.GONE
+        
+        layoutParams = ViewGroup.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT
+        )
     }
     
-    // Register the views with the native ad view
+    // Create headline view
+    val headlineView = android.widget.TextView(context).apply {
+        text = nativeAd.headline ?: "Sponsored Content"
+        textSize = 16f
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        setTextColor(android.graphics.Color.parseColor("#2C3E50"))
+        maxLines = 2
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setPadding(16, 16, 16, 8)
+    }
+    
+    // Create body view
+    val bodyView = android.widget.TextView(context).apply {
+        text = nativeAd.body ?: "Learn more about this product or service"
+        textSize = 14f
+        setTextColor(android.graphics.Color.parseColor("#7F8C8D"))
+        maxLines = 3
+        ellipsize = android.text.TextUtils.TruncateAt.END
+        setPadding(16, 0, 16, 16)
+    }
+    
+    // Create container
+    val containerLayout = android.widget.LinearLayout(context).apply {
+        orientation = android.widget.LinearLayout.VERTICAL
+        setPadding(0, 0, 0, 0)
+        
+        addView(headlineView)
+        addView(bodyView)
+        addView(testClickView)
+    }
+    
+    // Add container to the native ad view
+    nativeAdView.addView(containerLayout)
+    
+    // Register views with native ad
     nativeAdView.headlineView = headlineView
     nativeAdView.bodyView = bodyView
-    nativeAdView.callToActionView = callToActionView
+    nativeAdView.callToActionView = testClickView
     
-    // CRITICAL: Set the native ad AFTER registering views
+    // Add explicit click listener to the entire ad view
+    nativeAdView.setOnClickListener {
+        android.util.Log.d("NativeAd", "ENTIRE NATIVE AD VIEW CLICKED!")
+    }
+    
+    // Set the native ad - this should enable click tracking
     nativeAdView.setNativeAd(nativeAd)
     
-    // Log for debugging
-    android.util.Log.d("NativeAdCard", "Native ad populated with XML layout: headline=${nativeAd.headline}, cta=${nativeAd.callToAction}")
-}
-
-/**
- * Hilt entry point for accessing AdManager and NativeAdCache in Compose
- */
-@dagger.hilt.EntryPoint
-@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
-interface AdManagerEntryPoint {
-    fun adManager(): AdManager
-    fun nativeAdCache(): NativeAdCache
+    android.util.Log.d("NativeAd", "Native ad view setup complete with test button")
+    
+    // Verify the setup
+    nativeAdView.post {
+        android.util.Log.d("NativeAd", "Ad view isClickable: ${nativeAdView.isClickable}")
+        android.util.Log.d("NativeAd", "Test button isClickable: ${testClickView.isClickable}")
+        android.util.Log.d("NativeAd", "Ad has headline: ${nativeAd.headline}")
+        android.util.Log.d("NativeAd", "Ad has CTA: ${nativeAd.callToAction}")
+    }
 }

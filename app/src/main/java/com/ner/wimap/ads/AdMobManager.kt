@@ -20,14 +20,11 @@ object AdMobManager {
     private const val TEST_NATIVE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110"
     private const val TEST_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
     
-    // Switch between test and production ads
-    private const val USE_TEST_ADS = true // Set to false for production
-    
     val nativeAdUnitId: String
-        get() = if (USE_TEST_ADS) TEST_NATIVE_AD_UNIT_ID else NATIVE_AD_UNIT_ID
+        get() = if (com.ner.wimap.BuildConfig.USE_TEST_ADS) TEST_NATIVE_AD_UNIT_ID else NATIVE_AD_UNIT_ID
     
     private val interstitialAdUnitId: String
-        get() = if (USE_TEST_ADS) TEST_INTERSTITIAL_AD_UNIT_ID else INTERSTITIAL_AD_UNIT_ID
+        get() = if (com.ner.wimap.BuildConfig.USE_TEST_ADS) TEST_INTERSTITIAL_AD_UNIT_ID else INTERSTITIAL_AD_UNIT_ID
     
     // Interstitial ad state
     private var interstitialAd: InterstitialAd? = null

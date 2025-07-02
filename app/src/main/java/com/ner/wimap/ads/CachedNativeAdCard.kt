@@ -25,73 +25,55 @@ import com.google.android.gms.ads.nativead.MediaView
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdView
 import com.ner.wimap.BuildConfig
-import com.ner.wimap.ads.AdManager
 import dagger.hilt.android.EntryPointAccessors
-import kotlinx.coroutines.delay
-import kotlinx.coroutines.launch
-import androidx.compose.runtime.rememberCoroutineScope
+import com.ner.wimap.ads.AdManagerEntryPoint
 
 /**
- * Native Ad Card that matches the Wi-Fi network card styling
+ * Cached Native Ad Card that uses pre-loaded ads for instant display
+ * This provides much better performance than loading ads on-demand
  */
 @Composable
-fun NativeAdCard(
+fun CachedNativeAdCard(
     modifier: Modifier = Modifier,
     isPersistent: Boolean = false
 ) {
     val context = LocalContext.current
     var nativeAd by remember { mutableStateOf<NativeAd?>(null) }
     var isLoading by remember { mutableStateOf(true) }
-    var hasError by remember { mutableStateOf(false) }
-    val coroutineScope = rememberCoroutineScope()
     
-    // Get AdManager instance
-    val adManager = remember {
+    // Get NativeAdCache instance
+    val adCache = remember {
         val hiltEntryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
             AdManagerEntryPoint::class.java
         )
-        hiltEntryPoint.adManager()
+        hiltEntryPoint.nativeAdCache()
     }
     
-    // Load native ad
+    val cacheSize by adCache.cacheSize.collectAsState()
+    val isCacheLoading by adCache.isLoading.collectAsState()
+    
+    // Initialize cache on first composition
     LaunchedEffect(Unit) {
-        android.util.Log.d("NativeAdCard", "Loading native ad (isPersistent: $isPersistent)")
-        adManager.loadNativeAd(
-            context = context,
-            onAdLoaded = { ad ->
-                android.util.Log.d("NativeAdCard", "Native ad loaded successfully (isPersistent: $isPersistent)")
-                nativeAd = ad
-                isLoading = false
-                hasError = false
-            },
-            onAdFailedToLoad = { error ->
-                android.util.Log.e("NativeAdCard", "Native ad failed to load (isPersistent: $isPersistent): ${error.message}")
-                isLoading = false
-                hasError = true
-                
-                // Retry after a delay for both persistent and regular ads
-                coroutineScope.launch {
-                    val retryDelay = if (isPersistent) 3000L else 2000L // Faster retry for regular ads
-                    delay(retryDelay)
-                    android.util.Log.d("NativeAdCard", "Retrying native ad (isPersistent: $isPersistent)...")
-                    
-                    // Try loading again
-                    adManager.loadNativeAd(
-                        context = context,
-                        onAdLoaded = { ad ->
-                            android.util.Log.d("NativeAdCard", "Native ad retry successful (isPersistent: $isPersistent)")
-                            nativeAd = ad
-                            hasError = false
-                        },
-                        onAdFailedToLoad = { retryError ->
-                            android.util.Log.e("NativeAdCard", "Native ad retry failed (isPersistent: $isPersistent): ${retryError.message}")
-                            // Final failure, show placeholder
-                        }
-                    )
-                }
-            }
-        )
+        android.util.Log.d("CachedNativeAdCard", "Initializing ad cache for ${if (isPersistent) "persistent" else "regular"} ad")
+        adCache.initialize(context)
+        android.util.Log.d("CachedNativeAdCard", "Cache stats: ${adCache.getCacheStats()}")
+    }
+    
+    // Try to get a cached ad immediately
+    LaunchedEffect(cacheSize) {
+        if (nativeAd == null && cacheSize > 0) {
+            nativeAd = adCache.getAd()
+            isLoading = false
+            android.util.Log.d("CachedNativeAdCard", "Got cached ad immediately. Remaining: $cacheSize")
+        } else if (nativeAd == null && !isCacheLoading) {
+            // No ads available and not loading - refresh cache
+            isLoading = !isPersistent // Only show loading for persistent ads
+            adCache.refreshCache(context)
+        } else if (nativeAd == null && isCacheLoading) {
+            // Cache is loading - only show loading state for persistent ads
+            isLoading = isPersistent
+        }
     }
     
     // Dispose of ad when composable is removed
@@ -102,60 +84,31 @@ fun NativeAdCard(
     }
     
     when {
-        isLoading -> {
-            NativeAdLoadingCard(modifier = modifier)
-        }
-        hasError -> {
-            if (isPersistent) {
-                // For persistent ads, show a placeholder card instead of disappearing
-                NativeAdPlaceholderCard(modifier = modifier)
-            } else {
-                // For regular ads, show a minimal placeholder to avoid gaps
-                Card(
-                    modifier = modifier
-                        .fillMaxWidth()
-                        .shadow(1.dp, RoundedCornerShape(16.dp)),
-                    shape = RoundedCornerShape(16.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = if (BuildConfig.DEBUG) Color(0xFFFFEBEE) else Color(0xFFF8F9FA) // Light red in debug, light gray in release
-                    ),
-                    border = BorderStroke(1.dp, if (BuildConfig.DEBUG) Color(0xFFE57373) else Color(0xFFE0E0E0)) // Red in debug, gray in release
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .padding(12.dp),
-                        contentAlignment = Alignment.Center
-                    ) {
-                        if (BuildConfig.DEBUG) {
-                            Text(
-                                text = "Ad Failed to Load",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = Color(0xFFD32F2F)
-                            )
-                        } else {
-                            // Show a subtle "Sponsored" placeholder in release
-                            Text(
-                                text = "Sponsored Content",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.4f)
-                            )
-                        }
-                    }
-                }
-            }
-        }
         nativeAd != null -> {
+            // We have an ad - show it immediately
             NativeAdContent(
                 nativeAd = nativeAd!!,
                 modifier = modifier
             )
         }
+        isPersistent -> {
+            // For persistent ads, always show something
+            if (isLoading || isCacheLoading) {
+                NativeAdLoadingCard(modifier = modifier)
+            } else {
+                NativeAdPlaceholderCard(modifier = modifier)
+            }
+        }
+        else -> {
+            // For regular ads, don't show anything if no ad is available
+            // This prevents gaps in the list
+            Box(modifier = modifier)
+        }
     }
 }
 
 /**
- * Placeholder card for persistent ads when loading fails
+ * Placeholder card for persistent ads when no ads are available
  */
 @Composable
 private fun NativeAdPlaceholderCard(modifier: Modifier = Modifier) {
@@ -328,19 +281,21 @@ private fun NativeAdContent(
             
             Spacer(modifier = Modifier.height(12.dp))
             
-            // Native ad content using XML layout
+            // Native ad content
             AndroidView(
                 factory = { context ->
-                    // Inflate the native ad layout
-                    val inflater = android.view.LayoutInflater.from(context)
-                    inflater.inflate(com.ner.wimap.R.layout.native_ad_layout, null) as NativeAdView
+                    NativeAdView(context).apply {
+                        layoutParams = ViewGroup.LayoutParams(
+                            ViewGroup.LayoutParams.MATCH_PARENT,
+                            ViewGroup.LayoutParams.WRAP_CONTENT
+                        )
+                    }
                 },
-                modifier = Modifier.fillMaxWidth(),
-                update = { adView ->
-                    // Populate the native ad view
-                    populateNativeAdView(nativeAd, adView)
-                }
-            )
+                modifier = Modifier.fillMaxWidth()
+            ) { nativeAdView ->
+                // Set up the native ad view
+                populateNativeAdView(nativeAd, nativeAdView)
+            }
         }
     }
 }
@@ -349,48 +304,74 @@ private fun NativeAdContent(
  * Populate the native ad view with ad content
  */
 private fun populateNativeAdView(nativeAd: NativeAd, nativeAdView: NativeAdView) {
-    // Find views from the inflated layout
-    val headlineView = nativeAdView.findViewById<android.widget.TextView>(com.ner.wimap.R.id.ad_headline)
-    val bodyView = nativeAdView.findViewById<android.widget.TextView>(com.ner.wimap.R.id.ad_body)
-    val callToActionView = nativeAdView.findViewById<android.widget.Button>(com.ner.wimap.R.id.ad_call_to_action)
-    val mediaView = nativeAdView.findViewById<MediaView>(com.ner.wimap.R.id.ad_media)
+    // Create a simple layout for the native ad
+    val context = nativeAdView.context
     
-    // Set the text for each view
-    headlineView.text = nativeAd.headline
-    bodyView.text = nativeAd.body
-    callToActionView.text = nativeAd.callToAction
-    
-    // Handle media content
-    nativeAd.mediaContent?.let { content ->
-        if (content.hasVideoContent() || content.aspectRatio > 0) {
-            mediaView.visibility = android.view.View.VISIBLE
-            mediaView.mediaContent = content
-            nativeAdView.mediaView = mediaView
-        } else {
-            mediaView.visibility = android.view.View.GONE
-        }
-    } ?: run {
-        mediaView.visibility = android.view.View.GONE
+    // Create headline text view
+    val headlineView = android.widget.TextView(context).apply {
+        text = nativeAd.headline ?: "Sponsored Content"
+        textSize = 16f
+        setTypeface(null, android.graphics.Typeface.BOLD)
+        setTextColor(android.graphics.Color.parseColor("#2C3E50"))
+        maxLines = 2
+        ellipsize = android.text.TextUtils.TruncateAt.END
     }
     
-    // Register the views with the native ad view
+    // Create body text view
+    val bodyView = android.widget.TextView(context).apply {
+        text = nativeAd.body ?: "Learn more about this product or service"
+        textSize = 14f
+        setTextColor(android.graphics.Color.parseColor("#7F8C8D"))
+        maxLines = 3
+        ellipsize = android.text.TextUtils.TruncateAt.END
+    }
+    
+    // Create call to action button
+    val callToActionView = android.widget.Button(context).apply {
+        text = nativeAd.callToAction ?: "Learn More"
+        textSize = 12f
+        setBackgroundColor(android.graphics.Color.parseColor("#667eea"))
+        setTextColor(android.graphics.Color.WHITE)
+        layoutParams = android.widget.LinearLayout.LayoutParams(
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT,
+            android.widget.LinearLayout.LayoutParams.WRAP_CONTENT
+        ).apply {
+            topMargin = 12
+        }
+    }
+    
+    // Create container layout
+    val containerLayout = android.widget.LinearLayout(context).apply {
+        orientation = android.widget.LinearLayout.VERTICAL
+        addView(headlineView)
+        addView(bodyView)
+        addView(callToActionView)
+    }
+    
+    // Add media view if available
+    nativeAd.mediaContent?.let { mediaContent ->
+        val mediaView = MediaView(context).apply {
+            layoutParams = android.widget.LinearLayout.LayoutParams(
+                android.widget.LinearLayout.LayoutParams.MATCH_PARENT,
+                200 // Fixed height for media
+            ).apply {
+                topMargin = 12
+            }
+        }
+        mediaView.mediaContent = mediaContent
+        containerLayout.addView(mediaView, 2) // Add before CTA button
+        nativeAdView.mediaView = mediaView
+    }
+    
+    // Set up the native ad view
+    nativeAdView.removeAllViews()
+    nativeAdView.addView(containerLayout)
+    
+    // Register views with the native ad
     nativeAdView.headlineView = headlineView
     nativeAdView.bodyView = bodyView
     nativeAdView.callToActionView = callToActionView
     
-    // CRITICAL: Set the native ad AFTER registering views
+    // Register the native ad with the view
     nativeAdView.setNativeAd(nativeAd)
-    
-    // Log for debugging
-    android.util.Log.d("NativeAdCard", "Native ad populated with XML layout: headline=${nativeAd.headline}, cta=${nativeAd.callToAction}")
-}
-
-/**
- * Hilt entry point for accessing AdManager and NativeAdCache in Compose
- */
-@dagger.hilt.EntryPoint
-@dagger.hilt.InstallIn(dagger.hilt.components.SingletonComponent::class)
-interface AdManagerEntryPoint {
-    fun adManager(): AdManager
-    fun nativeAdCache(): NativeAdCache
 }

@@ -231,25 +231,36 @@ class MainViewModel @Inject constructor(
     fun startScan() {
         viewModelScope.launch {
             try {
-                // Clear previous results before starting a fresh scan
-                scanWifiNetworksUseCase.clearNetworks()
-                
-                // Mark that a scan has been started
-                _hasEverScanned.value = true
-                
-                val result = scanWifiNetworksUseCase.startScan()
-                if (result.isFailure) {
-                    val exception = result.exceptionOrNull()
-                    if (exception is SecurityException) {
-                        _permissionsRationaleMessage.value = exception.message ?: "Location and WiFi permissions are required to scan networks."
-                        _showPermissionRationaleDialog.value = true
-                    } else {
-                        _permissionsRationaleMessage.value = "Failed to start scan: ${exception?.message}"
-                        _showPermissionRationaleDialog.value = true
+                // Call ad manager for scan counter (may show interstitial ad every 3 scans)
+                adManager.onScanStarted {
+                    // This callback is called after the ad is shown (or immediately if no ad)
+                    viewModelScope.launch {
+                        try {
+                            // Clear previous results before starting a fresh scan
+                            scanWifiNetworksUseCase.clearNetworks()
+                            
+                            // Mark that a scan has been started
+                            _hasEverScanned.value = true
+                            
+                            val result = scanWifiNetworksUseCase.startScan()
+                            if (result.isFailure) {
+                                val exception = result.exceptionOrNull()
+                                if (exception is SecurityException) {
+                                    _permissionsRationaleMessage.value = exception.message ?: "Location and WiFi permissions are required to scan networks."
+                                    _showPermissionRationaleDialog.value = true
+                                } else {
+                                    _permissionsRationaleMessage.value = "Failed to start scan: ${exception?.message}"
+                                    _showPermissionRationaleDialog.value = true
+                                }
+                            }
+                        } catch (e: Exception) {
+                            _permissionsRationaleMessage.value = "Error starting scan: ${e.message}"
+                            _showPermissionRationaleDialog.value = true
+                        }
                     }
                 }
             } catch (e: Exception) {
-                _permissionsRationaleMessage.value = "Error starting scan: ${e.message}"
+                _permissionsRationaleMessage.value = "Error with ad manager: ${e.message}"
                 _showPermissionRationaleDialog.value = true
             }
         }
@@ -584,24 +595,8 @@ class MainViewModel @Inject constructor(
 
     // Export functions
     fun exportWifiNetworks(context: Context, format: ExportFormat, action: ExportAction) {
-        if (context is android.app.Activity) {
-            adManager.showInterstitialAdBeforeAction(
-                activity = context,
-                onAdDismissed = {
-                    // Execute export after ad is dismissed
-                    viewModelScope.launch {
-                        exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
-                    }
-                },
-                onAdNotAvailable = {
-                    // Execute export if no ad is available
-                    viewModelScope.launch {
-                        exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
-                    }
-                }
-            )
-        } else {
-            // Fallback if context is not Activity
+        adManager.showAdForExport {
+            // Execute export after ad is shown (or immediately if no ad)
             viewModelScope.launch {
                 exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks.value, format, action)
             }
@@ -609,24 +604,8 @@ class MainViewModel @Inject constructor(
     }
 
     fun exportPinnedNetwork(context: Context, network: PinnedNetwork, format: ExportFormat, action: ExportAction) {
-        if (context is android.app.Activity) {
-            adManager.showInterstitialAdBeforeAction(
-                activity = context,
-                onAdDismissed = {
-                    // Execute export after ad is dismissed
-                    viewModelScope.launch {
-                        exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
-                    }
-                },
-                onAdNotAvailable = {
-                    // Execute export if no ad is available
-                    viewModelScope.launch {
-                        exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
-                    }
-                }
-            )
-        } else {
-            // Fallback if context is not Activity
+        adManager.showAdForExport {
+            // Execute export after ad is shown (or immediately if no ad)
             viewModelScope.launch {
                 exportNetworksUseCase.exportPinnedNetwork(context, network, format, action)
             }

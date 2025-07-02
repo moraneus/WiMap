@@ -6,7 +6,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.BorderStroke
@@ -38,6 +38,12 @@ import com.ner.wimap.ui.components.InfoChip
 import com.ner.wimap.ui.components.DetailRow
 import com.ner.wimap.ui.components.ExportFormatDialog
 import com.ner.wimap.ui.components.UnifiedTopAppBar
+import com.ner.wimap.ads.NativeAdCard
+import com.ner.wimap.ads.WorkingNativeAdCard
+import com.ner.wimap.ads.ClickableNativeAdCard
+import com.ner.wimap.ads.WorkingClickableNativeAd
+import com.ner.wimap.ads.StableNativeAdCard
+import com.ner.wimap.ads.BannerAdView
 import com.ner.wimap.ui.components.EnhancedWifiNetworkCard
 import com.ner.wimap.ui.getSignalIcon
 import com.ner.wimap.ui.getSignalColor
@@ -153,89 +159,117 @@ fun PinnedNetworksScreen(
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
+                
+                // Persistent native ad as first card
+                item {
+                    key("persistent_native_ad_pinned") {
+                        StableNativeAdCard(
+                            modifier = Modifier.padding(vertical = 8.dp),
+                            isPersistent = true
+                        )
+                    }
+                }
+                
 
-                items(pinnedNetworks) { network ->
-                    // Convert PinnedNetwork to WifiNetwork for EnhancedWifiNetworkCard
-                    // Validate timestamp - if it's too old or invalid, use current time
-                    val validTimestamp = if (network.timestamp < 1000000000000L) {
-                        System.currentTimeMillis()
-                    } else {
-                        network.timestamp
+                // Use a more complex approach to interleave ads and networks
+                pinnedNetworks.forEachIndexed { index, network ->
+                    // Show native ad after every 3 cards exactly
+                    if (index > 0 && index % 3 == 0) {
+                        item {
+                            key("native_ad_$index") {
+                                StableNativeAdCard(
+                                    modifier = Modifier.padding(vertical = 8.dp)
+                                )
+                            }
+                        }
                     }
                     
-                    val wifiNetwork = WifiNetwork(
-                        ssid = network.ssid,
-                        bssid = network.bssid,
-                        rssi = network.rssi,
-                        channel = network.channel,
-                        security = network.security,
-                        latitude = network.latitude,
-                        longitude = network.longitude,
-                        timestamp = validTimestamp, // Use validated timestamp
-                        comment = network.comment ?: "",
-                        password = network.savedPassword,
-                        photoPath = network.photoUri,
-                        isPinned = true, // Always true for pinned networks screen
-                        // For pinned networks, we don't have peak RSSI data, so use current values
-                        peakRssi = network.rssi,
-                        peakRssiLatitude = network.latitude,
-                        peakRssiLongitude = network.longitude,
-                        lastSeenTimestamp = validTimestamp
-                    )
-                    
-                    SelectableEnhancedWifiNetworkCard(
-                        network = wifiNetwork,
-                        isConnecting = connectingNetworks.contains(network.bssid),
-                        connectionStatus = null,
-                        isMultiSelectMode = isMultiSelectMode,
-                        isSelected = selectedNetworks.contains(network.bssid),
-                        onCardClick = {
-                            if (isMultiSelectMode) {
-                                selectedNetworks = if (selectedNetworks.contains(network.bssid)) {
-                                    selectedNetworks - network.bssid
-                                } else {
-                                    selectedNetworks + network.bssid
+                    // Network card item
+                    item {
+                        key("${network.bssid}_${network.ssid}_pinned") {
+                            // Convert PinnedNetwork to WifiNetwork for EnhancedWifiNetworkCard
+                            // Validate timestamp - if it's too old or invalid, use current time
+                            val validTimestamp = if (network.timestamp < 1000000000000L) {
+                                System.currentTimeMillis()
+                            } else {
+                                network.timestamp
+                            }
+                            
+                            val wifiNetwork = WifiNetwork(
+                                ssid = network.ssid,
+                                bssid = network.bssid,
+                                rssi = network.rssi,
+                                channel = network.channel,
+                                security = network.security,
+                                latitude = network.latitude,
+                                longitude = network.longitude,
+                                timestamp = validTimestamp, // Use validated timestamp
+                                comment = network.comment ?: "",
+                                password = network.savedPassword,
+                                photoPath = network.photoUri,
+                                isPinned = true, // Always true for pinned networks screen
+                                // For pinned networks, we don't have peak RSSI data, so use current values
+                                peakRssi = network.rssi,
+                                peakRssiLatitude = network.latitude,
+                                peakRssiLongitude = network.longitude,
+                                lastSeenTimestamp = validTimestamp
+                            )
+                            
+                            SelectableEnhancedWifiNetworkCard(
+                                network = wifiNetwork,
+                                isConnecting = connectingNetworks.contains(network.bssid),
+                                connectionStatus = null,
+                                isMultiSelectMode = isMultiSelectMode,
+                                isSelected = selectedNetworks.contains(network.bssid),
+                                onCardClick = {
+                                    if (isMultiSelectMode) {
+                                        selectedNetworks = if (selectedNetworks.contains(network.bssid)) {
+                                            selectedNetworks - network.bssid
+                                        } else {
+                                            selectedNetworks + network.bssid
+                                        }
+                                        
+                                        // Exit multi-select mode if no items selected
+                                        if (selectedNetworks.isEmpty()) {
+                                            isMultiSelectMode = false
+                                        }
+                                    }
+                                },
+                                onCardLongClick = {
+                                    if (!isMultiSelectMode) {
+                                        hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
+                                        isMultiSelectMode = true
+                                        selectedNetworks = setOf(network.bssid)
+                                    }
+                                },
+                                onPinClick = { bssid, isPinned ->
+                                    // On unpin, delete the network
+                                    if (!isPinned) {
+                                        onDeletePinnedNetwork(network)
+                                    }
+                                },
+                                onConnectClick = { _ ->
+                                    onConnectToPinnedNetwork(network)
+                                },
+                                onCancelConnectionClick = { /* Not needed for pinned networks */ },
+                                onMoreInfoClick = { _ ->
+                                    if (!isMultiSelectMode) {
+                                        selectedNetwork = network
+                                        showActionMenu = true
+                                    }
+                                },
+                                onShowOnMapClick = {
+                                    onShowNetworksOnMap(listOf(network))
+                                },
+                                onUpdateData = { bssid, ssid, comment, password, photoPath ->
+                                    onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, false)
+                                },
+                                onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
+                                    onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, clearPhoto)
                                 }
-                                
-                                // Exit multi-select mode if no items selected
-                                if (selectedNetworks.isEmpty()) {
-                                    isMultiSelectMode = false
-                                }
-                            }
-                        },
-                        onCardLongClick = {
-                            if (!isMultiSelectMode) {
-                                hapticFeedback.performHapticFeedback(HapticFeedbackType.LongPress)
-                                isMultiSelectMode = true
-                                selectedNetworks = setOf(network.bssid)
-                            }
-                        },
-                        onPinClick = { bssid, isPinned ->
-                            // On unpin, delete the network
-                            if (!isPinned) {
-                                onDeletePinnedNetwork(network)
-                            }
-                        },
-                        onConnectClick = { _ ->
-                            onConnectToPinnedNetwork(network)
-                        },
-                        onCancelConnectionClick = { /* Not needed for pinned networks */ },
-                        onMoreInfoClick = { _ ->
-                            if (!isMultiSelectMode) {
-                                selectedNetwork = network
-                                showActionMenu = true
-                            }
-                        },
-                        onShowOnMapClick = {
-                            onShowNetworksOnMap(listOf(network))
-                        },
-                        onUpdateData = { bssid, ssid, comment, password, photoPath ->
-                            onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, false)
-                        },
-                        onUpdateDataWithPhotoDeletion = { bssid, ssid, comment, password, photoPath, clearPhoto ->
-                            onUpdatePinnedNetworkData(bssid, ssid, comment, password, photoPath, clearPhoto)
+                            )
                         }
-                    )
+                    }
                 }
             }
 
@@ -267,7 +301,20 @@ fun PinnedNetworksScreen(
                             // Don't clear selection here - let it be cleared when navigating away
                         }
                     },
-                    modifier = Modifier.align(Alignment.BottomCenter)
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .padding(bottom = if (!isMultiSelectMode) 60.dp else 0.dp) // Add padding when banner is visible
+                )
+            }
+            
+            // Banner Ad at the bottom (hide when in multi-select mode)
+            if (!isMultiSelectMode) {
+                BannerAdView(
+                    modifier = Modifier
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    isPinnedScreen = true
                 )
             }
         }
@@ -816,47 +863,19 @@ fun SelectableEnhancedWifiNetworkCard(
                 RoundedCornerShape(16.dp)
             )
     ) {
-        // Apply selection styling with solid background
-        if (isSelected && isMultiSelectMode) {
-            // Wrap in a card with solid light green background
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .shadow(12.dp, RoundedCornerShape(16.dp)),
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(
-                    containerColor = Color(0xFFE8F5E8) // Solid light green for selected
-                ),
-                border = BorderStroke(2.dp, Color(0xFF4CAF50)) // Green border
-            ) {
-                Box(modifier = Modifier.padding(4.dp)) {
-                    EnhancedWifiNetworkCard(
-                        network = network,
-                        isConnecting = isConnecting,
-                        connectionStatus = connectionStatus,
-                        onPinClick = onPinClick,
-                        onConnectClick = onConnectClick,
-                        onCancelConnectionClick = { onCancelConnectionClick(network.bssid) },
-                        onMoreInfoClick = onMoreInfoClick,
-                        onUpdateData = onUpdateData,
-                        onUpdateDataWithPhotoDeletion = onUpdateDataWithPhotoDeletion
-                    )
-                }
-            }
-        } else {
-            // Normal card without selection styling
-            EnhancedWifiNetworkCard(
-                network = network,
-                isConnecting = isConnecting,
-                connectionStatus = connectionStatus,
-                onPinClick = onPinClick,
-                onConnectClick = onConnectClick,
-                onCancelConnectionClick = { onCancelConnectionClick(network.bssid) },
-                onMoreInfoClick = onMoreInfoClick,
-                onUpdateData = onUpdateData,
-                onUpdateDataWithPhotoDeletion = onUpdateDataWithPhotoDeletion
-            )
-        }
+        // Use EnhancedWifiNetworkCard directly - it will handle its own selection styling
+        EnhancedWifiNetworkCard(
+            network = network,
+            isConnecting = isConnecting,
+            connectionStatus = connectionStatus,
+            isSelected = isSelected && isMultiSelectMode,
+            onPinClick = onPinClick,
+            onConnectClick = onConnectClick,
+            onCancelConnectionClick = { onCancelConnectionClick(network.bssid) },
+            onMoreInfoClick = onMoreInfoClick,
+            onUpdateData = onUpdateData,
+            onUpdateDataWithPhotoDeletion = onUpdateDataWithPhotoDeletion
+        )
         
         // Show checkmark in top-left corner when in multi-select mode
         if (isMultiSelectMode) {

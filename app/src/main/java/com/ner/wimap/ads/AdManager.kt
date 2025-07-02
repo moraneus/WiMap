@@ -16,7 +16,9 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 @Singleton
-class AdManager @Inject constructor() {
+class AdManager @Inject constructor(
+    private val interstitialAdManager: InterstitialAdManager
+) {
     
     companion object {
         private const val TAG = "AdManager"
@@ -24,16 +26,16 @@ class AdManager @Inject constructor() {
         // Test ad unit IDs (for development)
         private const val TEST_NATIVE_AD_UNIT_ID = "ca-app-pub-3940256099942544/2247696110"
         private const val TEST_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-3940256099942544/1033173712"
+        private const val TEST_BANNER_AD_UNIT_ID = "ca-app-pub-3940256099942544/6300978111"
         
         // Production ad unit IDs
         private const val PROD_NATIVE_AD_UNIT_ID = "ca-app-pub-9891349918663384/3021988773"
         private const val PROD_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-9891349918663384/5592311790"
+        private const val PROD_BANNER_AD_UNIT_ID = "ca-app-pub-9891349918663384/8828865130"
+        private const val PROD_PINNED_BANNER_AD_UNIT_ID = "ca-app-pub-9891349918663384/1975149340"
     }
     
-    private var interstitialAd: InterstitialAd? = null
-    private var isInterstitialLoading = false
-    private var lastInterstitialShownTime = 0L
-    private val interstitialCooldownMs = 5 * 60 * 1000L // 5 minutes cooldown
+    // Removed duplicate interstitial ad handling - now handled by InterstitialAdManager
     
     /**
      * Initialize AdMob SDK
@@ -45,17 +47,21 @@ class AdManager @Inject constructor() {
         
         if (BuildConfig.DEBUG) {
             Log.d(TAG, "Using test ads for debug build")
+            // Configure test device
+            val testDeviceIds = listOf("DD3E8A6B792D084D9CF7831C70581CCB")
+            val configuration = RequestConfiguration.Builder()
+                .setTestDeviceIds(testDeviceIds)
+                .build()
+            MobileAds.setRequestConfiguration(configuration)
+            Log.d(TAG, "Test device configured: $testDeviceIds")
         }
-        
-        // Preload interstitial ad
-        loadInterstitialAd(context)
     }
     
     /**
      * Get the appropriate native ad unit ID based on build type
      */
     fun getNativeAdUnitId(): String {
-        return if (BuildConfig.DEBUG) {
+        return if (BuildConfig.USE_TEST_ADS) {
             TEST_NATIVE_AD_UNIT_ID
         } else {
             PROD_NATIVE_AD_UNIT_ID
@@ -63,15 +69,27 @@ class AdManager @Inject constructor() {
     }
     
     /**
-     * Get the appropriate interstitial ad unit ID based on build type
+     * Get the appropriate banner ad unit ID based on build type
      */
-    private fun getInterstitialAdUnitId(): String {
-        return if (BuildConfig.DEBUG) {
-            TEST_INTERSTITIAL_AD_UNIT_ID
+    fun getBannerAdUnitId(): String {
+        return if (BuildConfig.USE_TEST_ADS) {
+            TEST_BANNER_AD_UNIT_ID
         } else {
-            PROD_INTERSTITIAL_AD_UNIT_ID
+            PROD_BANNER_AD_UNIT_ID
         }
     }
+    
+    /**
+     * Get the appropriate pinned screen banner ad unit ID based on build type
+     */
+    fun getPinnedBannerAdUnitId(): String {
+        return if (BuildConfig.USE_TEST_ADS) {
+            TEST_BANNER_AD_UNIT_ID
+        } else {
+            PROD_PINNED_BANNER_AD_UNIT_ID
+        }
+    }
+    
     
     /**
      * Load a native ad
@@ -104,98 +122,7 @@ class AdManager @Inject constructor() {
         }
     }
     
-    /**
-     * Load interstitial ad in background
-     */
-    private fun loadInterstitialAd(context: Context) {
-        if (isInterstitialLoading || interstitialAd != null) {
-            return
-        }
-        
-        isInterstitialLoading = true
-        val adRequest = AdRequest.Builder().build()
-        
-        InterstitialAd.load(
-            context,
-            getInterstitialAdUnitId(),
-            adRequest,
-            object : InterstitialAdLoadCallback() {
-                override fun onAdFailedToLoad(adError: LoadAdError) {
-                    Log.e(TAG, "Interstitial ad failed to load: ${adError.message}")
-                    interstitialAd = null
-                    isInterstitialLoading = false
-                }
-                
-                override fun onAdLoaded(ad: InterstitialAd) {
-                    Log.d(TAG, "Interstitial ad loaded successfully")
-                    interstitialAd = ad
-                    isInterstitialLoading = false
-                    
-                    ad.fullScreenContentCallback = object : FullScreenContentCallback() {
-                        override fun onAdClicked() {
-                            Log.d(TAG, "Interstitial ad was clicked")
-                        }
-                        
-                        override fun onAdDismissedFullScreenContent() {
-                            Log.d(TAG, "Interstitial ad dismissed")
-                            interstitialAd = null
-                            lastInterstitialShownTime = System.currentTimeMillis()
-                            // Preload next ad
-                            loadInterstitialAd(context)
-                        }
-                        
-                        override fun onAdFailedToShowFullScreenContent(adError: AdError) {
-                            Log.e(TAG, "Interstitial ad failed to show: ${adError.message}")
-                            interstitialAd = null
-                        }
-                        
-                        override fun onAdImpression() {
-                            Log.d(TAG, "Interstitial ad recorded an impression")
-                        }
-                        
-                        override fun onAdShowedFullScreenContent() {
-                            Log.d(TAG, "Interstitial ad showed fullscreen content")
-                        }
-                    }
-                }
-            }
-        )
-    }
     
-    /**
-     * Show interstitial ad before key actions (export, share)
-     * @deprecated Use showFullScreenTimedAd instead for better UX
-     */
-    @Deprecated("Use showFullScreenTimedAd instead")
-    fun showInterstitialAdBeforeAction(
-        activity: Activity,
-        onAdDismissed: () -> Unit,
-        onAdNotAvailable: () -> Unit
-    ) {
-        // Fallback to new timed ad system
-        showFullScreenTimedAd(onAdDismissed, onAdNotAvailable)
-    }
-    
-    /**
-     * Show full-screen timed ad with skip functionality (new implementation)
-     */
-    fun showFullScreenTimedAd(
-        onAdCompleted: () -> Unit,
-        onAdNotAvailable: () -> Unit
-    ): Boolean {
-        val currentTime = System.currentTimeMillis()
-        
-        // Check cooldown period
-        if (currentTime - lastInterstitialShownTime < interstitialCooldownMs) {
-            Log.d(TAG, "Full-screen ad in cooldown period, proceeding without ad")
-            onAdNotAvailable()
-            return false
-        }
-        
-        Log.d(TAG, "Showing full-screen timed ad")
-        lastInterstitialShownTime = currentTime
-        return true
-    }
     
     /**
      * Check if we should show native ads
@@ -205,12 +132,34 @@ class AdManager @Inject constructor() {
         return index > 0 && (index + 1) % 6 == 0
     }
     
+    
     /**
-     * Preload interstitial ad for better user experience
+     * Call this when scan starts - shows ad every 3 scans
      */
-    fun preloadInterstitialAd(context: Context) {
-        if (interstitialAd == null && !isInterstitialLoading) {
-            loadInterstitialAd(context)
-        }
+    fun onScanStarted(onAdShown: () -> Unit = {}) {
+        Log.d(TAG, "AdManager.onScanStarted called")
+        interstitialAdManager.onScanStarted(onAdShown)
+    }
+    
+    /**
+     * Show interstitial ad for export/share actions
+     */
+    fun showAdForExport(onAdShown: () -> Unit = {}) {
+        Log.d(TAG, "AdManager.showAdForExport called")
+        interstitialAdManager.showAdForExport(onAdShown)
+    }
+    
+    /**
+     * Get current scan count for debugging
+     */
+    fun getScanCount(): Int {
+        return interstitialAdManager.getScanCount()
+    }
+    
+    /**
+     * Set the current activity for showing interstitial ads
+     */
+    fun setCurrentActivity(activity: androidx.activity.ComponentActivity?) {
+        interstitialAdManager.setCurrentActivity(activity)
     }
 }

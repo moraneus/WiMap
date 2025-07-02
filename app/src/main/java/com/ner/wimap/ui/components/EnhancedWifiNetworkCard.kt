@@ -150,7 +150,7 @@ fun EnhancedWifiNetworkCard(
         ),
         elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         border = when {
-            isSelected -> BorderStroke(3.dp, MaterialTheme.colorScheme.primary)
+            isSelected -> BorderStroke(3.dp, Color(0xFF4CAF50)) // Green border for selected
             actuallyPinned -> BorderStroke(2.5.dp, MaterialTheme.colorScheme.primary)
             else -> null
         }

@@ -34,6 +34,7 @@ import com.google.maps.android.compose.*
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.ui.components.UnifiedTopAppBar
 import com.ner.wimap.utils.OUILookupManager
+import com.ner.wimap.ads.BannerAdView
 import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
@@ -192,7 +193,7 @@ fun MapsScreenWrapper(
                 isFilteredView = isFilteredView,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(16.dp)
+                    .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 70.dp)
             )
             
             // Floating Action Button - either menu or list
@@ -204,7 +205,7 @@ fun MapsScreenWrapper(
                         onClearSelection = onClearSelection,
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(16.dp)
+                            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 70.dp)
                             .zIndex(1f)
                     )
                 } else {
@@ -213,7 +214,7 @@ fun MapsScreenWrapper(
                         onClick = { showNetworkList = true },
                         modifier = Modifier
                             .align(Alignment.BottomEnd)
-                            .padding(16.dp)
+                            .padding(start = 16.dp, top = 16.dp, end = 16.dp, bottom = 70.dp)
                             .zIndex(1f)
                     )
                 }
@@ -227,6 +228,14 @@ fun MapsScreenWrapper(
                 }
             }
         }
+        
+        // Banner Ad at the bottom of the screen
+        BannerAdView(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 4.dp),
+            isPinnedScreen = false
+        )
     }
     
     // Network List Bottom Sheet
