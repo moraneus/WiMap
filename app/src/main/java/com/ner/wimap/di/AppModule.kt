@@ -1,6 +1,7 @@
 package com.ner.wimap.di
 
 import android.content.Context
+import android.content.SharedPreferences
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ner.wimap.ads.AdManager
 import com.ner.wimap.ads.NativeAdCache
@@ -40,5 +41,11 @@ object AppModule {
     @Singleton
     fun provideNativeAdCache(adManager: AdManager): NativeAdCache {
         return NativeAdCache(adManager)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
+        return context.getSharedPreferences("wimap_preferences", Context.MODE_PRIVATE)
     }
 }

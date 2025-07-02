@@ -7,6 +7,8 @@ import android.provider.Settings
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.OnBackPressedCallback
+import androidx.activity.addCallback
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.MaterialTheme
@@ -31,6 +33,7 @@ import com.ner.wimap.ui.components.SwipeNavigationContainer
 import com.ner.wimap.ui.components.SwipeDestination
 import com.ner.wimap.ui.components.NavigationWrapper
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.pager.PagerState
 import com.ner.wimap.ui.theme.WiMapTheme
 import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
@@ -42,6 +45,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
+import androidx.activity.compose.LocalOnBackPressedDispatcherOwner
 import dagger.hilt.android.AndroidEntryPoint
 import javax.inject.Inject
 
@@ -82,6 +86,7 @@ class MainActivity : ComponentActivity() {
         
         // Reload banner ads to ensure they appear consistently
         adManager.reloadBannerAds()
+        
     }
     
     override fun onPause() {
@@ -123,7 +128,6 @@ class MainActivity : ComponentActivity() {
         val networkForEmptyPasswordDialog by viewModel.networkForEmptyPasswordDialog.collectAsState()
         val showPrivacyConsentDialog by viewModel.showPrivacyConsentDialog.collectAsState()
         val isBackgroundScanningEnabled by viewModel.isBackgroundScanningEnabled.collectAsState()
-        val backgroundScanIntervalMinutes by viewModel.backgroundScanIntervalMinutes.collectAsState()
         val isBackgroundServiceActive by viewModel.isBackgroundServiceActive.collectAsState()
         val isAutoUploadEnabled by viewModel.isAutoUploadEnabled.collectAsState()
         val pinnedNetworks by viewModel.pinnedNetworks.collectAsState()
@@ -218,8 +222,20 @@ class MainActivity : ComponentActivity() {
             val observer = LifecycleEventObserver { _, event ->
                 when (event) {
                     Lifecycle.Event.ON_START -> {
+                        // Always navigate to main screen when app becomes visible
+                        viewModel.navigateToMain()
                         // Check for consent dialog when app becomes visible
                         viewModel.checkAndShowPrivacyConsent()
+                        // Handle app foregrounded
+                        viewModel.onAppForegrounded()
+                    }
+                    Lifecycle.Event.ON_RESUME -> {
+                        // Also ensure main screen on resume (covers different resume scenarios)
+                        viewModel.navigateToMain()
+                    }
+                    Lifecycle.Event.ON_STOP -> {
+                        // Handle app backgrounded
+                        viewModel.onAppBackgrounded()
                     }
                     else -> {}
                 }
@@ -233,12 +249,68 @@ class MainActivity : ComponentActivity() {
         // Initial check on first composition
         LaunchedEffect(Unit) {
             viewModel.checkAndShowPrivacyConsent()
+            // Always navigate to main screen when app opens
+            viewModel.navigateToMain()
         }
 
-        // Current navigation state for handling settings screen
-        var currentScreen by remember { mutableStateOf("main") }
+        // Current navigation state - now managed by ViewModel for persistence
+        val currentScreen by viewModel.currentScreen.collectAsState()
         var currentPage by remember { mutableStateOf(SwipeDestination.MAIN.index) }
         val coroutineScope = rememberCoroutineScope()
+        
+        // Create a remembered pager state for the swipe navigation
+        val pagerState = rememberPagerState(
+            initialPage = SwipeDestination.MAIN.index,
+            pageCount = { 3 }
+        )
+        
+        // Back button handling
+        val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
+        DisposableEffect(currentScreen, currentPage) {
+            val callback = backDispatcher?.addCallback {
+                when {
+                    currentScreen == "settings" -> {
+                        // From settings, go back to main
+                        viewModel.navigateToMain()
+                    }
+                    currentScreen == "main" -> {
+                        when (currentPage) {
+                            SwipeDestination.PINNED.index -> {
+                                // From pinned, go back to main
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                                currentPage = SwipeDestination.MAIN.index
+                            }
+                            SwipeDestination.MAPS.index -> {
+                                // From maps, go back to main
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                                currentPage = SwipeDestination.MAIN.index
+                            }
+                            SwipeDestination.MAIN.index -> {
+                                // On main screen, minimize app instead of closing
+                                moveTaskToBack(true)
+                            }
+                        }
+                    }
+                }
+            }
+            onDispose {
+                callback?.remove()
+            }
+        }
+        
+        // Reset to main page when currentScreen changes to main
+        LaunchedEffect(currentScreen) {
+            if (currentScreen == "main" && pagerState.currentPage != SwipeDestination.MAIN.index) {
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                }
+                currentPage = SwipeDestination.MAIN.index
+            }
+        }
         
         if (currentScreen == "settings") {
             SettingsScreen(
@@ -264,20 +336,19 @@ class MainActivity : ComponentActivity() {
                 onHideNetworksUnseenForSecondsChange = { viewModel.setHideNetworksUnseenForSeconds(it) },
                 isBackgroundScanningEnabled = isBackgroundScanningEnabled,
                 onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
-                backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
-                onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
                 isAutoUploadEnabled = isAutoUploadEnabled,
                 onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
                 onClearAllData = { viewModel.clearAllData() },
-                onBack = { currentScreen = "main" }
+                onBack = { viewModel.navigateToMain() }
             )
         } else {
             SwipeNavigationContainer(
                 initialPage = SwipeDestination.MAIN.index,
+                pagerState = pagerState,
                 onPageChanged = { pageIndex ->
                     currentPage = pageIndex
                 }
-            ) { pageIndex, pagerState ->
+            ) { pageIndex, innerPagerState ->
                 when (pageIndex) {
                     SwipeDestination.PINNED.index -> {
                         PinnedNetworksScreen(
@@ -287,7 +358,7 @@ class MainActivity : ComponentActivity() {
                             onBack = { 
                                 // Navigate back to main screen (center page)
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAIN.index)
                                 }
                             },
                             onDeletePinnedNetwork = { network ->
@@ -379,7 +450,7 @@ class MainActivity : ComponentActivity() {
                                 
                                 // Navigate to the Maps page in the swipeable navigation
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(SwipeDestination.MAPS.index)
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAPS.index)
                                     // Force page update
                                     currentPage = SwipeDestination.MAPS.index
                                 }
@@ -390,7 +461,7 @@ class MainActivity : ComponentActivity() {
                             onNavigateToPage = { pageIndex ->
                                 currentPage = pageIndex
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(pageIndex)
+                                    innerPagerState.animateScrollToPage(pageIndex)
                                 }
                             },
                             currentPage = currentPage
@@ -410,7 +481,6 @@ class MainActivity : ComponentActivity() {
                             showEmptyPasswordListDialog = showEmptyPasswordListDialog,
                             networkForEmptyPasswordDialog = networkForEmptyPasswordDialog,
                             isBackgroundScanningEnabled = isBackgroundScanningEnabled,
-                            backgroundScanIntervalMinutes = backgroundScanIntervalMinutes,
                             isBackgroundServiceActive = isBackgroundServiceActive,
                             isAutoUploadEnabled = isAutoUploadEnabled,
                             pinnedNetworks = pinnedNetworks,
@@ -434,14 +504,13 @@ class MainActivity : ComponentActivity() {
                             onDismissEmptyPasswordListDialog = { viewModel.dismissEmptyPasswordListDialog() },
                             onOpenPasswordManagement = { 
                                 viewModel.dismissEmptyPasswordListDialog()
-                                currentScreen = "settings"
+                                viewModel.navigateToSettings()
                             },
                             onToggleBackgroundScanning = { enabled -> viewModel.toggleBackgroundScanning(this@MainActivity, enabled) },
-                            onSetBackgroundScanInterval = { minutes -> viewModel.setBackgroundScanInterval(minutes) },
                             onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
                             onUploadScanResults = { viewModel.uploadScanResultsToFirebase() },
                             onClearUploadStatus = { viewModel.clearUploadStatus() },
-                            onOpenSettings = { currentScreen = "settings" },
+                            onOpenSettings = { viewModel.navigateToSettings() },
                             onExportWithFormatAndAction = { format, action ->
                                 viewModel.exportWifiNetworks(this@MainActivity, format, action)
                             },
@@ -450,7 +519,7 @@ class MainActivity : ComponentActivity() {
                             onOpenPinnedNetworks = { 
                                 // Navigate to pinned networks page via swipe
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(SwipeDestination.PINNED.index)
+                                    innerPagerState.animateScrollToPage(SwipeDestination.PINNED.index)
                                 }
                             },
                             onPinNetwork = { network, comment, password, photoUri ->
@@ -473,7 +542,7 @@ class MainActivity : ComponentActivity() {
                             onOpenMaps = {
                                 // Navigate to maps page via swipe
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(SwipeDestination.MAPS.index)
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAPS.index)
                                 }
                             },
                             onSortingModeChanged = { mode -> viewModel.setSortingMode(mode) },
@@ -490,13 +559,13 @@ class MainActivity : ComponentActivity() {
                                 viewModel.clearNetworksForMap()
                                 // Navigate back to main screen (center page)
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAIN.index)
                                 }
                             },
                             onNavigateToPage = { pageIndex ->
                                 currentPage = pageIndex
                                 coroutineScope.launch {
-                                    pagerState.animateScrollToPage(pageIndex)
+                                    innerPagerState.animateScrollToPage(pageIndex)
                                 }
                             },
                             currentPage = currentPage,

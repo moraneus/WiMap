@@ -76,8 +76,10 @@ class MainViewModel @Inject constructor(
     private val _isBackgroundScanningEnabled = MutableStateFlow(false)
     val isBackgroundScanningEnabled: StateFlow<Boolean> = _isBackgroundScanningEnabled.asStateFlow()
 
-    private val _backgroundScanIntervalMinutes = MutableStateFlow(15)
-    val backgroundScanIntervalMinutes: StateFlow<Int> = _backgroundScanIntervalMinutes.asStateFlow()
+    // Removed backgroundScanIntervalMinutes as it's not needed for continuous scanning
+    
+    private val _backgroundScanDurationMinutes = MutableStateFlow(10)
+    val backgroundScanDurationMinutes: StateFlow<Int> = _backgroundScanDurationMinutes.asStateFlow()
     
     // Background service state
     private val _isBackgroundServiceActive = MutableStateFlow(false)
@@ -95,6 +97,10 @@ class MainViewModel @Inject constructor(
     // Filter settings
     private val _ssidFilter = MutableStateFlow("")
     val ssidFilter: StateFlow<String> = _ssidFilter.asStateFlow()
+    
+    // Navigation state - persistent across app lifecycle
+    private val _currentScreen = MutableStateFlow("main")
+    val currentScreen: StateFlow<String> = _currentScreen.asStateFlow()
     
     // Networks to show on map (for filtered map view)
     private val _networksForMap = MutableStateFlow<List<WifiNetwork>?>(null)
@@ -279,22 +285,31 @@ class MainViewModel @Inject constructor(
                     // This runs after ad is shown (or immediately if no ad)
                     viewModelScope.launch {
                         try {
-                            // Clear previous results before starting a fresh scan
-                            scanWifiNetworksUseCase.clearNetworks()
+                            // Only clear previous results if not continuing from background scan
+                            if (!_isBackgroundServiceActive.value) {
+                                scanWifiNetworksUseCase.clearNetworks()
+                            }
                             
                             // Mark that a scan has been started
                             _hasEverScanned.value = true
                             
-                            // Start the scan
-                            val result = scanWifiNetworksUseCase.startScan()
-                            if (result.isFailure) {
-                                val exception = result.exceptionOrNull()
-                                if (exception is SecurityException) {
-                                    _permissionsRationaleMessage.value = exception.message ?: "Location and WiFi permissions are required to scan networks."
-                                    _showPermissionRationaleDialog.value = true
-                                } else {
-                                    _permissionsRationaleMessage.value = "Failed to start scan: ${exception?.message}"
-                                    _showPermissionRationaleDialog.value = true
+                            // Always start with background service if background scanning is enabled
+                            // This allows the scan to continue when app is backgrounded
+                            if (_isBackgroundScanningEnabled.value) {
+                                // Start background scanning service (with foreground notification)
+                                startBackgroundScan(getApplication<android.app.Application>())
+                            } else {
+                                // Start regular foreground-only scan
+                                val result = scanWifiNetworksUseCase.startScan()
+                                if (result.isFailure) {
+                                    val exception = result.exceptionOrNull()
+                                    if (exception is SecurityException) {
+                                        _permissionsRationaleMessage.value = exception.message ?: "Location and WiFi permissions are required to scan networks."
+                                        _showPermissionRationaleDialog.value = true
+                                    } else {
+                                        _permissionsRationaleMessage.value = "Failed to start scan: ${exception?.message}"
+                                        _showPermissionRationaleDialog.value = true
+                                    }
                                 }
                             }
                         } catch (e: Exception) {
@@ -312,21 +327,27 @@ class MainViewModel @Inject constructor(
 
     fun stopScan() {
         viewModelScope.launch {
-            scanWifiNetworksUseCase.stopScan()
-            // Check for stale networks after scan completes
-            try {
-                scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
-            } catch (e: Exception) {
-                // Silently handle cleanup errors
-            }
-            
-            // Auto-upload if enabled and networks are available
-            Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${wifiNetworks.value.size}")
-            if (_isAutoUploadEnabled.value && wifiNetworks.value.isNotEmpty()) {
-                Log.d("MainViewModel", "stopScan: Triggering auto-upload")
-                uploadScanResultsToFirebase(showNotifications = false)
+            if (_isBackgroundServiceActive.value) {
+                // Stop background scanning service
+                stopBackgroundScan(getApplication<android.app.Application>())
             } else {
-                Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
+                // Stop regular foreground scan
+                scanWifiNetworksUseCase.stopScan()
+                // Check for stale networks after scan completes
+                try {
+                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
+                } catch (e: Exception) {
+                    // Silently handle cleanup errors
+                }
+                
+                // Auto-upload if enabled and networks are available
+                Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${wifiNetworks.value.size}")
+                if (_isAutoUploadEnabled.value && wifiNetworks.value.isNotEmpty()) {
+                    Log.d("MainViewModel", "stopScan: Triggering auto-upload")
+                    uploadScanResultsToFirebase(showNotifications = false)
+                } else {
+                    Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
+                }
             }
         }
     }
@@ -359,15 +380,15 @@ class MainViewModel @Inject constructor(
                     }
                 }
                 
-                // Clear previous results before starting a fresh scan
-                scanWifiNetworksUseCase.clearNetworks()
+                // Don't clear previous results to maintain scan continuity
+                // scanWifiNetworksUseCase.clearNetworks()
                 
                 // Mark that a scan has been started
                 _hasEverScanned.value = true
                 _isBackgroundServiceActive.value = true
                 
                 // Start the foreground service
-                android.util.Log.d("MainViewModel", "About to start WiFiScanService")
+                android.util.Log.d("MainViewModel", "About to start WiFiScanService for continuous scanning")
                 WiFiScanService.startService(context)
                 android.util.Log.d("MainViewModel", "WiFiScanService.startService() called")
                 
@@ -715,23 +736,106 @@ class MainViewModel @Inject constructor(
     // Settings functions
     fun toggleBackgroundScanning(context: Context, isEnabled: Boolean) {
         android.util.Log.d("MainViewModel", "toggleBackgroundScanning called: enabled=$isEnabled")
-        android.widget.Toast.makeText(context, "Background scanning: ${if (isEnabled) "ENABLED" else "DISABLED"}", android.widget.Toast.LENGTH_SHORT).show()
         
         _isBackgroundScanningEnabled.value = isEnabled
         saveBackgroundScanSettingsToPreferences()
         
         if (isEnabled) {
-            android.util.Log.d("MainViewModel", "Calling startBackgroundScan")
-            startBackgroundScan(context)
+            // Check if a scan is currently running (foreground only)
+            if (isScanning.value && !_isBackgroundServiceActive.value) {
+                // Promote the current scan to background mode
+                android.util.Log.d("MainViewModel", "Promoting current scan to background mode")
+                promoteToBackgroundScan(context)
+            } else if (!_isBackgroundServiceActive.value) {
+                // Start the background notification service to show "enabled not running" state
+                android.util.Log.d("MainViewModel", "Starting BackgroundNotificationService for enabled state")
+                try {
+                    val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("MainViewModel", "Failed to start BackgroundNotificationService", e)
+                }
+            }
         } else {
-            android.util.Log.d("MainViewModel", "Calling stopBackgroundScan")
-            stopBackgroundScan(context)
+            // Stop all background services when disabling
+            android.util.Log.d("MainViewModel", "Background scanning disabled - stopping all services")
+            if (_isBackgroundServiceActive.value) {
+                stopBackgroundScan(context)
+            }
+            // Also stop the notification service
+            try {
+                val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
+                context.stopService(intent)
+            } catch (e: Exception) {
+                android.util.Log.w("MainViewModel", "Failed to stop BackgroundNotificationService", e)
+            }
+        }
+        
+        android.widget.Toast.makeText(context, "Background scanning: ${if (isEnabled) "ALLOWED" else "DISABLED"}", android.widget.Toast.LENGTH_SHORT).show()
+    }
+    
+    private fun promoteToBackgroundScan(context: Context) {
+        android.util.Log.d("MainViewModel", "Promoting foreground scan to background mode")
+        
+        viewModelScope.launch {
+            try {
+                // Check for notification permission on Android 13+
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+                    val hasNotificationPermission = androidx.core.content.ContextCompat.checkSelfPermission(
+                        context, 
+                        android.Manifest.permission.POST_NOTIFICATIONS
+                    ) == android.content.pm.PackageManager.PERMISSION_GRANTED
+                    
+                    if (!hasNotificationPermission) {
+                        _permissionsRationaleMessage.value = "Notification permission is required for background scanning. Please grant it in the next dialog."
+                        _showPermissionRationaleDialog.value = true
+                        return@launch
+                    }
+                }
+                
+                // Don't clear networks - continue with existing scan data
+                _isBackgroundServiceActive.value = true
+                
+                // Start the foreground service (this will replace foreground scan with background service)
+                android.util.Log.d("MainViewModel", "Starting WiFiScanService to promote scan")
+                WiFiScanService.startService(context)
+                android.util.Log.d("MainViewModel", "Scan promoted to background mode successfully")
+                
+            } catch (e: Exception) {
+                _permissionsRationaleMessage.value = "Error promoting scan to background: ${e.message}"
+                _showPermissionRationaleDialog.value = true
+                _isBackgroundServiceActive.value = false
+            }
+        }
+    }
+    
+    // Function to manually start background scanning when enabled
+    fun startBackgroundScanningIfEnabled(context: Context) {
+        if (_isBackgroundScanningEnabled.value && !_isBackgroundServiceActive.value) {
+            android.util.Log.d("MainViewModel", "Starting background scan (user initiated)")
+            startBackgroundScan(context)
         }
     }
 
-    fun setBackgroundScanInterval(minutes: Int) {
-        _backgroundScanIntervalMinutes.value = minutes.coerceIn(5, 60)
-        saveBackgroundScanSettingsToPreferences()
+    // Removed setBackgroundScanDuration as continuous scanning doesn't need duration limits
+    
+    // Navigation functions
+    fun navigateToScreen(screen: String) {
+        _currentScreen.value = screen
+        // Don't save navigation state - always return to main on app resume
+        // sharedPreferences.edit().putString("current_screen", screen).apply()
+    }
+    
+    fun navigateToMain() {
+        navigateToScreen("main")
+    }
+    
+    fun navigateToSettings() {
+        navigateToScreen("settings")
     }
 
     fun toggleAutoUpload(isEnabled: Boolean) {
@@ -882,12 +986,56 @@ class MainViewModel @Inject constructor(
         loadConnectionSettingsFromPreferences()
         loadSortingFromPreferences()
         loadBackgroundScanSettingsFromPreferences()
+        loadNavigationStateFromPreferences()
         
         // Start periodic cleanup of stale networks
         startPeriodicNetworkCleanup()
         
         // Monitor connection status for success notifications
         monitorConnectionSuccess()
+        
+        // Start background notification service if background scanning is enabled
+        initializeBackgroundScanningState()
+    }
+    
+    private fun initializeBackgroundScanningState() {
+        // Check if background scanning is enabled but not running
+        if (_isBackgroundScanningEnabled.value && !_isBackgroundServiceActive.value) {
+            // Start the background notification service to show "enabled not running" state
+            android.util.Log.d("MainViewModel", "Initializing background notification service on app start")
+            viewModelScope.launch {
+                try {
+                    val context = getApplication<android.app.Application>()
+                    val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
+                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                        context.startForegroundService(intent)
+                    } else {
+                        context.startService(intent)
+                    }
+                } catch (e: Exception) {
+                    android.util.Log.w("MainViewModel", "Failed to start BackgroundNotificationService on init", e)
+                }
+            }
+        }
+        android.util.Log.d("MainViewModel", "Background scanning permission: ${_isBackgroundScanningEnabled.value}")
+    }
+    
+    // Handle app lifecycle changes
+    fun onAppBackgrounded() {
+        android.util.Log.d("MainViewModel", "App backgrounded - checking scan state")
+        
+        // If background scanning is disabled and a foreground scan is running, stop it
+        if (!_isBackgroundScanningEnabled.value && isScanning.value && !_isBackgroundServiceActive.value) {
+            android.util.Log.d("MainViewModel", "Stopping foreground scan - background scanning disabled")
+            viewModelScope.launch {
+                scanWifiNetworksUseCase.stopScan()
+            }
+        }
+    }
+    
+    fun onAppForegrounded() {
+        android.util.Log.d("MainViewModel", "App foregrounded - scan state maintained")
+        // Scan state is maintained - no action needed
     }
 
     // SharedPreferences methods
@@ -1010,7 +1158,6 @@ class MainViewModel @Inject constructor(
                 _rssiThresholdForConnection.value = -80
                 _hideNetworksUnseenForSeconds.value = 30
                 _isBackgroundScanningEnabled.value = false
-                _backgroundScanIntervalMinutes.value = 15
                 _isAutoUploadEnabled.value = true
                 
                 // Update ConnectionManager with empty passwords
@@ -1195,7 +1342,7 @@ class MainViewModel @Inject constructor(
     // Background scanning persistence
     private fun loadBackgroundScanSettingsFromPreferences() {
         _isBackgroundScanningEnabled.value = sharedPreferences.getBoolean("background_scanning_enabled", false)
-        _backgroundScanIntervalMinutes.value = sharedPreferences.getInt("background_scan_interval_minutes", 15).coerceIn(5, 60)
+        _backgroundScanDurationMinutes.value = sharedPreferences.getInt("background_scan_duration_minutes", 10).coerceIn(5, 60)
         
         // Auto-start background scanning if enabled
         if (_isBackgroundScanningEnabled.value) {
@@ -1208,8 +1355,16 @@ class MainViewModel @Inject constructor(
     private fun saveBackgroundScanSettingsToPreferences() {
         sharedPreferences.edit()
             .putBoolean("background_scanning_enabled", _isBackgroundScanningEnabled.value)
-            .putInt("background_scan_interval_minutes", _backgroundScanIntervalMinutes.value)
+            .putInt("background_scan_duration_minutes", _backgroundScanDurationMinutes.value)
             .apply()
+    }
+    
+    private fun loadNavigationStateFromPreferences() {
+        // Always start on main screen when app resumes/relaunches
+        // Don't load saved screen to ensure consistent behavior
+        _currentScreen.value = "main"
+        // Clear any saved screen state to prevent confusion
+        sharedPreferences.edit().putString("current_screen", "main").apply()
     }
     
     // Privacy Consent Methods

@@ -26,27 +26,29 @@ import kotlinx.coroutines.launch
 fun SwipeNavigationContainer(
     modifier: Modifier = Modifier,
     initialPage: Int = 1, // Start with Main screen (center)
+    pagerState: PagerState? = null, // Optional external pager state
     onPageChanged: (Int) -> Unit = {},
     content: @Composable (pageIndex: Int, pagerState: PagerState) -> Unit
 ) {
-    val pagerState = rememberPagerState(
+    val internalPagerState = rememberPagerState(
         initialPage = initialPage,
         pageCount = { 3 } // Pinned (0), Main (1), Maps (2)
     )
+    val actualPagerState = pagerState ?: internalPagerState
     
     val coroutineScope = rememberCoroutineScope()
     
     // Handle page changes
-    LaunchedEffect(pagerState.currentPage) {
-        onPageChanged(pagerState.currentPage)
+    LaunchedEffect(actualPagerState.currentPage) {
+        onPageChanged(actualPagerState.currentPage)
     }
     
     HorizontalPager(
-        state = pagerState,
+        state = actualPagerState,
         modifier = modifier.fillMaxSize(),
         pageSpacing = 0.dp
     ) { pageIndex ->
-        content(pageIndex, pagerState)
+        content(pageIndex, actualPagerState)
     }
 }
 

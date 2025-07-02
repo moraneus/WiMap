@@ -98,6 +98,12 @@
             android:enabled="true"
             android:exported="false"
             android:foregroundServiceType="location" />
+            
+        <!-- Background Notification Service -->
+        <service
+            android:name=".service.BackgroundNotificationService"
+            android:enabled="true"
+            android:exported="false" />
 
         <!-- FileProvider for sharing exported files -->
         <provider

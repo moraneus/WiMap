@@ -3,6 +3,7 @@ package com.ner.wimap.service
 import android.app.*
 import android.content.Context
 import android.content.Intent
+import android.content.SharedPreferences
 import android.os.Build
 import android.os.IBinder
 import androidx.core.app.NotificationCompat
@@ -15,6 +16,7 @@ import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.collectLatest
 import javax.inject.Inject
 import android.util.Log
+import java.util.concurrent.TimeUnit
 
 @AndroidEntryPoint
 class WiFiScanService : Service() {
@@ -22,8 +24,15 @@ class WiFiScanService : Service() {
     @Inject
     lateinit var scanWifiNetworksUseCase: ScanWifiNetworksUseCase
     
-    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+    @Inject
+    lateinit var sharedPreferences: SharedPreferences
+    
+    private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private var scanJob: Job? = null
+    private var networkCountJob: Job? = null
+    private var notificationUpdateJob: Job? = null
+    
+    private var networksFound: Int = 0
     
     companion object {
         const val NOTIFICATION_ID = 1001
@@ -49,6 +58,7 @@ class WiFiScanService : Service() {
             }
         }
         
+        
         fun stopService(context: Context) {
             val intent = Intent(context, WiFiScanService::class.java)
             context.stopService(intent)
@@ -58,7 +68,6 @@ class WiFiScanService : Service() {
     override fun onCreate() {
         super.onCreate()
         Log.d(TAG, "WiFiScanService created")
-        android.widget.Toast.makeText(this, "WiFiScanService CREATED", android.widget.Toast.LENGTH_SHORT).show()
         createNotificationChannel()
     }
     
@@ -67,8 +76,8 @@ class WiFiScanService : Service() {
         
         when (intent?.action) {
             ACTION_STOP_SCAN -> {
-                Log.d(TAG, "Stop scan action received")
-                stopScanning()
+                Log.d(TAG, "Stop scan action received from user")
+                stopScanningWithReason("Stopped by user")
                 return START_NOT_STICKY
             }
             else -> {
@@ -83,7 +92,7 @@ class WiFiScanService : Service() {
     
     override fun onDestroy() {
         Log.d(TAG, "WiFiScanService destroyed")
-        stopScanning()
+        stopScanningWithReason("Service destroyed")
         serviceScope.cancel()
         super.onDestroy()
     }
@@ -112,8 +121,21 @@ class WiFiScanService : Service() {
     
     private fun startForegroundScanning() {
         Log.d(TAG, "Creating notification and starting foreground service")
+        
+        // Stop the background notification service if it's running
         try {
-            val notification = createScanningNotification()
+            val intent = Intent(this, BackgroundNotificationService::class.java)
+            stopService(intent)
+            Log.d(TAG, "Stopped BackgroundNotificationService")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to stop BackgroundNotificationService", e)
+        }
+        
+        // Initialize scanning state
+        networksFound = 0
+        
+        try {
+            val notification = createRunningNotification(0)
             Log.d(TAG, "Notification created successfully")
             Log.d(TAG, "Starting foreground with notification ID: $NOTIFICATION_ID")
             startForeground(NOTIFICATION_ID, notification)
@@ -131,30 +153,60 @@ class WiFiScanService : Service() {
                 if (result.isFailure) {
                     val exception = result.exceptionOrNull()
                     Log.e(TAG, "Error starting background scan: ${exception?.message}")
-                    stopScanning()
+                    stopScanningWithReason("Failed to start scan: ${exception?.message}")
                     return@launch
                 }
                 
-                // Monitor scanning state
-                scanWifiNetworksUseCase.isScanning().collectLatest { isScanning ->
-                    Log.d(TAG, "Scanning state changed: $isScanning")
-                    if (isScanning) {
-                        updateNotification("Scanning for WiFi networks...")
-                    } else {
-                        updateNotification("WiFi scan completed")
-                        // Auto-stop service after scan completes
-                        delay(2000) // Show completion message briefly
-                        stopScanning()
+                Log.d(TAG, "WiFi scan started successfully")
+            } catch (e: Exception) {
+                Log.e(TAG, "Error during background scanning", e)
+                stopScanningWithReason("Error during scanning: ${e.message}")
+            }
+        }
+        
+        // Start network count monitoring
+        startNetworkCountMonitoring()
+        
+        // Start periodic notification updates
+        startPeriodicNotificationUpdates()
+    }
+    
+    
+    private fun startNetworkCountMonitoring() {
+        networkCountJob = serviceScope.launch {
+            try {
+                scanWifiNetworksUseCase.getWifiNetworks().collectLatest { networks ->
+                    val newCount = networks.size
+                    if (newCount != networksFound) {
+                        networksFound = newCount
+                        Log.d(TAG, "Networks found updated: $networksFound")
+                        
+                        // Update notification immediately when count changes
+                        updateRunningNotification(networksFound)
                     }
                 }
             } catch (e: Exception) {
-                Log.e(TAG, "Error during background scanning", e)
-                stopScanning()
+                Log.e(TAG, "Error monitoring network count", e)
             }
         }
     }
     
-    private fun createScanningNotification(): Notification {
+    private fun startPeriodicNotificationUpdates() {
+        notificationUpdateJob = serviceScope.launch {
+            while (isActive) {
+                delay(20000) // Update every 20 seconds
+                try {
+                    updateRunningNotification(networksFound)
+                    Log.d(TAG, "Periodic notification update: $networksFound networks")
+                } catch (e: Exception) {
+                    Log.w(TAG, "Error during periodic notification update", e)
+                }
+            }
+        }
+    }
+    
+    
+    private fun createRunningNotification(networksFound: Int): Notification {
         // Intent to open main activity when notification is tapped
         val openAppIntent = Intent(this, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
@@ -174,12 +226,12 @@ class WiFiScanService : Service() {
         )
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
-            .setContentTitle("WiMap - WiFi Scanning")
-            .setContentText("Scanning for WiFi networks in background...")
-            .setSmallIcon(android.R.drawable.stat_notify_sync) // Use system sync icon for background scanning
+            .setContentTitle("Background scan running – $networksFound networks found")
+            .setContentText("Scanning continuously - tap Stop to end")
+            .setSmallIcon(android.R.drawable.stat_notify_sync)
             .setContentIntent(openAppPendingIntent)
             .addAction(
-                android.R.drawable.ic_delete, // Use system stop icon
+                android.R.drawable.ic_delete,
                 "Stop",
                 stopPendingIntent
             )
@@ -191,31 +243,30 @@ class WiFiScanService : Service() {
             .build()
     }
     
-    private fun updateNotification(text: String) {
+    private fun updateRunningNotification(networksFound: Int) {
         try {
-            val notification = NotificationCompat.Builder(this, CHANNEL_ID)
-                .setContentTitle("WiMap - WiFi Scanning")
-                .setContentText(text)
-                .setSmallIcon(android.R.drawable.stat_notify_sync)
-                .setOngoing(true)
-                .setAutoCancel(false)
-                .setPriority(NotificationCompat.PRIORITY_LOW)
-                .build()
-            
+            val notification = createRunningNotification(networksFound)
             val notificationManager = NotificationManagerCompat.from(this)
             if (notificationManager.areNotificationsEnabled()) {
                 notificationManager.notify(NOTIFICATION_ID, notification)
             }
         } catch (e: SecurityException) {
             Log.w(TAG, "Cannot update notification - permission denied", e)
+        } catch (e: Exception) {
+            Log.w(TAG, "Error updating notification", e)
         }
     }
     
-    private fun stopScanning() {
-        Log.d(TAG, "Stopping WiFi scan service")
+    private fun stopScanningWithReason(reason: String) {
+        Log.d(TAG, "Stopping WiFi scan service: $reason")
         
+        // Cancel all jobs
         scanJob?.cancel()
+        networkCountJob?.cancel()
+        notificationUpdateJob?.cancel()
         scanJob = null
+        networkCountJob = null
+        notificationUpdateJob = null
         
         // Stop the scanning use case in a coroutine
         serviceScope.launch {
@@ -226,8 +277,53 @@ class WiFiScanService : Service() {
             }
         }
         
+        // Check if background scanning is still enabled in preferences
+        val isBackgroundScanningEnabled = sharedPreferences.getBoolean("background_scanning_enabled", false)
+        
+        if (isBackgroundScanningEnabled) {
+            // Start the background notification service to show "enabled not running" state
+            Log.d(TAG, "Starting BackgroundNotificationService for enabled not running state")
+            try {
+                val intent = Intent(this, BackgroundNotificationService::class.java)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    startForegroundService(intent)
+                } else {
+                    startService(intent)
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to start BackgroundNotificationService", e)
+            }
+        }
+        
+        // Show appropriate notification/feedback based on stop reason
+        when {
+            reason.contains("user", ignoreCase = true) -> {
+                showUserStopToast()
+            }
+            else -> {
+                // For any other reason (errors, etc.), just show simple toast
+                showUserStopToast()
+            }
+        }
+        
         // Stop foreground service
         stopForeground(STOP_FOREGROUND_REMOVE)
         stopSelf()
+    }
+    
+    
+    private fun showUserStopToast() {
+        try {
+            // Use coroutine with Main dispatcher to show toast on main thread
+            serviceScope.launch(Dispatchers.Main) {
+                android.widget.Toast.makeText(
+                    this@WiFiScanService,
+                    "Background scanning stopped.",
+                    android.widget.Toast.LENGTH_SHORT
+                ).show()
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "Error showing user stop toast", e)
+        }
     }
 }

@@ -74,8 +74,6 @@ fun SettingsScreen(
     onHideNetworksUnseenForSecondsChange: (Int) -> Unit,
     isBackgroundScanningEnabled: Boolean = false,
     onToggleBackgroundScanning: (Boolean) -> Unit = {},
-    backgroundScanIntervalMinutes: Int = 15,
-    onSetBackgroundScanInterval: (Int) -> Unit = {},
     isAutoUploadEnabled: Boolean = true,
     onToggleAutoUpload: (Boolean) -> Unit = {},
     onClearAllData: () -> Unit,
@@ -104,7 +102,7 @@ fun SettingsScreen(
                 ModernSettingsCategoryCard(
                     icon = Icons.Default.Autorenew,
                     title = "Background Scanning",
-                    subtitle = "Automatic network discovery when app is minimized",
+                    subtitle = "Allow scans to continue when app is minimized",
                     content = {
                         Column(
                             modifier = Modifier.padding(20.dp),
@@ -113,8 +111,8 @@ fun SettingsScreen(
                             // Enable/Disable Background Scanning
                             SettingItem(
                                 icon = Icons.Default.Autorenew,
-                                title = "Enable Background Scanning",
-                                description = "Continuously discover new networks in background"
+                                title = "Allow Background Scanning",
+                                description = "Let scans continue when app is backgrounded"
                             ) {
                                 Switch(
                                     checked = isBackgroundScanningEnabled,
@@ -125,18 +123,22 @@ fun SettingsScreen(
                             if (isBackgroundScanningEnabled) {
                                 HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
                                 
-                                // Scan Interval
-                                SettingItem(
-                                    icon = Icons.Default.Schedule,
-                                    title = "Scan Frequency",
-                                    description = "How often to scan for networks"
+                                // Info about permission behavior
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
                                 ) {
-                                    ModernSlider(
-                                        value = backgroundScanIntervalMinutes,
-                                        onValueChange = onSetBackgroundScanInterval,
-                                        valueRange = 5..60,
-                                        label = "Every $backgroundScanIntervalMinutes minutes",
-                                        helper = "Lower intervals use more battery"
+                                    Icon(
+                                        imageVector = Icons.Default.Info,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.primary,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                    Text(
+                                        text = "This is a permission toggle - use Start button to begin scanning",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
                                     )
                                 }
                             }
