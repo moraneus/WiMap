@@ -21,6 +21,7 @@ import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Warning
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudSync
+import androidx.compose.material.icons.filled.Autorenew
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.KeyboardArrowUp
@@ -98,6 +99,57 @@ fun SettingsScreen(
             verticalArrangement = Arrangement.spacedBy(16.dp),
             contentPadding = PaddingValues(vertical = 16.dp)
         ) {
+            // Background Scanning Section - MOVED TO TOP
+            item {
+                ModernSettingsCategoryCard(
+                    icon = Icons.Default.Autorenew,
+                    title = "Background Scanning",
+                    subtitle = "Automatic network discovery when app is minimized",
+                    content = {
+                        Column(
+                            modifier = Modifier.padding(20.dp),
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            // Enable/Disable Background Scanning
+                            SettingItem(
+                                icon = Icons.Default.Autorenew,
+                                title = "Enable Background Scanning",
+                                description = "Continuously discover new networks in background"
+                            ) {
+                                Switch(
+                                    checked = isBackgroundScanningEnabled,
+                                    onCheckedChange = onToggleBackgroundScanning
+                                )
+                            }
+
+                            if (isBackgroundScanningEnabled) {
+                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
+                                
+                                // Scan Interval
+                                SettingItem(
+                                    icon = Icons.Default.Schedule,
+                                    title = "Scan Frequency",
+                                    description = "How often to scan for networks"
+                                ) {
+                                    ModernSlider(
+                                        value = backgroundScanIntervalMinutes,
+                                        onValueChange = onSetBackgroundScanInterval,
+                                        valueRange = 5..60,
+                                        label = "Every $backgroundScanIntervalMinutes minutes",
+                                        helper = "Lower intervals use more battery"
+                                    )
+                                }
+                            }
+                        }
+                    }
+                )
+            }
+
+            // Visual separator after Background Scanning
+            item {
+                Spacer(modifier = Modifier.height(8.dp))
+            }
+
             // Scan Filters Section
             item {
                 ModernSettingsCategoryCard(
@@ -158,7 +210,7 @@ fun SettingsScreen(
                             SettingItem(
                                 icon = Icons.Default.SignalCellularAlt,
                                 title = "Signal Strength Filter",
-                                description = "Hide networks with weak signals"
+                                description = "Hide networks with weak signals (default: -95 dBm)"
                             ) {
                                 RssiThresholdSliderSection(
                                     rssiThreshold = rssiThreshold,
@@ -220,7 +272,7 @@ fun SettingsScreen(
                             SettingItem(
                                 icon = Icons.Default.SignalCellularAlt,
                                 title = "Minimum Signal for Connection",
-                                description = "Don't attempt connection if signal is too weak"
+                                description = "Don't attempt connection if signal is too weak (default: -80 dBm)"
                             ) {
                                 RssiThresholdSliderSection(
                                     rssiThreshold = rssiThresholdForConnection.toString(),
@@ -323,52 +375,6 @@ fun SettingsScreen(
                                             onRemove = { onRemovePassword(pwd) }
                                         )
                                     }
-                                }
-                            }
-                        }
-                    }
-                )
-            }
-
-            // Background Scanning Section
-            item {
-                ModernSettingsCategoryCard(
-                    icon = Icons.Default.CloudSync,
-                    title = "Background Scanning",
-                    subtitle = "Automatic network discovery when app is minimized",
-                    content = {
-                        Column(
-                            modifier = Modifier.padding(20.dp),
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            // Enable/Disable Background Scanning
-                            SettingItem(
-                                icon = Icons.Default.CloudSync,
-                                title = "Enable Background Scanning",
-                                description = "Continuously discover new networks in background"
-                            ) {
-                                Switch(
-                                    checked = isBackgroundScanningEnabled,
-                                    onCheckedChange = onToggleBackgroundScanning
-                                )
-                            }
-
-                            if (isBackgroundScanningEnabled) {
-                                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.3f))
-                                
-                                // Scan Interval
-                                SettingItem(
-                                    icon = Icons.Default.Schedule,
-                                    title = "Scan Frequency",
-                                    description = "How often to scan for networks"
-                                ) {
-                                    ModernSlider(
-                                        value = backgroundScanIntervalMinutes,
-                                        onValueChange = onSetBackgroundScanInterval,
-                                        valueRange = 5..60,
-                                        label = "Every $backgroundScanIntervalMinutes minutes",
-                                        helper = "Lower intervals use more battery"
-                                    )
                                 }
                             }
                         }

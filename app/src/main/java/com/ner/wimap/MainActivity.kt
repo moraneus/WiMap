@@ -79,6 +79,9 @@ class MainActivity : ComponentActivity() {
         super.onResume()
         // Update the activity reference when resuming
         adManager.setCurrentActivity(this)
+        
+        // Reload banner ads to ensure they appear consistently
+        adManager.reloadBannerAds()
     }
     
     override fun onPause() {

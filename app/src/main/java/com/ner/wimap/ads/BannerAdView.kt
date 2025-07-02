@@ -54,12 +54,37 @@ fun BannerAdView(
         adManager.getBannerAdUnitId()
     }
     
+    // Track if we need to reload the ad
+    var shouldReloadAd by remember { mutableStateOf(false) }
+    
+    // Force reload if ad doesn't load within reasonable time and periodically check
+    LaunchedEffect(Unit) {
+        while (true) {
+            kotlinx.coroutines.delay(5000) // Check every 5 seconds
+            if (!isAdLoaded) {
+                Log.d("BannerAdView", "Banner ad not loaded, triggering reload - error: $adLoadError")
+                shouldReloadAd = true
+            }
+        }
+    }
+    
     // Handle lifecycle events
     DisposableEffect(lifecycleOwner, adView) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_RESUME -> adView?.resume()
-                Lifecycle.Event.ON_PAUSE -> adView?.pause()
+                Lifecycle.Event.ON_RESUME -> {
+                    Log.d("BannerAdView", "ON_RESUME - resuming AdView and checking if reload needed")
+                    adView?.resume()
+                    // If the ad failed to load or disappeared, trigger reload
+                    if (!isAdLoaded || adLoadError != null) {
+                        Log.d("BannerAdView", "Ad not loaded on resume, triggering reload")
+                        shouldReloadAd = true
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> {
+                    Log.d("BannerAdView", "ON_PAUSE - pausing AdView")
+                    adView?.pause()
+                }
                 else -> {}
             }
         }
@@ -74,8 +99,8 @@ fun BannerAdView(
     Card(
         modifier = modifier
             .fillMaxWidth()
-            .height(if (isAdLoaded) 60.dp else 0.dp) // Only show when ad is loaded
-            .shadow(if (isAdLoaded) 4.dp else 0.dp, RoundedCornerShape(8.dp)),
+            .height(60.dp) // Always reserve space for banner ad
+            .shadow(if (isAdLoaded) 4.dp else 2.dp, RoundedCornerShape(8.dp)),
         shape = RoundedCornerShape(8.dp),
         colors = CardDefaults.cardColors(
             containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.95f)
@@ -130,10 +155,11 @@ fun BannerAdView(
                 },
                 modifier = Modifier.fillMaxSize(),
                 update = { view ->
-                    // Re-load ad if needed
-                    if (!isAdLoaded && adLoadError != null) {
-                        Log.d("BannerAdView", "Retrying ad load...")
+                    // Re-load ad if needed or triggered by lifecycle
+                    if ((!isAdLoaded && adLoadError != null) || shouldReloadAd) {
+                        Log.d("BannerAdView", "Reloading banner ad - reason: ${if (shouldReloadAd) "lifecycle trigger" else "retry after error"}")
                         view.loadAd(AdRequest.Builder().build())
+                        shouldReloadAd = false // Reset the trigger
                     }
                 }
             )

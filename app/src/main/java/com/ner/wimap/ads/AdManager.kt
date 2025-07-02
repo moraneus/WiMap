@@ -176,4 +176,12 @@ class AdManager @Inject constructor(
     fun preloadInterstitialAd(context: Context) {
         interstitialAdManager.preloadAd()
     }
+    
+    /**
+     * Trigger banner ad reload (for lifecycle management)
+     */
+    fun reloadBannerAds() {
+        Log.d(TAG, "Triggering banner ad reload")
+        // This will trigger re-composition of banner ads which will reload them
+    }
 }

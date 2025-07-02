@@ -103,7 +103,7 @@ class MainViewModel @Inject constructor(
     private val _securityFilter = MutableStateFlow(emptySet<String>())
     val securityFilter: StateFlow<Set<String>> = _securityFilter.asStateFlow()
 
-    private val _rssiThreshold = MutableStateFlow("-70")
+    private val _rssiThreshold = MutableStateFlow("-95")
     val rssiThreshold: StateFlow<String> = _rssiThreshold.asStateFlow()
 
     private val _bssidFilter = MutableStateFlow("")
@@ -826,7 +826,7 @@ class MainViewModel @Inject constructor(
     private val _connectionTimeoutSeconds = MutableStateFlow(10)
     val connectionTimeoutSeconds: StateFlow<Int> = _connectionTimeoutSeconds.asStateFlow()
 
-    private val _rssiThresholdForConnection = MutableStateFlow(-70)
+    private val _rssiThresholdForConnection = MutableStateFlow(-80)
     val rssiThresholdForConnection: StateFlow<Int> = _rssiThresholdForConnection.asStateFlow()
 
     private val _hideNetworksUnseenForSeconds = MutableStateFlow(30)
@@ -960,11 +960,11 @@ class MainViewModel @Inject constructor(
                 _passwords.value = emptyList()
                 _ssidFilter.value = ""
                 _securityFilter.value = emptySet()
-                _rssiThreshold.value = "-70"
+                _rssiThreshold.value = "-95"
                 _bssidFilter.value = ""
                 _maxRetries.value = 3
                 _connectionTimeoutSeconds.value = 10
-                _rssiThresholdForConnection.value = -70
+                _rssiThresholdForConnection.value = -80
                 _hideNetworksUnseenForSeconds.value = 30
                 _isBackgroundScanningEnabled.value = false
                 _backgroundScanIntervalMinutes.value = 15
@@ -1025,7 +1025,7 @@ class MainViewModel @Inject constructor(
     private fun loadFiltersFromPreferences() {
         _ssidFilter.value = sharedPreferences.getString("ssid_filter", "") ?: ""
         _securityFilter.value = sharedPreferences.getStringSet("security_filter", emptySet()) ?: emptySet()
-        _rssiThreshold.value = sharedPreferences.getString("rssi_threshold", "-70") ?: "-70"
+        _rssiThreshold.value = sharedPreferences.getString("rssi_threshold", "-95") ?: "-95"
         _bssidFilter.value = sharedPreferences.getString("bssid_filter", "") ?: ""
     }
 
@@ -1056,7 +1056,7 @@ class MainViewModel @Inject constructor(
 
             // RSSI Threshold Filter
             val rssiMatch = try {
-                val threshold = rssiThreshold.toIntOrNull() ?: -70
+                val threshold = rssiThreshold.toIntOrNull() ?: -95
                 network.rssi >= threshold
             } catch (e: Exception) {
                 true // If parsing fails, don't filter
@@ -1127,7 +1127,7 @@ class MainViewModel @Inject constructor(
     private fun loadConnectionSettingsFromPreferences() {
         _maxRetries.value = sharedPreferences.getInt("max_retries", 3).coerceIn(1, 10)
         _connectionTimeoutSeconds.value = sharedPreferences.getInt("connection_timeout_seconds", 10).coerceIn(5, 60)
-        _rssiThresholdForConnection.value = sharedPreferences.getInt("rssi_threshold_for_connection", -70).coerceIn(-100, -30)
+        _rssiThresholdForConnection.value = sharedPreferences.getInt("rssi_threshold_for_connection", -80).coerceIn(-100, -30)
         _hideNetworksUnseenForSeconds.value = sharedPreferences.getInt("hide_networks_unseen_for_seconds", 30)
         
         // Update ConnectionManager with loaded settings
