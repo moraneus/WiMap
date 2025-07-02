@@ -33,6 +33,7 @@ import androidx.compose.material.icons.filled.SignalCellularAlt
 import androidx.compose.material.icons.filled.Router
 import androidx.compose.material.icons.filled.VpnKey
 import androidx.compose.material.icons.filled.Schedule
+import androidx.compose.material.icons.filled.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -77,7 +78,8 @@ fun SettingsScreen(
     isAutoUploadEnabled: Boolean = true,
     onToggleAutoUpload: (Boolean) -> Unit = {},
     onClearAllData: () -> Unit,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onNavigateToScanHistory: () -> Unit = {}
 ) {
     var newPassword by remember { mutableStateOf("") }
 
@@ -421,6 +423,20 @@ fun SettingsScreen(
                             modifier = Modifier.padding(20.dp),
                             verticalArrangement = Arrangement.spacedBy(16.dp)
                         ) {
+                            // Scan History
+                            SettingItem(
+                                icon = Icons.Default.History,
+                                title = "Scan History",
+                                description = "View and manage your scan sessions"
+                            ) {
+                                Button(
+                                    onClick = onNavigateToScanHistory,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Text("View History")
+                                }
+                            }
+                            
                             // Share Statistics Toggle
                             SettingItem(
                                 icon = Icons.Default.CloudSync,

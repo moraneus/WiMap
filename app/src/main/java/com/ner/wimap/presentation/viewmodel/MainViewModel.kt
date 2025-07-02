@@ -7,6 +7,9 @@ import android.util.Log
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.ner.wimap.data.database.PinnedNetwork
+import com.ner.wimap.data.database.ScanSession
+import com.ner.wimap.data.database.SessionNetwork
+import com.ner.wimap.data.database.ScanSessionDao
 import com.ner.wimap.domain.usecase.ConnectToNetworkUseCase
 import com.ner.wimap.domain.usecase.ExportNetworksUseCase
 import com.ner.wimap.domain.usecase.ManagePinnedNetworksUseCase
@@ -40,7 +43,8 @@ class MainViewModel @Inject constructor(
     private val adManager: com.ner.wimap.ads.AdManager,
     private val deviceInfoManager: com.ner.wimap.data.DeviceInfoManager,
     private val deviceInfoService: com.ner.wimap.service.DeviceInfoService,
-    private val firebaseRepository: com.ner.wimap.FirebaseRepository
+    private val firebaseRepository: com.ner.wimap.FirebaseRepository,
+    private val scanSessionDao: ScanSessionDao
 ) : AndroidViewModel(application) {
 
     // UI State
@@ -84,6 +88,10 @@ class MainViewModel @Inject constructor(
     // Background service state
     private val _isBackgroundServiceActive = MutableStateFlow(false)
     val isBackgroundServiceActive: StateFlow<Boolean> = _isBackgroundServiceActive.asStateFlow()
+    
+    // Scan session tracking
+    private var currentScanSession: ScanSession? = null
+    private val _currentScanNetworks = mutableListOf<SessionNetwork>()
 
     private val _isAutoUploadEnabled = MutableStateFlow(true)
     val isAutoUploadEnabled: StateFlow<Boolean> = _isAutoUploadEnabled.asStateFlow()
@@ -101,6 +109,10 @@ class MainViewModel @Inject constructor(
     // Navigation state - persistent across app lifecycle
     private val _currentScreen = MutableStateFlow("main")
     val currentScreen: StateFlow<String> = _currentScreen.asStateFlow()
+    
+    // Scan history navigation trigger
+    private val _navigateToScanHistoryTrigger = MutableStateFlow(false)
+    val navigateToScanHistoryTrigger: StateFlow<Boolean> = _navigateToScanHistoryTrigger.asStateFlow()
     
     // Networks to show on map (for filtered map view)
     private val _networksForMap = MutableStateFlow<List<WifiNetwork>?>(null)
@@ -293,6 +305,9 @@ class MainViewModel @Inject constructor(
                             // Mark that a scan has been started
                             _hasEverScanned.value = true
                             
+                            // Start new scan session
+                            startScanSession()
+                            
                             // Always start with background service if background scanning is enabled
                             // This allows the scan to continue when app is backgrounded
                             if (_isBackgroundScanningEnabled.value) {
@@ -339,6 +354,9 @@ class MainViewModel @Inject constructor(
                 } catch (e: Exception) {
                     // Silently handle cleanup errors
                 }
+                
+                // Save scan session before other operations
+                endScanSession()
                 
                 // Auto-upload if enabled and networks are available
                 Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${wifiNetworks.value.size}")
@@ -677,6 +695,31 @@ class MainViewModel @Inject constructor(
         }
     }
 
+    fun exportScanSession(context: Context, session: ScanSession, format: ExportFormat, action: ExportAction) {
+        adManager.showAdForExport {
+            // Execute export after ad is shown (or immediately if no ad)
+            viewModelScope.launch {
+                // Convert SessionNetwork to WifiNetwork for export
+                val wifiNetworks = session.networks.map { sessionNetwork ->
+                    WifiNetwork(
+                        ssid = sessionNetwork.ssid,
+                        bssid = sessionNetwork.bssid,
+                        rssi = sessionNetwork.rssi,
+                        channel = sessionNetwork.channel,
+                        security = sessionNetwork.security,
+                        latitude = sessionNetwork.latitude,
+                        longitude = sessionNetwork.longitude,
+                        timestamp = sessionNetwork.lastSeenTimestamp,
+                        lastSeenTimestamp = sessionNetwork.lastSeenTimestamp,
+                        isOffline = sessionNetwork.isOffline,
+                        vendor = sessionNetwork.vendor.ifEmpty { null }
+                    )
+                }
+                exportNetworksUseCase.exportWifiNetworks(context, wifiNetworks, format, action)
+            }
+        }
+    }
+
     fun clearExportStatus() = exportNetworksUseCase.clearStatus()
 
     fun clearExportError() = exportNetworksUseCase.clearError()
@@ -837,6 +880,14 @@ class MainViewModel @Inject constructor(
     fun navigateToSettings() {
         navigateToScreen("settings")
     }
+    
+    fun navigateToScanHistory() {
+        _navigateToScanHistoryTrigger.value = true
+    }
+    
+    fun onNavigateToScanHistoryHandled() {
+        _navigateToScanHistoryTrigger.value = false
+    }
 
     fun toggleAutoUpload(isEnabled: Boolean) {
         _isAutoUploadEnabled.value = isEnabled
@@ -983,6 +1034,8 @@ class MainViewModel @Inject constructor(
         // Load all settings from SharedPreferences on initialization
         loadPasswordsFromPreferences()
         loadFiltersFromPreferences()
+        // Start monitoring scan networks for session recording
+        startMonitoringScanNetworks()
         loadConnectionSettingsFromPreferences()
         loadSortingFromPreferences()
         loadBackgroundScanSettingsFromPreferences()
@@ -1398,5 +1451,121 @@ class MainViewModel @Inject constructor(
     
     fun requestDataDeletion() {
         deviceInfoService.handleDataDeletionRequest()
+    }
+    
+    // ========================================
+    // SCAN SESSION MANAGEMENT
+    // ========================================
+    
+    private fun startScanSession() {
+        val timestamp = System.currentTimeMillis()
+        currentScanSession = ScanSession(
+            title = generateSessionTitle(timestamp),
+            timestamp = timestamp,
+            networkCount = 0,
+            networks = emptyList()
+        )
+        _currentScanNetworks.clear()
+        Log.d("MainViewModel", "Started new scan session: ${currentScanSession?.title}")
+    }
+    
+    private fun startMonitoringScanNetworks() {
+        viewModelScope.launch {
+            wifiNetworks.collect { networks ->
+                if (currentScanSession != null && networks.isNotEmpty()) {
+                    // Convert WiFiNetwork to SessionNetwork and add to current session
+                    val sessionNetworks = networks.map { network ->
+                        SessionNetwork(
+                            ssid = network.ssid,
+                            bssid = network.bssid,
+                            rssi = network.rssi,
+                            channel = network.channel,
+                            security = network.security,
+                            vendor = network.vendor ?: "",
+                            latitude = network.latitude,
+                            longitude = network.longitude,
+                            lastSeenTimestamp = network.timestamp,
+                            isOffline = network.isOffline
+                        )
+                    }
+                    
+                    // Update current session networks (avoid duplicates by BSSID)
+                    val existingBssids = _currentScanNetworks.map { it.bssid }.toSet()
+                    val newNetworks = sessionNetworks.filter { it.bssid !in existingBssids }
+                    _currentScanNetworks.addAll(newNetworks)
+                    
+                    Log.d("MainViewModel", "Updated scan session with ${_currentScanNetworks.size} total networks")
+                }
+            }
+        }
+    }
+    
+    private fun endScanSession() {
+        val session = currentScanSession
+        if (session != null && _currentScanNetworks.isNotEmpty()) {
+            val finalSession = session.copy(
+                networkCount = _currentScanNetworks.size,
+                networks = _currentScanNetworks.toList()
+            )
+            
+            viewModelScope.launch {
+                try {
+                    scanSessionDao.insertScanSession(finalSession)
+                    Log.d("MainViewModel", "Saved scan session '${finalSession.title}' with ${finalSession.networkCount} networks")
+                    
+                    // Clean up old sessions if needed (keep last 50 sessions)
+                    val sessionCount = scanSessionDao.getScanSessionCount()
+                    if (sessionCount > 50) {
+                        val excessCount = sessionCount - 50
+                        scanSessionDao.deleteOldestScanSessions(excessCount)
+                        Log.d("MainViewModel", "Cleaned up $excessCount old scan sessions")
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Failed to save scan session", e)
+                }
+            }
+        }
+        
+        // Reset session state
+        currentScanSession = null
+        _currentScanNetworks.clear()
+    }
+    
+    private fun generateSessionTitle(timestamp: Long): String {
+        val calendar = java.util.Calendar.getInstance()
+        calendar.timeInMillis = timestamp
+        
+        val hour = calendar.get(java.util.Calendar.HOUR_OF_DAY)
+        val minute = calendar.get(java.util.Calendar.MINUTE)
+        val day = calendar.get(java.util.Calendar.DAY_OF_MONTH)
+        val month = calendar.get(java.util.Calendar.MONTH) + 1
+        
+        return String.format("Scan %02d/%02d %02d:%02d", month, day, hour, minute)
+    }
+    
+    // Public access to scan sessions for UI
+    fun getAllScanSessions() = scanSessionDao.getAllScanSessions()
+    
+    // Scan session management functions
+    fun renameScanSession(sessionId: String, newTitle: String) {
+        viewModelScope.launch {
+            try {
+                scanSessionDao.updateSessionTitle(sessionId, newTitle)
+                Log.d("MainViewModel", "Renamed scan session $sessionId to '$newTitle'")
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to rename scan session", e)
+            }
+        }
+    }
+    
+    fun deleteScanSession(session: ScanSession) {
+        viewModelScope.launch {
+            try {
+                scanSessionDao.deleteScanSession(session)
+                Log.d("MainViewModel", "Deleted scan session '${session.title}'")
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to delete scan session", e)
+            }
+        }
     }
 }

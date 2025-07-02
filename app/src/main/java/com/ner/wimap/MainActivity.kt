@@ -29,6 +29,7 @@ import com.ner.wimap.ui.MainScreen
 import com.ner.wimap.ui.MapsScreenWrapper
 import com.ner.wimap.ui.PinnedNetworksScreen
 import com.ner.wimap.ui.SettingsScreen
+import com.ner.wimap.ui.ScanHistoryScreen
 import com.ner.wimap.ui.components.SwipeNavigationContainer
 import com.ner.wimap.ui.components.SwipeDestination
 import com.ner.wimap.ui.components.NavigationWrapper
@@ -261,8 +262,23 @@ class MainActivity : ComponentActivity() {
         // Create a remembered pager state for the swipe navigation
         val pagerState = rememberPagerState(
             initialPage = SwipeDestination.MAIN.index,
-            pageCount = { 3 }
+            pageCount = { 4 }
         )
+        
+        // Handle scan history navigation trigger
+        val navigateToScanHistoryTrigger by viewModel.navigateToScanHistoryTrigger.collectAsState()
+        LaunchedEffect(navigateToScanHistoryTrigger) {
+            if (navigateToScanHistoryTrigger) {
+                // Ensure we're on main screen first, then navigate to scan history
+                if (currentScreen == "main") {
+                    coroutineScope.launch {
+                        pagerState.animateScrollToPage(SwipeDestination.SCAN_HISTORY.index)
+                    }
+                    currentPage = SwipeDestination.SCAN_HISTORY.index
+                }
+                viewModel.onNavigateToScanHistoryHandled()
+            }
+        }
         
         // Back button handling
         val backDispatcher = LocalOnBackPressedDispatcherOwner.current?.onBackPressedDispatcher
@@ -284,6 +300,13 @@ class MainActivity : ComponentActivity() {
                             }
                             SwipeDestination.MAPS.index -> {
                                 // From maps, go back to main
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                                currentPage = SwipeDestination.MAIN.index
+                            }
+                            SwipeDestination.SCAN_HISTORY.index -> {
+                                // From scan history, go back to main
                                 coroutineScope.launch {
                                     pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
                                 }
@@ -339,7 +362,8 @@ class MainActivity : ComponentActivity() {
                 isAutoUploadEnabled = isAutoUploadEnabled,
                 onToggleAutoUpload = { enabled -> viewModel.toggleAutoUpload(enabled) },
                 onClearAllData = { viewModel.clearAllData() },
-                onBack = { viewModel.navigateToMain() }
+                onBack = { viewModel.navigateToMain() },
+                onNavigateToScanHistory = { viewModel.navigateToScanHistory() }
             )
         } else {
             SwipeNavigationContainer(
@@ -572,6 +596,17 @@ class MainActivity : ComponentActivity() {
                             onClearSelection = {
                                 // Clear the selected networks but stay on map screen
                                 viewModel.clearNetworksForMap()
+                            }
+                        )
+                    }
+                    SwipeDestination.SCAN_HISTORY.index -> {
+                        ScanHistoryScreen(
+                            onNavigateBack = {
+                                // Navigate back to main screen (center page)
+                                coroutineScope.launch {
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                                currentPage = SwipeDestination.MAIN.index
                             }
                         )
                     }

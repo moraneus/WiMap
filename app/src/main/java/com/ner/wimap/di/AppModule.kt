@@ -5,6 +5,8 @@ import android.content.SharedPreferences
 import com.google.firebase.firestore.FirebaseFirestore
 import com.ner.wimap.ads.AdManager
 import com.ner.wimap.ads.NativeAdCache
+import com.ner.wimap.data.database.AppDatabase
+import com.ner.wimap.data.database.ScanSessionDao
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -47,5 +49,11 @@ object AppModule {
     @Singleton
     fun provideSharedPreferences(@ApplicationContext context: Context): SharedPreferences {
         return context.getSharedPreferences("wimap_preferences", Context.MODE_PRIVATE)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideScanSessionDao(@ApplicationContext context: Context): ScanSessionDao {
+        return AppDatabase.getDatabase(context).scanSessionDao()
     }
 }

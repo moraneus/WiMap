@@ -105,6 +105,7 @@ fun MainTopAppBar(
                             GlowingNavigationDot(isSelected = currentPage == 0)
                             GlowingNavigationDot(isSelected = currentPage == 1)
                             GlowingNavigationDot(isSelected = currentPage == 2)
+                            GlowingNavigationDot(isSelected = currentPage == 3)
                         }
                     }
                 }
@@ -383,6 +384,7 @@ fun UnifiedTopAppBar(
                             GlowingNavigationDot(isSelected = currentPage == 0)
                             GlowingNavigationDot(isSelected = currentPage == 1)
                             GlowingNavigationDot(isSelected = currentPage == 2)
+                            GlowingNavigationDot(isSelected = currentPage == 3)
                         }
                     }
                 }

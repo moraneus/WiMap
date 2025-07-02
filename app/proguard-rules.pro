@@ -48,6 +48,23 @@
 -keep class kotlinx.serialization.** { *; }
 -dontwarn kotlinx.serialization.**
 
+# Keep Gson classes and preserve generic type information
+-keep class com.google.gson.** { *; }
+-keep class com.google.gson.reflect.TypeToken { *; }
+-keep class * extends com.google.gson.reflect.TypeToken
+-keepattributes Signature
+-keepattributes *Annotation*
+-keepattributes EnclosingMethod
+
+# Keep our specific TypeToken implementations for Room converters
+-keep class com.ner.wimap.data.database.NetworkListConverter { *; }
+-keep class com.ner.wimap.data.database.NetworkListConverter$* { *; }
+-keep class com.ner.wimap.data.database.NetworkListConverter$Companion { *; }
+
+# Keep all classes used in Gson serialization
+-keep class com.ner.wimap.data.database.SessionNetwork { *; }
+-keep class com.ner.wimap.data.database.ScanSession { *; }
+
 # Remove logging in release builds
 -assumenosideeffects class android.util.Log {
     public static boolean isLoggable(java.lang.String, int);

@@ -32,7 +32,7 @@ fun SwipeNavigationContainer(
 ) {
     val internalPagerState = rememberPagerState(
         initialPage = initialPage,
-        pageCount = { 3 } // Pinned (0), Main (1), Maps (2)
+        pageCount = { 4 } // Pinned (0), Main (1), Maps (2), Scan History (3)
     )
     val actualPagerState = pagerState ?: internalPagerState
     
@@ -55,10 +55,11 @@ fun SwipeNavigationContainer(
 /**
  * Navigation destinations for the swipe container
  */
-enum class SwipeDestination(val index: Int, val title: String) {
-    PINNED(0, "Pinned Networks"),
-    MAIN(1, "WiFi Scanner"),
-    MAPS(2, "Network Map")
+enum class SwipeDestination(val index: Int, val title: String, val icon: String) {
+    PINNED(0, "Pinned", "📌"),
+    MAIN(1, "Main", "📡"),
+    MAPS(2, "Map", "🗺"),
+    SCAN_HISTORY(3, "Scans", "🧾")
 }
 
 /**
@@ -102,7 +103,7 @@ private fun SwipeIndicatorDot(
     label: String
 ) {
     val animatedSize by animateDpAsState(
-        targetValue = if (isSelected) 8.dp else 6.dp,
+        targetValue = if (isSelected) 10.dp else 8.dp,
         animationSpec = spring(dampingRatio = Spring.DampingRatioMediumBouncy),
         label = "dot_size"
     )
@@ -124,5 +125,71 @@ private fun SwipeIndicatorDot(
             shape = androidx.compose.foundation.shape.CircleShape,
             color = MaterialTheme.colorScheme.primary
         ) {}
+    }
+}
+
+/**
+ * Enhanced swipe indicator with icons and labels
+ */
+@Composable
+fun SwipeIndicatorWithLabels(
+    currentPage: Int,
+    modifier: Modifier = Modifier,
+    showLabels: Boolean = true
+) {
+    Column(
+        modifier = modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        // Dot indicators
+        Row(
+            horizontalArrangement = Arrangement.Center,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            SwipeDestination.values().forEachIndexed { index, destination ->
+                SwipeIndicatorDot(
+                    isSelected = currentPage == index,
+                    label = destination.title
+                )
+                if (index < SwipeDestination.values().size - 1) {
+                    Spacer(modifier = Modifier.width(12.dp))
+                }
+            }
+        }
+        
+        if (showLabels) {
+            Spacer(modifier = Modifier.height(4.dp))
+            // Labels with icons
+            Row(
+                horizontalArrangement = Arrangement.SpaceEvenly,
+                modifier = Modifier.fillMaxWidth(0.8f)
+            ) {
+                SwipeDestination.values().forEachIndexed { index, destination ->
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Text(
+                            text = destination.icon,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = if (currentPage == index) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                        Text(
+                            text = destination.title,
+                            style = MaterialTheme.typography.labelSmall,
+                            color = if (currentPage == index) 
+                                MaterialTheme.colorScheme.primary 
+                            else 
+                                MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.6f)
+                        )
+                    }
+                }
+            }
+        }
     }
 }

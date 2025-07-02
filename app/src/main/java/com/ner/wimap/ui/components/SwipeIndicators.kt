@@ -10,6 +10,7 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Map
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -73,15 +74,19 @@ fun SwipeIndicators(
         // Page indicators (center)
         PageIndicators(
             currentPage = currentPage,
-            totalPages = 3,
+            totalPages = 4,
             modifier = Modifier.align(Alignment.Center)
         )
         
-        // Right swipe indicator (to Maps)
-        if (currentPage != 2) { // Don't show on rightmost page
+        // Right swipe indicator (to Maps or Scan History)
+        if (currentPage != 3) { // Don't show on rightmost page
+            val (rightIcon, rightLabel) = when {
+                currentPage < 2 -> Icons.Outlined.Map to "Maps"
+                else -> Icons.Outlined.History to "Scans"
+            }
             SwipeHint(
-                icon = Icons.Outlined.Map,
-                label = "Maps",
+                icon = rightIcon,
+                label = rightLabel,
                 direction = Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 modifier = Modifier
                     .align(Alignment.CenterEnd)
@@ -168,6 +173,7 @@ private fun PageIndicators(
                     0 -> MaterialTheme.colorScheme.tertiary // Pinned
                     1 -> MaterialTheme.colorScheme.primary  // Main
                     2 -> MaterialTheme.colorScheme.secondary // Maps
+                    3 -> MaterialTheme.colorScheme.error    // Scan History
                     else -> MaterialTheme.colorScheme.outline
                 }
             )
@@ -216,13 +222,14 @@ fun MinimalSwipeIndicators(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        repeat(3) { index ->
+        repeat(4) { index ->
             PageIndicatorDot(
                 isSelected = currentPage == index,
                 color = when (index) {
                     0 -> MaterialTheme.colorScheme.tertiary
                     1 -> MaterialTheme.colorScheme.primary
                     2 -> MaterialTheme.colorScheme.secondary
+                    3 -> MaterialTheme.colorScheme.error
                     else -> MaterialTheme.colorScheme.outline
                 },
                 modifier = Modifier.padding(horizontal = 2.dp)

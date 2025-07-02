@@ -25,6 +25,7 @@ import androidx.compose.ui.unit.dp
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import com.ner.wimap.ui.components.*
+import com.ner.wimap.ui.components.SwipeIndicatorWithLabels
 import com.ner.wimap.ui.dialogs.*
 // Removed enhanced permission imports - camera permissions handled directly
 import com.ner.wimap.ui.viewmodel.ExportFormat

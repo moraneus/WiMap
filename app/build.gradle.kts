@@ -147,6 +147,7 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.5.0")
     
     // JSON serialization
+    implementation("com.google.code.gson:gson:2.10.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.6.2")
     
     // Coroutines

@@ -8,13 +8,14 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import android.content.Context
 
 @Database(
-    entities = [PinnedNetwork::class, TemporaryNetworkData::class],
-    version = 4, // Incremented version to include offline status tracking
+    entities = [PinnedNetwork::class, TemporaryNetworkData::class, ScanSession::class],
+    version = 5, // Incremented version to include scan sessions
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
     abstract fun pinnedNetworkDao(): PinnedNetworkDao
     abstract fun temporaryNetworkDataDao(): TemporaryNetworkDataDao
+    abstract fun scanSessionDao(): ScanSessionDao
 
     companion object {
         @Volatile
@@ -57,6 +58,21 @@ abstract class AppDatabase : RoomDatabase() {
                 database.execSQL("ALTER TABLE pinned_networks ADD COLUMN lastSeenTimestamp INTEGER NOT NULL DEFAULT 0")
             }
         }
+        
+        // Migration from version 4 to 5 to add scan sessions
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(database: SupportSQLiteDatabase) {
+                database.execSQL("""
+                    CREATE TABLE IF NOT EXISTS scan_sessions (
+                        id TEXT NOT NULL PRIMARY KEY,
+                        title TEXT NOT NULL,
+                        timestamp INTEGER NOT NULL,
+                        networkCount INTEGER NOT NULL,
+                        networks TEXT NOT NULL
+                    )
+                """.trimIndent())
+            }
+        }
 
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
@@ -65,7 +81,7 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "wifi_database"
                 )
-                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+                    .addMigrations(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
                     .fallbackToDestructiveMigration() // For development - remove in production
                     .build()
                 INSTANCE = instance
