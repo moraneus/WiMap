@@ -1,6 +1,9 @@
 <resources>
-    <!-- App Name -->
+    <!-- App Name and Description -->
     <string name="app_name">WiMap</string>
+    <string name="app_description">Professional WiFi network scanner and mapper for Android. Discover, analyze, and manage wireless networks with GPS mapping, network analytics, and comprehensive export capabilities.</string>
+    <string name="app_tagline">WiFi Network Scanner &amp; Mapper</string>
+    <string name="app_purpose">Discover and analyze WiFi networks around you</string>
     
     <!-- Main Screen -->
     <string name="wifi_scanner">WiFi Scanner</string>

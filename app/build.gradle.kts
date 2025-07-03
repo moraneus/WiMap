@@ -19,6 +19,10 @@ android {
         targetSdk = 34
         versionCode = 1
         versionName = "1.0.0"
+        
+        // App metadata for store listing
+        resValue("string", "app_version", "1.0.0")
+        resValue("string", "version_code", "1")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
