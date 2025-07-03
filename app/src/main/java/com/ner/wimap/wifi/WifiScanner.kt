@@ -344,7 +344,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                         specifierBuilder.setWpa2Passphrase(password)
                     }
                     network.security.contains("WEP", ignoreCase = true) -> {
-                        _connectionStatus.postValue("❌ WEP networks are not supported on Android 10+")
+                        _connectionStatus.postValue("⚠️ WEP networks are not supported on Android 10+")
                         return
                     }
                     network.security.contains("Open", ignoreCase = true) -> {
@@ -384,15 +384,22 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                         
                         if (connectedSsid != network.ssid) {
                             android.util.Log.w("WifiScanner", "Wrong network connected: $connectedSsid instead of ${network.ssid}")
-                            _connectionStatus.postValue("❌ Connected to wrong network: $connectedSsid instead of ${network.ssid}")
+                            _connectionStatus.postValue("⚠️ Connected to wrong network: $connectedSsid instead of ${network.ssid}")
                             releaseCurrentNetworkCallback()
                             return
                         }
                         
                         // Connection successful - password is correct
                         connectionSuccessful = true
+                        connectionValidated = true
                         connectionAttemptActive = false // Stop the attempt, we succeeded
                         android.util.Log.d("WifiScanner", "Connection successful! Password is correct for ${network.ssid}")
+                        
+                        // Save the working password to SharedPreferences immediately
+                        password?.let { validPassword ->
+                            saveWorkingPassword(network, validPassword)
+                        }
+                        
                         _connectionStatus.postValue("✅ Password validated for ${network.ssid}")
                         
                         // Immediately disconnect and complete verification
@@ -400,12 +407,11 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                             android.util.Log.d("WifiScanner", "Disconnecting after successful validation")
                             connectivityManager.bindProcessToNetwork(null)
                             releaseCurrentNetworkCallback()
-                            _connectionStatus.postValue("Connection validated and disconnected")
                         }, 500) // Quick disconnect
                         
                     } catch (e: Exception) {
                         android.util.Log.e("WifiScanner", "Exception in onAvailable: ${e.message}")
-                        _connectionStatus.postValue("❌ Failed to validate connection: ${e.message}")
+                        _connectionStatus.postValue("⚠️ Failed to validate connection: ${e.message}")
                         releaseCurrentNetworkCallback()
                     }
                 }
@@ -415,7 +421,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                     android.util.Log.d("WifiScanner", "onLost called, connectionValidated: $connectionValidated")
                     if (connectionValidated) {
                         android.util.Log.d("WifiScanner", "Sending final success message")
-                        _connectionStatus.postValue("✅ Connection validated and disconnected successfully")
+                        _connectionStatus.postValue("✅ Password validated and saved for ${network.ssid}")
                     } else {
                         android.util.Log.w("WifiScanner", "Connection lost without validation")
                         _connectionStatus.postValue("⚠️ Lost connection to ${network.ssid}")
@@ -430,7 +436,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                     
                     android.util.Log.d("WifiScanner", "onUnavailable called - connection failed")
                     connectionAttemptActive = false
-                    _connectionStatus.postValue("❌ Could not connect to ${network.ssid} - incorrect password or network unavailable")
+                    _connectionStatus.postValue("⚠️ Could not connect to ${network.ssid} - incorrect password or network unavailable")
                     releaseCurrentNetworkCallback()
                 }
                 
@@ -450,7 +456,7 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
             Handler(Looper.getMainLooper()).postDelayed({
                 if (connectionAttemptActive && !connectionSuccessful) {
                     connectionAttemptActive = false
-                    _connectionStatus.postValue("❌ Connection timeout - no response from ${network.ssid}")
+                    _connectionStatus.postValue("⚠️ Connection timeout - no response from ${network.ssid}")
                     releaseCurrentNetworkCallback()
                 }
             }, 10000) // 10 second timeout
@@ -460,9 +466,9 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
             android.util.Log.d("WifiScanner", "Connection request sent for ${network.ssid} with password: ${password?.take(3)}***")
             
         } catch (e: SecurityException) {
-            _connectionStatus.postValue("❌ Permission error: ${e.message}")
+            _connectionStatus.postValue("⚠️ Permission error: ${e.message}")
         } catch (e: Exception) {
-            _connectionStatus.postValue("❌ Connection error: ${e.message}")
+            _connectionStatus.postValue("⚠️ Connection error: ${e.message}")
         }
     }
 
@@ -534,53 +540,55 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
     }
 
     private fun hasRequiredPermissions(checkAccessWifiState: Boolean = true, checkChangeWifiState: Boolean = true): Boolean {
-        val fineLocationPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION)
-        if (fineLocationPermission != PackageManager.PERMISSION_GRANTED) return false
-
-        if (checkAccessWifiState) {
-            val wifiStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_WIFI_STATE)
-            if (wifiStatePermission != PackageManager.PERMISSION_GRANTED) return false
-        }
-
-        if (checkChangeWifiState) {
-            val changeWifiStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE)
-            if (changeWifiStatePermission != PackageManager.PERMISSION_GRANTED) return false
-            
-            val changeNetworkStatePermission = ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_NETWORK_STATE)
-            if (changeNetworkStatePermission != PackageManager.PERMISSION_GRANTED) return false
-        }
-
-        // Check for NEARBY_WIFI_DEVICES permission on Android 13+
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            val nearbyWifiDevicesPermission = ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES)
-            if (nearbyWifiDevicesPermission != PackageManager.PERMISSION_GRANTED) return false
-        }
-
-        return true
+        // Use the centralized permission utilities
+        return PermissionUtils.hasAllWifiPermissions(context) && 
+               (!checkAccessWifiState || ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_WIFI_STATE) == PackageManager.PERMISSION_GRANTED) &&
+               (!checkChangeWifiState || ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE) == PackageManager.PERMISSION_GRANTED)
     }
-
+    
+    /**
+     * Get detailed list of missing permissions for better error reporting
+     */
     fun getMissingPermissions(): List<String> {
-        val missingPermissions = mutableListOf<String>()
-        
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
-            missingPermissions.add(Manifest.permission.ACCESS_FINE_LOCATION)
+        return PermissionUtils.getMissingWifiPermissions(context)
+    }
+    
+    /**
+     * Check if location services are enabled (required for Android 10+)
+     */
+    fun isLocationEnabled(): Boolean {
+        return PermissionUtils.isLocationEnabled(context)
+    }
+    
+    /**
+     * Save working password to SharedPreferences for future reference
+     */
+    private fun saveWorkingPassword(network: WifiNetwork, password: String) {
+        try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            
+            workingPasswordsPrefs.edit()
+                .putString(network.bssid, password)
+                .putString("${network.bssid}_ssid", network.ssid) 
+                .putLong("${network.bssid}_timestamp", System.currentTimeMillis())
+                .apply()
+                
+            android.util.Log.d("WifiScanner", "Saved working password for ${network.ssid} (${network.bssid})")
+        } catch (e: Exception) {
+            android.util.Log.e("WifiScanner", "Failed to save working password: ${e.message}")
         }
-        
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.ACCESS_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
-            missingPermissions.add(Manifest.permission.ACCESS_WIFI_STATE)
+    }
+    
+    /**
+     * Get saved working password for a network
+     */
+    fun getWorkingPassword(network: WifiNetwork): String? {
+        return try {
+            val workingPasswordsPrefs = context.getSharedPreferences("working_passwords", Context.MODE_PRIVATE)
+            workingPasswordsPrefs.getString(network.bssid, null)
+        } catch (e: Exception) {
+            null
         }
-        
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CHANGE_WIFI_STATE) != PackageManager.PERMISSION_GRANTED) {
-            missingPermissions.add(Manifest.permission.CHANGE_WIFI_STATE)
-        }
-        
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            if (ContextCompat.checkSelfPermission(context, Manifest.permission.NEARBY_WIFI_DEVICES) != PackageManager.PERMISSION_GRANTED) {
-                missingPermissions.add(Manifest.permission.NEARBY_WIFI_DEVICES)
-            }
-        }
-        
-        return missingPermissions
     }
 
     fun unregisterReceiver() {

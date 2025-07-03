@@ -103,7 +103,7 @@ class ConnectionManager(
                 val rssiThreshold = _rssiThresholdForConnection.value
                 if (network.rssi < rssiThreshold) {
                     withContext(Dispatchers.Main) {
-                        _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
+                        _connectionStatus.value = "⚠️ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
                         _connectionProgress.value = "Connection aborted - weak signal"
                     }
                     delay(2000)
@@ -206,7 +206,7 @@ class ConnectionManager(
                             // Only show retry message if we have more attempts left for this password
                             if (retry < maxRetries) {
                                 withContext(Dispatchers.Main) {
-                                    _connectionProgress.value = "❌ Wrong password '$password', retrying in 2s..."
+                                    _connectionProgress.value = "⚠️ Wrong password '$password', retrying in 2s..."
                                 }
                                 delay(2000)
                                 // Check if cancelled during delay
@@ -216,7 +216,7 @@ class ConnectionManager(
                                 }
                             } else {
                                 withContext(Dispatchers.Main) {
-                                    _connectionProgress.value = "❌ Password '$password' failed after $maxRetries attempts"
+                                    _connectionProgress.value = "⚠️ Password '$password' failed after $maxRetries attempts"
                                 }
                                 delay(1000)
                                 // Check if cancelled during delay
@@ -234,7 +234,7 @@ class ConnectionManager(
 
                 if (!connected) {
                     withContext(Dispatchers.Main) {
-                        _connectionStatus.value = "❌ All stored passwords failed for ${network.ssid}"
+                        _connectionStatus.value = "⚠️ All stored passwords failed for ${network.ssid}"
                         _connectionProgress.value = "All passwords failed - manual entry required"
                     }
                     delay(2000)
@@ -290,7 +290,7 @@ class ConnectionManager(
             val rssiThreshold = _rssiThresholdForConnection.value
             if (network.rssi < rssiThreshold) {
                 withContext(Dispatchers.Main) {
-                    _connectionStatus.value = "❌ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
+                    _connectionStatus.value = "⚠️ Signal too weak (${network.rssi}dBm < ${rssiThreshold}dBm)"
                     _connectionProgress.value = "Connection aborted - weak signal"
                     // Clear progress data and remove from connecting set
                     _currentPassword.value = null
@@ -344,7 +344,7 @@ class ConnectionManager(
                 } else {
                     if (retry < maxRetries) {
                         withContext(Dispatchers.Main) {
-                            _connectionProgress.value = "❌ Attempt $retry failed, retrying in 2s..."
+                            _connectionProgress.value = "⚠️ Attempt $retry failed, retrying in 2s..."
                         }
                         delay(2000)
                         // Check if cancelled during delay
@@ -354,7 +354,7 @@ class ConnectionManager(
                         }
                     } else {
                         withContext(Dispatchers.Main) {
-                            _connectionStatus.value = "❌ Manual password failed for ${network.ssid} after $maxRetries attempts"
+                            _connectionStatus.value = "⚠️ Manual password failed for ${network.ssid} after $maxRetries attempts"
                             _connectionProgress.value = "Manual password incorrect after all retries"
                         }
                     }
@@ -413,22 +413,27 @@ class ConnectionManager(
                 // Check for missing permissions first
                 val missingPermissions = wifiScanner.getMissingPermissions()
                 if (missingPermissions.isNotEmpty()) {
-                    _connectionProgress.value = "❌ Missing permissions: ${missingPermissions.joinToString(", ")}"
-                    _connectionStatus.value = "❌ Required permissions not granted. Please enable: ${missingPermissions.joinToString(", ")}"
+                    val permissionNames = missingPermissions.map { permission ->
+                        PermissionUtils.getPermissionDisplayName(permission)
+                    }
+                    _connectionProgress.value = "⚠️ Missing permissions: ${permissionNames.joinToString(", ")}"
+                    _connectionStatus.value = "⚠️ Required permissions not granted. Please enable: ${permissionNames.joinToString(", ")}"
                     return false
                 }
                 
                 // Check if location is enabled (required for Android 10+)
-                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.Q) {
-                    val locationManager = context.getSystemService(Context.LOCATION_SERVICE) as android.location.LocationManager
-                    val isLocationEnabled = locationManager.isProviderEnabled(android.location.LocationManager.GPS_PROVIDER) ||
-                                          locationManager.isProviderEnabled(android.location.LocationManager.NETWORK_PROVIDER)
-                    
-                    if (!isLocationEnabled) {
-                        _connectionProgress.value = "❌ Location services must be enabled for Wi-Fi connections on Android 10+"
-                        _connectionStatus.value = "❌ Please enable location services in device settings"
-                        return false
-                    }
+                if (!wifiScanner.isLocationEnabled()) {
+                    _connectionProgress.value = "⚠️ Location services must be enabled for Wi-Fi connections on Android 10+"
+                    _connectionStatus.value = "⚠️ Please enable location services in device settings"
+                    return false
+                }
+                
+                // Check if we already have a working password for this network
+                val existingPassword = wifiScanner.getWorkingPassword(network)
+                if (existingPassword != null && existingPassword == password) {
+                    _connectionProgress.value = "✅ Using previously validated password"
+                    _connectionStatus.value = "✅ Password already validated for ${network.ssid}"
+                    return true
                 }
                 
                 // Enhanced validation: Clear any existing working password to force fresh validation
@@ -437,7 +442,7 @@ class ConnectionManager(
                 // Ensure no fallback or default passwords interfere
                 if (isDefaultOrFallbackPassword(password)) {
                     _connectionProgress.value = "⚠️ Avoiding common/default password for security"
-                    _connectionStatus.value = "❌ Please use the actual network password, not a default one"
+                    _connectionStatus.value = "⚠️ Please use the actual network password, not a default one"
                     return false
                 }
                 
@@ -476,10 +481,10 @@ class ConnectionManager(
                                 _connectionProgress.value = "✅ Password validation successful!"
                                 android.util.Log.d("ConnectionManager", "Password validation successful")
                             }
-                            currentStatus.contains("❌") -> {
+                            currentStatus.contains("⚠️") -> {
                                 connectionResult = false
                                 connectionError = currentStatus
-                                _connectionProgress.value = "❌ Password validation failed"
+                                _connectionProgress.value = "⚠️ Password validation failed"
                                 android.util.Log.d("ConnectionManager", "Password validation failed: $currentStatus")
                             }
                             currentStatus.contains("Connection validated and disconnected") -> {
@@ -504,29 +509,29 @@ class ConnectionManager(
                         android.util.Log.d("ConnectionManager", "Stored successful password for ${network.bssid}: ${password.take(3)}***")
                         
                         _connectionProgress.value = "✅ Password validated and saved for ${network.ssid}"
-                        _connectionStatus.value = "✅ Connection successful! Password saved for future reference."
+                        _connectionStatus.value = "✅ Password validated! ${network.ssid} credentials saved for future use."
                         return true
                     }
                     false -> {
-                        _connectionProgress.value = connectionError ?: "❌ Connection failed"
-                        _connectionStatus.value = connectionError ?: "❌ Failed to connect to ${network.ssid} - incorrect password"
+                        _connectionProgress.value = connectionError ?: "⚠️ Connection failed"
+                        _connectionStatus.value = connectionError ?: "⚠️ Failed to connect to ${network.ssid} - incorrect password"
                         return false
                     }
                     null -> {
                         // Connection timeout
-                        _connectionProgress.value = "❌ Connection timeout after ${timeoutSeconds}s"
-                        _connectionStatus.value = "❌ Connection timeout - no response from ${network.ssid}"
+                        _connectionProgress.value = "⚠️ Connection timeout after ${timeoutSeconds}s"
+                        _connectionStatus.value = "⚠️ Connection timeout - no response from ${network.ssid}"
                         return false
                     }
                 }
             }
         } catch (e: SecurityException) {
-            _connectionProgress.value = "❌ Permission error: ${e.message}"
-            _connectionStatus.value = "❌ Security error: Missing required permissions"
+            _connectionProgress.value = "⚠️ Permission error: ${e.message}"
+            _connectionStatus.value = "⚠️ Security error: Missing required permissions"
             false
         } catch (e: Exception) {
-            _connectionProgress.value = "❌ Connection error: ${e.message}"
-            _connectionStatus.value = "❌ Connection failed: ${e.message}"
+            _connectionProgress.value = "⚠️ Connection error: ${e.message}"
+            _connectionStatus.value = "⚠️ Connection failed: ${e.message}"
             false
         }
     }
