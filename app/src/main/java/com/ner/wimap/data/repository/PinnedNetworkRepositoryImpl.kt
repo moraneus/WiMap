@@ -34,7 +34,7 @@ class PinnedNetworkRepositoryImpl @Inject constructor(
                 longitude = network.longitude,
                 timestamp = network.timestamp,
                 comment = comment,
-                savedPassword = password,
+                encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(password),
                 photoUri = photoUri,
                 pinnedAt = System.currentTimeMillis()
             )
@@ -74,7 +74,7 @@ class PinnedNetworkRepositoryImpl @Inject constructor(
             if (existingNetwork != null) {
                 val updatedNetwork = existingNetwork.copy(
                     comment = comment,
-                    savedPassword = password,
+                    encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(password),
                     photoUri = photoUri
                 )
                 pinnedNetworkDao.updatePinnedNetwork(updatedNetwork)

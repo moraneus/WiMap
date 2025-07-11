@@ -35,4 +35,7 @@ interface ScanSessionDao {
     
     @Query("UPDATE scan_sessions SET title = :newTitle WHERE id = :sessionId")
     suspend fun updateSessionTitle(sessionId: String, newTitle: String)
+    
+    @Query("DELETE FROM scan_sessions")
+    suspend fun clearAllScanSessions()
 }

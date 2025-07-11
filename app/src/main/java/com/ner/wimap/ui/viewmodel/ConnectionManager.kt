@@ -575,7 +575,7 @@ class ConnectionManager(
         try {
             val existingPinned = pinnedNetworkDao.getPinnedNetworkByBssid(network.bssid)
             existingPinned?.let { pinned ->
-                val updatedNetwork = pinned.copy(savedPassword = password)
+                val updatedNetwork = pinned.copy(encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(password))
                 pinnedNetworkDao.updatePinnedNetwork(updatedNetwork)
                 withContext(Dispatchers.Main) {
                     _connectionProgress.value = "✅ Password saved to pinned network"

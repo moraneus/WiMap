@@ -50,7 +50,7 @@ class PinnedNetworksManager(
                     longitude = network.longitude,
                     timestamp = network.timestamp,
                     comment = comment,
-                    savedPassword = password,
+                    encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(password),
                     photoUri = photoUri,
                     pinnedAt = System.currentTimeMillis()
                 )
@@ -91,7 +91,7 @@ class PinnedNetworksManager(
                 if (existingPinned != null) {
                     val updatedNetwork = existingPinned.copy(
                         comment = comment,
-                        savedPassword = password,
+                        encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(password),
                         photoUri = photoUri
                     )
                     pinnedNetworkDao.updatePinnedNetwork(updatedNetwork)
@@ -124,7 +124,7 @@ class PinnedNetworksManager(
                 existingNetwork?.let { network ->
                     val updatedNetwork = network.copy(
                         comment = comment ?: network.comment,
-                        savedPassword = password ?: network.savedPassword,
+                        encryptedPassword = if (password != null) com.ner.wimap.utils.EncryptionUtils.encrypt(password) else network.encryptedPassword,
                         photoUri = photoUri ?: network.photoUri
                     )
                     pinnedNetworkDao.updatePinnedNetwork(updatedNetwork)

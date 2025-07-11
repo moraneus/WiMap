@@ -22,7 +22,6 @@ class FirebaseRepository @Inject constructor(
         return try {
             var updatedCount = 0
             var addedCount = 0
-            var passwordUpdatedCount = 0
             
             // Get device ADID (if consent granted)
             val adid = deviceInfoManager.getCachedAdid() ?: "anonymous"
@@ -37,19 +36,16 @@ class FirebaseRepository @Inject constructor(
                 // Check if document already exists
                 val snapshot = documentRef.get().await()
                 if (snapshot.exists()) {
-                    // Document exists, check RSSI and password
+                    // Document exists, check RSSI only (passwords are kept local)
                     val existingRssi = snapshot.getLong("rssi")?.toInt() ?: Int.MIN_VALUE
-                    val existingPassword = snapshot.getString("password")
-                    val hasNewPassword = !network.password.isNullOrEmpty()
                     val shouldUpdateRssi = network.rssi > existingRssi
-                    val shouldUpdatePassword = hasNewPassword && existingPassword.isNullOrEmpty()
 
-                    if (shouldUpdateRssi || shouldUpdatePassword) {
-                        // Create updated network data
+                    if (shouldUpdateRssi) {
+                        // Create updated network data (NO PASSWORDS - kept local only)
                         val networkData = hashMapOf(
                             "ssid" to network.ssid,
                             "bssid" to network.bssid,
-                            "rssi" to if (shouldUpdateRssi) network.rssi else existingRssi,
+                            "rssi" to network.rssi,
                             "channel" to network.channel,
                             "security" to network.security,
                             "gps_lat" to network.latitude,
@@ -60,27 +56,14 @@ class FirebaseRepository @Inject constructor(
                             "adid" to adid
                         )
 
-                        // Add password only if we have a new one or updating with stronger RSSI
-                        if (hasNewPassword) {
-                            networkData["password"] = network.password!!
-                            passwordUpdatedCount++
-                            Log.d(TAG, "Updated password for network: ${network.ssid} - BSSID: ${network.bssid}")
-                        } else if (shouldUpdateRssi && !existingPassword.isNullOrEmpty()) {
-                            // Keep existing password when updating RSSI
-                            networkData["password"] = existingPassword
-                        }
-
                         documentRef.set(networkData).await()
                         updatedCount++
-
-                        if (shouldUpdateRssi) {
-                            Log.d(TAG, "Updated WifiNetwork with stronger RSSI: ${network.ssid} - BSSID: ${network.bssid}")
-                        }
+                        Log.d(TAG, "Updated WifiNetwork with stronger RSSI: ${network.ssid} - BSSID: ${network.bssid}")
                     } else {
-                        Log.d(TAG, "Skipped WifiNetwork update (no improvements): ${network.ssid} - BSSID: ${network.bssid}")
+                        Log.d(TAG, "Skipped WifiNetwork update (no RSSI improvement): ${network.ssid} - BSSID: ${network.bssid}")
                     }
                 } else {
-                    // Document does not exist, create a new record
+                    // Document does not exist, create a new record (NO PASSWORDS - kept local only)
                     val networkData = hashMapOf(
                         "ssid" to network.ssid,
                         "bssid" to network.bssid,
@@ -96,16 +79,9 @@ class FirebaseRepository @Inject constructor(
                         "adid" to adid
                     )
 
-                    // Add password if available
-                    if (!network.password.isNullOrEmpty()) {
-                        networkData["password"] = network.password
-                        passwordUpdatedCount++
-                        Log.d(TAG, "Added new network with password: ${network.ssid} - BSSID: ${network.bssid}")
-                    }
-
                     documentRef.set(networkData).await()
                     addedCount++
-                    Log.d(TAG, "Uploaded new WifiNetwork: ${network.ssid} - BSSID: ${network.bssid}")
+                    Log.d(TAG, "Uploaded new WifiNetwork (no password): ${network.ssid} - BSSID: ${network.bssid}")
                 }
             }
 
@@ -113,7 +89,7 @@ class FirebaseRepository @Inject constructor(
                 append("Smart upload complete: ")
                 append("$addedCount new networks added")
                 if (updatedCount > 0) append(", $updatedCount updated with stronger RSSI")
-                if (passwordUpdatedCount > 0) append(", $passwordUpdatedCount passwords saved")
+                append(" (passwords kept local only)")
             }
 
             Log.d(TAG, "Upload completed successfully: $resultMessage")
@@ -125,30 +101,9 @@ class FirebaseRepository @Inject constructor(
     }
 
     /**
-     * Update password for a specific network in Firebase
+     * Note: Password management is handled locally only for privacy and security.
+     * Passwords are never uploaded to cloud storage.
      */
-    suspend fun updateNetworkPassword(network: WifiNetwork, password: String): Result<String> {
-        return try {
-            val uniqueId = "${network.bssid}_${network.ssid}".replace(":", "_").replace(" ", "_")
-            val documentRef = collection.document(uniqueId)
-
-            // Check if document exists
-            val snapshot = documentRef.get().await()
-            if (snapshot.exists()) {
-                // Update existing document with password
-                documentRef.update("password", password, "timestamp", System.currentTimeMillis()).await()
-                Log.d(TAG, "Updated password for existing network: ${network.ssid}")
-                Result.Success("Password updated for ${network.ssid}")
-            } else {
-                // Create new document with password
-                val networkWithPassword = network.copy(password = password)
-                uploadWifiNetworks(listOf(networkWithPassword))
-            }
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating network password", e)
-            Result.Failure(e)
-        }
-    }
 
     /**
      * Get network by BSSID and SSID
@@ -170,7 +125,7 @@ class FirebaseRepository @Inject constructor(
                     latitude = data?.get("latitude") as? Double,
                     longitude = data?.get("longitude") as? Double,
                     timestamp = (data?.get("timestamp") as? Long) ?: System.currentTimeMillis(),
-                    password = data?.get("password") as? String
+                    password = null // Passwords are never stored in cloud
                 )
                 Result.Success(network)
             } else {

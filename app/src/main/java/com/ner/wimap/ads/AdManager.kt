@@ -8,6 +8,7 @@ import com.google.android.gms.ads.interstitial.InterstitialAd
 import com.google.android.gms.ads.interstitial.InterstitialAdLoadCallback
 import com.google.android.gms.ads.nativead.NativeAd
 import com.google.android.gms.ads.nativead.NativeAdOptions
+import android.content.SharedPreferences
 import com.ner.wimap.BuildConfig
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -17,7 +18,8 @@ import javax.inject.Singleton
 
 @Singleton
 class AdManager @Inject constructor(
-    private val interstitialAdManager: InterstitialAdManager
+    private val interstitialAdManager: InterstitialAdManager,
+    private val sharedPreferences: SharedPreferences
 ) {
     
     companion object {
@@ -33,6 +35,9 @@ class AdManager @Inject constructor(
         private const val PROD_INTERSTITIAL_AD_UNIT_ID = "ca-app-pub-9891349918663384/5592311790"
         private const val PROD_BANNER_AD_UNIT_ID = "ca-app-pub-9891349918663384/8828865130"
         private const val PROD_PINNED_BANNER_AD_UNIT_ID = "ca-app-pub-9891349918663384/1975149340"
+        
+        // GDPR consent preferences
+        private const val KEY_PERSONALIZED_ADS_ENABLED = "personalized_ads_enabled"
     }
     
     // Removed duplicate interstitial ad handling - now handled by InterstitialAdManager
@@ -118,7 +123,7 @@ class AdManager @Inject constructor(
                 )
                 .build()
             
-            adLoader.loadAd(AdRequest.Builder().build())
+            adLoader.loadAd(buildAdRequest())
         }
     }
     
@@ -183,5 +188,40 @@ class AdManager @Inject constructor(
     fun reloadBannerAds() {
         Log.d(TAG, "Triggering banner ad reload")
         // This will trigger re-composition of banner ads which will reload them
+    }
+    
+    /**
+     * Set personalized ads enabled/disabled based on GDPR consent
+     */
+    fun setPersonalizedAdsEnabled(enabled: Boolean) {
+        Log.d(TAG, "Setting personalized ads enabled: $enabled")
+        sharedPreferences.edit()
+            .putBoolean(KEY_PERSONALIZED_ADS_ENABLED, enabled)
+            .apply()
+        
+        // Update all future ad requests
+        interstitialAdManager.setPersonalizedAdsEnabled(enabled)
+    }
+    
+    /**
+     * Check if personalized ads are enabled
+     */
+    fun isPersonalizedAdsEnabled(): Boolean {
+        return sharedPreferences.getBoolean(KEY_PERSONALIZED_ADS_ENABLED, false)
+    }
+    
+    /**
+     * Build AdRequest with consent settings
+     */
+    private fun buildAdRequest(): AdRequest {
+        val builder = AdRequest.Builder()
+        
+        // Add non-personalized ads parameter if personalized ads are disabled
+        if (!isPersonalizedAdsEnabled()) {
+            // Use the simplified approach for non-personalized ads
+            builder.addKeyword("npa")
+        }
+        
+        return builder.build()
     }
 }

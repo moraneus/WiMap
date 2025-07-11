@@ -17,12 +17,12 @@ android {
         applicationId = "com.ner.wimap"
         minSdk = 24
         targetSdk = 34
-        versionCode = 1
+        versionCode = 2
         versionName = "1.0.0"
         
         // App metadata for store listing
         resValue("string", "app_version", "1.0.0")
-        resValue("string", "version_code", "1")
+        resValue("string", "version_code", "2")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {

@@ -7,6 +7,7 @@ import com.ner.wimap.ads.AdManager
 import com.ner.wimap.ads.NativeAdCache
 import com.ner.wimap.data.database.AppDatabase
 import com.ner.wimap.data.database.ScanSessionDao
+import com.ner.wimap.data.GDPRConsentManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
@@ -55,5 +56,11 @@ object AppModule {
     @Singleton
     fun provideScanSessionDao(@ApplicationContext context: Context): ScanSessionDao {
         return AppDatabase.getDatabase(context).scanSessionDao()
+    }
+    
+    @Provides
+    @Singleton
+    fun provideGDPRConsentManager(@ApplicationContext context: Context): GDPRConsentManager {
+        return GDPRConsentManager(context)
     }
 }

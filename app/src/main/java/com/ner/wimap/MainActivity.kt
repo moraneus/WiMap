@@ -40,6 +40,8 @@ import com.ner.wimap.ui.viewmodel.ExportFormat
 import com.ner.wimap.ui.viewmodel.ExportAction
 import com.ner.wimap.ads.AdMobManager
 import com.ner.wimap.ui.dialogs.PrivacyConsentDialog
+import com.ner.wimap.ui.dialogs.GDPRConsentDialog
+import com.ner.wimap.ui.dialogs.ScanSummaryDialog
 import com.ner.wimap.ui.dialogs.ExportSuccessDialog
 import androidx.lifecycle.lifecycleScope
 import androidx.compose.runtime.DisposableEffect
@@ -128,6 +130,10 @@ class MainActivity : ComponentActivity() {
         val showEmptyPasswordListDialog by viewModel.showEmptyPasswordListDialog.collectAsState()
         val networkForEmptyPasswordDialog by viewModel.networkForEmptyPasswordDialog.collectAsState()
         val showPrivacyConsentDialog by viewModel.showPrivacyConsentDialog.collectAsState()
+        val showGDPRConsentDialog by viewModel.showGDPRConsentDialog.collectAsState()
+        val showConsentRequiredDialog by viewModel.showConsentRequiredDialog.collectAsState()
+        val showScanSummaryDialog by viewModel.showScanSummaryDialog.collectAsState()
+        val currentScanSummary by viewModel.currentScanSummary.collectAsState()
         val isBackgroundScanningEnabled by viewModel.isBackgroundScanningEnabled.collectAsState()
         val isBackgroundServiceActive by viewModel.isBackgroundServiceActive.collectAsState()
         val isAutoUploadEnabled by viewModel.isAutoUploadEnabled.collectAsState()
@@ -269,13 +275,16 @@ class MainActivity : ComponentActivity() {
         val navigateToScanHistoryTrigger by viewModel.navigateToScanHistoryTrigger.collectAsState()
         LaunchedEffect(navigateToScanHistoryTrigger) {
             if (navigateToScanHistoryTrigger) {
-                // Ensure we're on main screen first, then navigate to scan history
-                if (currentScreen == "main") {
-                    coroutineScope.launch {
-                        pagerState.animateScrollToPage(SwipeDestination.SCAN_HISTORY.index)
-                    }
-                    currentPage = SwipeDestination.SCAN_HISTORY.index
+                // Navigate to scan history from any screen
+                if (currentScreen == "settings") {
+                    // From settings, first navigate to main screen
+                    viewModel.navigateToMain()
                 }
+                // Navigate to scan history page
+                coroutineScope.launch {
+                    pagerState.animateScrollToPage(SwipeDestination.SCAN_HISTORY.index)
+                }
+                currentPage = SwipeDestination.SCAN_HISTORY.index
                 viewModel.onNavigateToScanHistoryHandled()
             }
         }
@@ -614,7 +623,61 @@ class MainActivity : ComponentActivity() {
             }
         }
         
-        // Privacy Consent Dialog
+        // GDPR Consent Dialog (takes priority over legacy dialog)
+        if (showGDPRConsentDialog) {
+            GDPRConsentDialog(
+                onConsentGiven = { essential, analytics, advertising, location, dataUpload, userAge ->
+                    viewModel.onGDPRConsentGranted(essential, analytics, advertising, location, dataUpload, userAge)
+                },
+                onDismiss = { viewModel.onGDPRConsentDenied() }
+            )
+        }
+        
+        // Consent Required Dialog (blocks app usage)
+        if (showConsentRequiredDialog) {
+            androidx.compose.material3.AlertDialog(
+                onDismissRequest = { }, // Cannot dismiss without action
+                title = {
+                    androidx.compose.material3.Text(
+                        text = "Consent Required",
+                        style = androidx.compose.material3.MaterialTheme.typography.headlineSmall
+                    )
+                },
+                text = {
+                    androidx.compose.material3.Text(
+                        text = "WiMap requires consent to essential features (GPS location and data sharing) to function as a WiFi mapping application. Please review and accept the terms to continue."
+                    )
+                },
+                confirmButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { viewModel.onShowConsentFromRequiredDialog() }
+                    ) {
+                        androidx.compose.material3.Text("Review Terms")
+                    }
+                },
+                dismissButton = {
+                    androidx.compose.material3.TextButton(
+                        onClick = { viewModel.dismissConsentRequiredDialog() }
+                    ) {
+                        androidx.compose.material3.Text("Cancel")
+                    }
+                },
+                shape = androidx.compose.foundation.shape.RoundedCornerShape(16.dp)
+            )
+        }
+        
+        // Scan Summary Dialog
+        if (showScanSummaryDialog && currentScanSummary != null) {
+            val (networkCount, defaultTitle) = currentScanSummary!!
+            ScanSummaryDialog(
+                networkCount = networkCount,
+                defaultTitle = defaultTitle,
+                onSave = { title -> viewModel.onSaveScanSession(title) },
+                onCancel = { viewModel.onCancelScanSession() }
+            )
+        }
+        
+        // Legacy Privacy Consent Dialog (for backward compatibility)
         PrivacyConsentDialog(
             isVisible = showPrivacyConsentDialog,
             onConsentGranted = { viewModel.onPrivacyConsentGranted() },

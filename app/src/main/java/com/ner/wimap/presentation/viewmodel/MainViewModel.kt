@@ -44,7 +44,8 @@ class MainViewModel @Inject constructor(
     private val deviceInfoManager: com.ner.wimap.data.DeviceInfoManager,
     private val deviceInfoService: com.ner.wimap.service.DeviceInfoService,
     private val firebaseRepository: com.ner.wimap.FirebaseRepository,
-    private val scanSessionDao: ScanSessionDao
+    private val scanSessionDao: ScanSessionDao,
+    private val gdprConsentManager: com.ner.wimap.data.GDPRConsentManager
 ) : AndroidViewModel(application) {
 
     // UI State
@@ -68,6 +69,18 @@ class MainViewModel @Inject constructor(
 
     private val _showPrivacyConsentDialog = MutableStateFlow(false)
     val showPrivacyConsentDialog: StateFlow<Boolean> = _showPrivacyConsentDialog.asStateFlow()
+    
+    private val _showGDPRConsentDialog = MutableStateFlow(false)
+    val showGDPRConsentDialog: StateFlow<Boolean> = _showGDPRConsentDialog.asStateFlow()
+    
+    private val _showConsentRequiredDialog = MutableStateFlow(false)
+    val showConsentRequiredDialog: StateFlow<Boolean> = _showConsentRequiredDialog.asStateFlow()
+    
+    private val _showScanSummaryDialog = MutableStateFlow(false)
+    val showScanSummaryDialog: StateFlow<Boolean> = _showScanSummaryDialog.asStateFlow()
+    
+    private val _currentScanSummary = MutableStateFlow<Pair<Int, String>?>(null)
+    val currentScanSummary: StateFlow<Pair<Int, String>?> = _currentScanSummary.asStateFlow()
 
     // Permission actions
     private val _requestPermissionsAction = MutableStateFlow<List<String>?>(null)
@@ -264,7 +277,7 @@ class MainViewModel @Inject constructor(
                 
                 pinnedNetwork.copy(
                     comment = temporaryData.comment.takeIf { it.isNotEmpty() } ?: pinnedNetwork.comment,
-                    savedPassword = temporaryData.savedPassword ?: pinnedNetwork.savedPassword,
+                    encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(temporaryData.savedPassword) ?: pinnedNetwork.encryptedPassword,
                     photoUri = mergedPhotoUri,
                     isOffline = isOffline,
                     lastSeenTimestamp = updatedLastSeen
@@ -290,6 +303,13 @@ class MainViewModel @Inject constructor(
 
     // Scanning functions
     fun startScan() {
+        // Check GDPR consent before allowing scan
+        val consentState = gdprConsentManager.consentState.value
+        if (!consentState.hasValidConsent) {
+            _showConsentRequiredDialog.value = true
+            return
+        }
+        
         viewModelScope.launch {
             try {
                 // Handle scan with potential ad display every 3rd scan
@@ -355,12 +375,20 @@ class MainViewModel @Inject constructor(
                     // Silently handle cleanup errors
                 }
                 
-                // Save scan session before other operations
-                endScanSession()
+                // Show scan summary dialog if networks were found
+                val networkCount = wifiNetworks.value.size
+                if (networkCount > 0) {
+                    val defaultTitle = generateSessionTitle(System.currentTimeMillis())
+                    _currentScanSummary.value = Pair(networkCount, defaultTitle)
+                    _showScanSummaryDialog.value = true
+                } else {
+                    // No networks found, just end session without dialog
+                    endScanSession()
+                }
                 
                 // Auto-upload if enabled and networks are available
-                Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${wifiNetworks.value.size}")
-                if (_isAutoUploadEnabled.value && wifiNetworks.value.isNotEmpty()) {
+                Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${networkCount}")
+                if (_isAutoUploadEnabled.value && networkCount > 0) {
                     Log.d("MainViewModel", "stopScan: Triggering auto-upload")
                     uploadScanResultsToFirebase(showNotifications = false)
                 } else {
@@ -1197,6 +1225,9 @@ class MainViewModel @Inject constructor(
                 // Clear all temporary network data from database
                 manageTemporaryNetworkDataUseCase.clearAllTemporaryData()
                 
+                // Clear all scan sessions from database
+                scanSessionDao.clearAllScanSessions()
+                
                 // Clear current networks list
                 scanWifiNetworksUseCase.clearNetworks()
                 
@@ -1422,8 +1453,11 @@ class MainViewModel @Inject constructor(
     
     // Privacy Consent Methods
     fun checkAndShowPrivacyConsent() {
-        // Always show dialog if consent was never granted
-        if (deviceInfoManager.shouldShowConsentDialog()) {
+        // Check GDPR consent first
+        if (gdprConsentManager.needsConsent()) {
+            _showGDPRConsentDialog.value = true
+        } else if (deviceInfoManager.shouldShowConsentDialog()) {
+            // Fall back to old consent dialog for legacy compatibility
             _showPrivacyConsentDialog.value = true
         } else if (deviceInfoManager.hasConsentGranted()) {
             // User has already consented, check if we need to update device info
@@ -1431,6 +1465,119 @@ class MainViewModel @Inject constructor(
         }
     }
     
+    // GDPR Consent Methods
+    fun onGDPRConsentGranted(
+        essentialConsent: Boolean,
+        analyticsConsent: Boolean,
+        advertisingConsent: Boolean,
+        locationConsent: Boolean,
+        dataUploadConsent: Boolean,
+        userAge: Int
+    ) {
+        _showGDPRConsentDialog.value = false
+        
+        // Record consent in GDPR manager
+        gdprConsentManager.recordConsent(
+            essentialConsent = essentialConsent,
+            analyticsConsent = analyticsConsent,
+            advertisingConsent = advertisingConsent,
+            locationConsent = locationConsent,
+            dataUploadConsent = dataUploadConsent,
+            userAge = userAge
+        )
+        
+        // Initialize AdMob based on consent
+        initializeServicesAfterConsent()
+    }
+    
+    fun onGDPRConsentDenied() {
+        _showGDPRConsentDialog.value = false
+        // User declined - app can only use essential functionality
+        gdprConsentManager.withdrawConsent()
+    }
+    
+    fun dismissGDPRConsentDialog() {
+        _showGDPRConsentDialog.value = false
+    }
+    
+    fun dismissConsentRequiredDialog() {
+        _showConsentRequiredDialog.value = false
+    }
+    
+    fun onShowConsentFromRequiredDialog() {
+        _showConsentRequiredDialog.value = false
+        _showGDPRConsentDialog.value = true
+    }
+    
+    fun onSaveScanSession(title: String) {
+        _showScanSummaryDialog.value = false
+        
+        // Update the current session title and save it
+        currentScanSession?.let { session ->
+            val finalSession = session.copy(
+                title = title,
+                networkCount = _currentScanNetworks.size,
+                networks = _currentScanNetworks.toList()
+            )
+            
+            viewModelScope.launch {
+                try {
+                    scanSessionDao.insertScanSession(finalSession)
+                    Log.d("MainViewModel", "Saved scan session with custom title: '$title'")
+                    
+                    // Clean up old sessions if needed (keep last 50 sessions)
+                    val sessionCount = scanSessionDao.getScanSessionCount()
+                    if (sessionCount > 50) {
+                        val excessCount = sessionCount - 50
+                        scanSessionDao.deleteOldestScanSessions(excessCount)
+                        Log.d("MainViewModel", "Cleaned up $excessCount old scan sessions")
+                    }
+                } catch (e: Exception) {
+                    Log.e("MainViewModel", "Failed to save scan session", e)
+                }
+            }
+        }
+        
+        // End the session and reset state
+        endScanSession(saveSession = false) // Don't save again, we already saved above
+        _currentScanSummary.value = null
+    }
+    
+    fun onCancelScanSession() {
+        _showScanSummaryDialog.value = false
+        // End session without saving
+        endScanSession()
+        _currentScanSummary.value = null
+    }
+    
+    private fun initializeServicesAfterConsent() {
+        val consentState = gdprConsentManager.consentState.value
+        
+        // Initialize AdMob with consent settings
+        if (consentState.canShowPersonalizedAds) {
+            // Initialize with personalized ads
+            adManager.setPersonalizedAdsEnabled(true)
+        } else {
+            // Initialize with non-personalized ads only
+            adManager.setPersonalizedAdsEnabled(false)
+        }
+        
+        // Handle analytics consent
+        if (consentState.canCollectAnalytics) {
+            // Enable analytics
+            // TODO: Initialize analytics service
+        }
+        
+        // Handle data upload consent
+        if (consentState.canUploadData) {
+            // Enable cloud uploads
+            _isAutoUploadEnabled.value = true
+        } else {
+            _isAutoUploadEnabled.value = false
+        }
+    }
+    
+    // Legacy consent methods for backward compatibility
     fun onPrivacyConsentGranted() {
         _showPrivacyConsentDialog.value = false
         deviceInfoService.handleConsentGranted()
@@ -1446,11 +1593,35 @@ class MainViewModel @Inject constructor(
     }
     
     fun isPrivacyConsentGranted(): Boolean {
-        return deviceInfoManager.hasConsentGranted()
+        val gdprConsent = gdprConsentManager.consentState.value.hasValidConsent
+        val legacyConsent = deviceInfoManager.hasConsentGranted()
+        return gdprConsent || legacyConsent
     }
     
     fun requestDataDeletion() {
+        // Clear GDPR consent data
+        gdprConsentManager.clearAllData()
+        
+        // Clear legacy consent data
         deviceInfoService.handleDataDeletionRequest()
+        
+        // Clear all app data
+        clearAllData()
+    }
+    
+    // GDPR Rights Management
+    fun getGDPRConsentSummary(): String {
+        return gdprConsentManager.getConsentSummary()
+    }
+    
+    fun exportGDPRData(): Map<String, Any> {
+        return gdprConsentManager.exportConsentData()
+    }
+    
+    fun withdrawGDPRConsent() {
+        gdprConsentManager.withdrawConsent()
+        // Show consent dialog again
+        _showGDPRConsentDialog.value = true
     }
     
     // ========================================
@@ -1500,9 +1671,9 @@ class MainViewModel @Inject constructor(
         }
     }
     
-    private fun endScanSession() {
+    private fun endScanSession(saveSession: Boolean = false) {
         val session = currentScanSession
-        if (session != null && _currentScanNetworks.isNotEmpty()) {
+        if (session != null && _currentScanNetworks.isNotEmpty() && saveSession) {
             val finalSession = session.copy(
                 networkCount = _currentScanNetworks.size,
                 networks = _currentScanNetworks.toList()

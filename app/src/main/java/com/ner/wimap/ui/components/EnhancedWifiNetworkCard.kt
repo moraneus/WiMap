@@ -227,7 +227,8 @@ fun EnhancedWifiNetworkCard(
                     comment = comment,
                     savedPassword = savedPassword,
                     isOpenNetwork = isOpenNetwork,
-                    hasPhoto = photoPath != null
+                    hasPhoto = photoPath != null,
+                    successfulPasswords = successfulPasswords
                 )
             }
         }

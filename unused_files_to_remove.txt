@@ -1,0 +1,21 @@
+# Unused Files to Remove
+
+## Ad Manager Duplicates
+- app/src/main/java/com/ner/wimap/ads/AdMobManager.kt (duplicate of AdManager.kt)
+- app/src/main/java/com/ner/wimap/ads/AdExportManager.kt (uses obsolete AdMobManager)
+
+## Unused Native Ad Implementations  
+- app/src/main/java/com/ner/wimap/ads/NativeAdCard.kt (replaced by StableNativeAdCard)
+- app/src/main/java/com/ner/wimap/ads/WorkingNativeAdCard.kt (test version)
+- app/src/main/java/com/ner/wimap/ads/ClickableNativeAdCard.kt (test implementation)
+- app/src/main/java/com/ner/wimap/ads/WorkingClickableNativeAd.kt (test implementation)
+- app/src/main/java/com/ner/wimap/ads/HybridNativeAdCard.kt (not used)
+- app/src/main/java/com/ner/wimap/ads/CachedNativeAdCard.kt (not used)
+
+## Unused Layout Files
+- app/src/main/res/layout/native_ad_layout_working.xml (test layout)
+
+## Other
+- app/src/main/java/com/ner/wimap/MapsActivity.kt (likely replaced by MapsScreenWrapper)
+
+You can manually delete these files as they are no longer needed.

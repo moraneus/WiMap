@@ -23,6 +23,7 @@ class InterstitialAdManager @Inject constructor(
     private var currentActivity: Activity? = null
     private val sharedPreferences: SharedPreferences = 
         context.getSharedPreferences("app_prefs", Context.MODE_PRIVATE)
+    private var personalizedAdsEnabled: Boolean = false
     
     companion object {
         private const val SCAN_COUNTER_KEY = "scan_count"
@@ -56,7 +57,7 @@ class InterstitialAdManager @Inject constructor(
         
         Log.d(TAG, "Using ad unit: $adUnitId (test ads: ${BuildConfig.USE_TEST_ADS})")
         
-        val adRequest = AdRequest.Builder().build()
+        val adRequest = buildAdRequest()
 
         InterstitialAd.load(
             context,
@@ -176,5 +177,31 @@ class InterstitialAdManager @Inject constructor(
         if (interstitialAd == null) {
             loadInterstitialAd()
         }
+    }
+    
+    /**
+     * Set personalized ads enabled/disabled based on GDPR consent
+     */
+    fun setPersonalizedAdsEnabled(enabled: Boolean) {
+        Log.d(TAG, "Setting personalized ads enabled: $enabled")
+        personalizedAdsEnabled = enabled
+        // Reload ad with new consent settings
+        interstitialAd = null
+        loadInterstitialAd()
+    }
+    
+    /**
+     * Build AdRequest with consent settings
+     */
+    private fun buildAdRequest(): AdRequest {
+        val builder = AdRequest.Builder()
+        
+        // Add non-personalized ads parameter if personalized ads are disabled
+        if (!personalizedAdsEnabled) {
+            // Use the simplified approach for non-personalized ads
+            builder.addKeyword("npa")
+        }
+        
+        return builder.build()
     }
 }

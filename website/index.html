@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WiMap - Global WiFi Network Mapping</title>
+    <meta name="description" content="WiMap is the ultimate WiFi network mapping app. Discover, share, and map WiFi networks globally. GDPR compliant with advanced privacy features.">
+    <meta name="keywords" content="WiFi, network mapping, Android app, WiFi scanner, network discovery, global WiFi map">
+    
+    <!-- Open Graph -->
+    <meta property="og:title" content="WiMap - Global WiFi Network Mapping">
+    <meta property="og:description" content="Discover, share, and map WiFi networks globally with WiMap. GDPR compliant with advanced privacy features.">
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="https://wimap.app">
+    
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="nav-container">
+            <div class="nav-logo">
+                <i class="fas fa-wifi"></i>
+                <span>WiMap</span>
+            </div>
+            <div class="nav-menu">
+                <a href="#features" class="nav-link">Features</a>
+                <a href="#privacy" class="nav-link">Privacy</a>
+                <a href="#demo" class="nav-link">Demo</a>
+                <a href="#download" class="nav-link download-btn">Download</a>
+            </div>
+            <div class="hamburger">
+                <span></span>
+                <span></span>
+                <span></span>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <section class="hero">
+        <div class="hero-container">
+            <div class="hero-content">
+                <div class="hero-badge">
+                    <i class="fas fa-shield-alt"></i>
+                    <span>GDPR Compliant & Privacy First</span>
+                </div>
+                <h1 class="hero-title">
+                    Map the World's <span class="gradient-text">WiFi Networks</span>
+                </h1>
+                <p class="hero-description">
+                    WiMap is the ultimate WiFi network mapping application that helps you discover, share, and contribute to a global database of WiFi networks while maintaining your privacy.
+                </p>
+                <div class="hero-buttons">
+                    <a href="#download" class="btn btn-primary">
+                        <i class="fab fa-google-play"></i>
+                        Download for Android
+                    </a>
+                    <a href="#demo" class="btn btn-secondary">
+                        <i class="fas fa-play"></i>
+                        Watch Demo
+                    </a>
+                </div>
+                <div class="hero-stats">
+                    <div class="stat">
+                        <span class="stat-number">10K+</span>
+                        <span class="stat-label">Networks Mapped</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">50+</span>
+                        <span class="stat-label">Countries</span>
+                    </div>
+                    <div class="stat">
+                        <span class="stat-number">100%</span>
+                        <span class="stat-label">Privacy Protected</span>
+                    </div>
+                </div>
+            </div>
+            <div class="hero-image">
+                <div class="phone-mockup">
+                    <div class="phone-frame">
+                        <div class="phone-screen">
+                            <div class="app-demo">
+                                <div class="demo-header">
+                                    <div class="demo-signal"></div>
+                                    <span>WiMap</span>
+                                    <div class="demo-battery"></div>
+                                </div>
+                                <div class="demo-content">
+                                    <div class="wifi-network">
+                                        <i class="fas fa-wifi"></i>
+                                        <span>CoffeeShop_Guest</span>
+                                        <span class="signal-strength">-45dBm</span>
+                                    </div>
+                                    <div class="wifi-network">
+                                        <i class="fas fa-wifi"></i>
+                                        <span>Hotel_Lobby</span>
+                                        <span class="signal-strength">-62dBm</span>
+                                    </div>
+                                    <div class="wifi-network">
+                                        <i class="fas fa-wifi"></i>
+                                        <span>Airport_Free</span>
+                                        <span class="signal-strength">-55dBm</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features Section -->
+    <section id="features" class="features">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">Powerful Features</h2>
+                <p class="section-subtitle">Everything you need to map and discover WiFi networks globally</p>
+            </div>
+            
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-search"></i>
+                    </div>
+                    <h3>Advanced Network Scanning</h3>
+                    <p>Real-time WiFi network discovery with detailed information including signal strength, security type, and vendor details.</p>
+                    <ul class="feature-list">
+                        <li>Real-time network detection</li>
+                        <li>Signal strength monitoring</li>
+                        <li>Vendor identification via OUI</li>
+                        <li>Security type analysis</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-map-marked-alt"></i>
+                    </div>
+                    <h3>GPS Network Mapping</h3>
+                    <p>Automatically map discovered networks with precise GPS coordinates to build a comprehensive global database.</p>
+                    <ul class="feature-list">
+                        <li>GPS coordinate tracking</li>
+                        <li>Global network database</li>
+                        <li>Interactive map visualization</li>
+                        <li>Peak signal location detection</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-key"></i>
+                    </div>
+                    <h3>Smart Password Management</h3>
+                    <p>Securely store and manage WiFi passwords locally with encryption, never uploading sensitive data to the cloud.</p>
+                    <ul class="feature-list">
+                        <li>Local password storage only</li>
+                        <li>AES encryption with Android Keystore</li>
+                        <li>Automatic connection attempts</li>
+                        <li>Password success tracking</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-shield-alt"></i>
+                    </div>
+                    <h3>GDPR Compliance</h3>
+                    <p>Full GDPR compliance with granular consent management, data minimization, and user privacy protection.</p>
+                    <ul class="feature-list">
+                        <li>Granular consent management</li>
+                        <li>Data retention policies</li>
+                        <li>Age verification (COPPA)</li>
+                        <li>Privacy by design</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-camera"></i>
+                    </div>
+                    <h3>Network Documentation</h3>
+                    <p>Add photos, comments, and notes to networks for better identification and community sharing.</p>
+                    <ul class="feature-list">
+                        <li>Photo attachments</li>
+                        <li>Custom comments</li>
+                        <li>Network annotations</li>
+                        <li>Community contributions</li>
+                    </ul>
+                </div>
+
+                <div class="feature-card">
+                    <div class="feature-icon">
+                        <i class="fas fa-download"></i>
+                    </div>
+                    <h3>Export & Sharing</h3>
+                    <p>Export your discoveries in multiple formats and share networks with the global community.</p>
+                    <ul class="feature-list">
+                        <li>CSV, JSON, KML export</li>
+                        <li>Multiple sharing options</li>
+                        <li>Scan session management</li>
+                        <li>Data portability</li>
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Privacy Section -->
+    <section id="privacy" class="privacy">
+        <div class="container">
+            <div class="privacy-content">
+                <div class="privacy-text">
+                    <h2>Privacy First Approach</h2>
+                    <p class="privacy-subtitle">Your data security and privacy are our top priorities</p>
+                    
+                    <div class="privacy-features">
+                        <div class="privacy-item">
+                            <i class="fas fa-lock"></i>
+                            <div>
+                                <h4>Passwords Never Leave Your Device</h4>
+                                <p>All WiFi passwords are stored locally using Android Keystore encryption. We never upload or access your sensitive data.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="privacy-item">
+                            <i class="fas fa-user-shield"></i>
+                            <div>
+                                <h4>GDPR Compliant</h4>
+                                <p>Full compliance with GDPR regulations including consent management, data portability, and the right to be forgotten.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="privacy-item">
+                            <i class="fas fa-eye-slash"></i>
+                            <div>
+                                <h4>Data Minimization</h4>
+                                <p>We only collect network metadata necessary for mapping. No personal information or browsing data is ever collected.</p>
+                            </div>
+                        </div>
+                        
+                        <div class="privacy-item">
+                            <i class="fas fa-clock"></i>
+                            <div>
+                                <h4>Automatic Data Retention</h4>
+                                <p>Automatic cleanup of old data with configurable retention periods to minimize storage footprint.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="privacy-visual">
+                    <div class="security-shield">
+                        <i class="fas fa-shield-alt"></i>
+                        <div class="shield-layers">
+                            <div class="layer">Encryption</div>
+                            <div class="layer">Local Storage</div>
+                            <div class="layer">GDPR Compliance</div>
+                            <div class="layer">Data Minimization</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Demo Section -->
+    <section id="demo" class="demo">
+        <div class="container">
+            <div class="section-header">
+                <h2 class="section-title">See WiMap in Action</h2>
+                <p class="section-subtitle">Watch how easy it is to discover and map WiFi networks with WiMap</p>
+            </div>
+            
+            <div class="video-container">
+                <div class="video-wrapper">
+                    <iframe 
+                        src="https://www.youtube.com/embed/YOUR_VIDEO_ID" 
+                        title="WiMap Demo Video" 
+                        frameborder="0" 
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                        allowfullscreen>
+                    </iframe>
+                </div>
+                <div class="video-overlay" id="videoOverlay">
+                    <div class="play-button" id="playButton">
+                        <i class="fas fa-play"></i>
+                    </div>
+                    <div class="video-info">
+                        <h3>WiMap Demo</h3>
+                        <p>See how to scan, map, and share WiFi networks</p>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="demo-features">
+                <div class="demo-step">
+                    <div class="step-number">1</div>
+                    <h4>Scan Networks</h4>
+                    <p>Start scanning to discover nearby WiFi networks</p>
+                </div>
+                <div class="demo-step">
+                    <div class="step-number">2</div>
+                    <h4>View Details</h4>
+                    <p>See network information, signal strength, and location</p>
+                </div>
+                <div class="demo-step">
+                    <div class="step-number">3</div>
+                    <h4>Add Information</h4>
+                    <p>Attach photos, comments, and additional details</p>
+                </div>
+                <div class="demo-step">
+                    <div class="step-number">4</div>
+                    <h4>Share Globally</h4>
+                    <p>Contribute to the global WiFi network database</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Download Section -->
+    <section id="download" class="download">
+        <div class="container">
+            <div class="download-content">
+                <div class="download-text">
+                    <h2>Ready to Start Mapping?</h2>
+                    <p>Download WiMap now and join thousands of users building the world's most comprehensive WiFi network database.</p>
+                    
+                    <div class="download-buttons">
+                        <a href="#" class="download-btn google-play">
+                            <div class="download-icon">
+                                <i class="fab fa-google-play"></i>
+                            </div>
+                            <div class="download-text-content">
+                                <span class="download-small">Get it on</span>
+                                <span class="download-large">Google Play</span>
+                            </div>
+                        </a>
+                        
+                        <a href="#" class="download-btn direct-download">
+                            <div class="download-icon">
+                                <i class="fas fa-download"></i>
+                            </div>
+                            <div class="download-text-content">
+                                <span class="download-small">Direct</span>
+                                <span class="download-large">Download APK</span>
+                            </div>
+                        </a>
+                    </div>
+                    
+                    <div class="download-info">
+                        <div class="info-item">
+                            <i class="fas fa-mobile-alt"></i>
+                            <span>Android 7.0+ required</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-download"></i>
+                            <span>25MB download size</span>
+                        </div>
+                        <div class="info-item">
+                            <i class="fas fa-star"></i>
+                            <span>Free with no subscription</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="download-visual">
+                    <div class="phone-preview">
+                        <div class="phone-frame-large">
+                            <div class="phone-screen-large">
+                                <div class="app-interface">
+                                    <div class="interface-header">
+                                        <div class="header-title">WiMap Scanner</div>
+                                        <div class="scan-button active">
+                                            <i class="fas fa-wifi"></i>
+                                        </div>
+                                    </div>
+                                    <div class="interface-content">
+                                        <div class="network-list">
+                                            <div class="network-item">
+                                                <i class="fas fa-wifi"></i>
+                                                <div class="network-details">
+                                                    <span class="network-name">Starbucks_WiFi</span>
+                                                    <span class="network-signal">-42dBm</span>
+                                                </div>
+                                            </div>
+                                            <div class="network-item">
+                                                <i class="fas fa-wifi"></i>
+                                                <div class="network-details">
+                                                    <span class="network-name">Hotel_Guest</span>
+                                                    <span class="network-signal">-58dBm</span>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="footer">
+        <div class="container">
+            <div class="footer-content">
+                <div class="footer-brand">
+                    <div class="footer-logo">
+                        <i class="fas fa-wifi"></i>
+                        <span>WiMap</span>
+                    </div>
+                    <p>Building the world's most comprehensive WiFi network database while protecting user privacy.</p>
+                </div>
+                
+                <div class="footer-links">
+                    <div class="footer-column">
+                        <h4>Product</h4>
+                        <a href="#features">Features</a>
+                        <a href="#privacy">Privacy</a>
+                        <a href="#demo">Demo</a>
+                        <a href="#download">Download</a>
+                    </div>
+                    
+                    <div class="footer-column">
+                        <h4>Legal</h4>
+                        <a href="/privacy-policy.html">Privacy Policy</a>
+                        <a href="/terms-of-service.html">Terms of Service</a>
+                        <a href="/gdpr.html">GDPR Information</a>
+                        <a href="/app-ads.txt">App Ads</a>
+                    </div>
+                    
+                    <div class="footer-column">
+                        <h4>Support</h4>
+                        <a href="mailto:support@wimap.app">Contact Support</a>
+                        <a href="/faq.html">FAQ</a>
+                        <a href="/help.html">Help Center</a>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="footer-bottom">
+                <div class="footer-copyright">
+                    <p>&copy; 2024 WiMap. All rights reserved.</p>
+                </div>
+                <div class="footer-social">
+                    <a href="#" aria-label="Twitter"><i class="fab fa-twitter"></i></a>
+                    <a href="#" aria-label="Facebook"><i class="fab fa-facebook"></i></a>
+                    <a href="#" aria-label="GitHub"><i class="fab fa-github"></i></a>
+                </div>
+            </div>
+        </div>
+    </footer>
+
+    <script src="script.js"></script>
+</body>
+</html>
