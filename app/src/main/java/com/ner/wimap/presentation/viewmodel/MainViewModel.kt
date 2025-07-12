@@ -194,6 +194,13 @@ class MainViewModel @Inject constructor(
     val isScanning = scanWifiNetworksUseCase.isScanning()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
+    // WiFi Locator scanning state
+    val isLocatorScanning = scanWifiNetworksUseCase.isLocatorScanning()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
+        
+    val locatorRSSI = scanWifiNetworksUseCase.getLocatorRSSI()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), -100)
+
     // Track if a scan has ever been started
     private val _hasEverScanned = MutableStateFlow(false)
     val hasEverScanned: StateFlow<Boolean> = _hasEverScanned.asStateFlow()
@@ -393,6 +400,29 @@ class MainViewModel @Inject constructor(
                 uploadScanResultsToFirebase(showNotifications = false)
             } else {
                 Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
+            }
+        }
+    }
+
+    // WiFi Locator scanning methods
+    fun startLocatorScanning(targetNetwork: WifiNetwork) {
+        viewModelScope.launch {
+            try {
+                scanWifiNetworksUseCase.startLocatorScanning(targetNetwork)
+            } catch (e: Exception) {
+                // Handle errors silently for now
+                android.util.Log.e("MainViewModel", "Error starting locator scanning", e)
+            }
+        }
+    }
+    
+    fun stopLocatorScanning() {
+        viewModelScope.launch {
+            try {
+                scanWifiNetworksUseCase.stopLocatorScanning()
+            } catch (e: Exception) {
+                // Handle errors silently for now
+                android.util.Log.e("MainViewModel", "Error stopping locator scanning", e)
             }
         }
     }

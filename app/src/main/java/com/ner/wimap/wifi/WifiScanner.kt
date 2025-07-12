@@ -37,6 +37,40 @@ fun convertFrequencyToChannel(freq: Int): Int {
     }
 }
 
+// Helper function to convert channel to frequency for targeted scanning
+fun convertChannelToFrequency(channel: Int): Int {
+    return when (channel) {
+        in 1..14 -> 2412 + (channel - 1) * 5 // 2.4 GHz channels
+        in 34..165 -> 5170 + (channel - 34) * 5 // 5 GHz channels (simplified)
+        36 -> 5180
+        40 -> 5200
+        44 -> 5220
+        48 -> 5240
+        52 -> 5260
+        56 -> 5280
+        60 -> 5300
+        64 -> 5320
+        100 -> 5500
+        104 -> 5520
+        108 -> 5540
+        112 -> 5560
+        116 -> 5580
+        120 -> 5600
+        124 -> 5620
+        128 -> 5640
+        132 -> 5660
+        136 -> 5680
+        140 -> 5700
+        144 -> 5720
+        149 -> 5745
+        153 -> 5765
+        157 -> 5785
+        161 -> 5805
+        165 -> 5825
+        else -> -1 // Unknown channel
+    }
+}
+
 // Helper function to determine security type from capabilities string
 fun getSecurityType(capabilities: String): String {
     return when {
@@ -65,12 +99,31 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
     private var currentNetworkCallback: ConnectivityManager.NetworkCallback? = null
 
     private val scanInterval = 10000L // 10 seconds, adjust as needed
+    private val locatorScanInterval = 800L // 0.8 seconds for aggressive locator mode
+    private val connectionRssiInterval = 2000L // 2 seconds for connection-based RSSI tracking
     private val handler = Handler(Looper.getMainLooper())
+    private val locatorHandler = Handler(Looper.getMainLooper())
+    private val connectionRssiHandler = Handler(Looper.getMainLooper())
     
     // Background coroutine scope for Wi-Fi operations
     private val wifiScope = CoroutineScope(Dispatchers.IO + SupervisorJob())
     private var scanningJob: Job? = null
     private var connectionJob: Job? = null
+    private var locatorScanningJob: Job? = null
+    
+    // Locator mode state
+    private val _isLocatorScanning = MutableLiveData(false)
+    val isLocatorScanning: LiveData<Boolean> = _isLocatorScanning
+    private var targetNetworkForLocator: WifiNetwork? = null
+    
+    // LiveData for locator-specific RSSI updates
+    private val _locatorRSSI = MutableLiveData<Int>()
+    val locatorRSSI: LiveData<Int> = _locatorRSSI
+    
+    // Connection-based RSSI tracking state
+    private var isConnectionBasedTracking = false
+    private var connectionTrackingCallback: ConnectivityManager.NetworkCallback? = null
+    private var lastConnectionAttemptTime = 0L
 
     private val wifiScanReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -147,6 +200,566 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
         _isScanning.value = false
         handler.removeCallbacks(scanRunnable)
         _connectionStatus.postValue(context.getString(R.string.wifi_scan_stopped))
+    }
+
+    /**
+     * Start aggressive RSSI tracking for WiFi Locator mode
+     * Uses connection-based approach to force AP responses with fresh RSSI
+     */
+    fun startLocatorScanning(targetNetwork: WifiNetwork) {
+        if (_isLocatorScanning.value == true) {
+            stopLocatorScanning()
+        }
+        
+        targetNetworkForLocator = targetNetwork
+        _locatorRSSI.postValue(targetNetwork.rssi) // Set initial RSSI
+        _isLocatorScanning.value = true
+        
+        val frequency = convertChannelToFrequency(targetNetwork.channel)
+        val freqInfo = if (frequency > 0) " (${frequency}MHz)" else ""
+        
+        // Determine the best tracking approach based on network security
+        val isOpenNetwork = targetNetwork.security.contains("Open", ignoreCase = true)
+        
+        if (isOpenNetwork && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Use connection-based tracking for open networks (forces immediate AP response)
+            _connectionStatus.postValue("🔗 Connection-based tracking: ${targetNetwork.ssid} Ch${targetNetwork.channel}$freqInfo")
+            startConnectionBasedRssiTracking(targetNetwork)
+        } else {
+            // Use probe-request based tracking for secured networks
+            _connectionStatus.postValue("📡 Probe-based tracking: ${targetNetwork.ssid} Ch${targetNetwork.channel}$freqInfo")
+            startProbeBasedRssiTracking(targetNetwork)
+        }
+    }
+
+    /**
+     * Stop WiFi Locator scanning
+     */
+    fun stopLocatorScanning() {
+        locatorScanningJob?.cancel()
+        locatorScanningJob = null
+        _isLocatorScanning.value = false
+        targetNetworkForLocator = null
+        locatorHandler.removeCallbacks(locatorScanRunnable)
+        
+        // Stop connection-based tracking
+        stopConnectionBasedRssiTracking()
+        
+        _connectionStatus.postValue("🛑 Locator scanning stopped")
+    }
+
+    // Independent locator scanning runnable
+    private val locatorScanRunnable = Runnable {
+        if (_isLocatorScanning.value == true && targetNetworkForLocator != null) {
+            performIndependentLocatorScan()
+        }
+    }
+
+    /**
+     * Start independent high-frequency scanning that doesn't depend on regular WiFi scanning
+     */
+    private fun startIndependentLocatorScanning() {
+        locatorHandler.post(locatorScanRunnable)
+    }
+
+    /**
+     * Perform a single independent scan for locator mode with channel-specific targeting
+     * This uses channel-specific scanning to catch packets immediately when AP transmits
+     */
+    private fun performIndependentLocatorScan() {
+        if (!hasRequiredPermissions(checkChangeWifiState = false)) {
+            _isLocatorScanning.value = false
+            _connectionStatus.postValue("⚠️ Locator scanning requires WiFi permissions")
+            return
+        }
+
+        if (!wifiManager.isWifiEnabled) {
+            _connectionStatus.postValue("⚠️ WiFi disabled - locator scanning paused")
+            scheduleNextLocatorScan()
+            return
+        }
+
+        val target = targetNetworkForLocator
+        if (target == null) {
+            scheduleNextLocatorScan()
+            return
+        }
+
+        try {
+            // Perform channel-specific scanning for the target network
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                performChannelSpecificScan(target)
+            } else {
+                // Fallback to regular scanning for older Android versions
+                performRegularScanWithChannelAwareness(target)
+            }
+        } catch (e: SecurityException) {
+            android.util.Log.e("WifiScanner", "Locator scan permission error", e)
+            _connectionStatus.postValue("⚠️ Locator scan permission error")
+        }
+        
+        // Schedule next scan regardless
+        scheduleNextLocatorScan()
+    }
+
+    /**
+     * Perform channel-specific scan for Android R+ (API 30+)
+     * This focuses scanning on the target network's specific channel
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private fun performChannelSpecificScan(target: WifiNetwork) {
+        try {
+            // Convert channel to frequency for targeted scanning
+            val frequency = convertChannelToFrequency(target.channel)
+            
+            if (frequency > 0) {
+                android.util.Log.d("WifiScanner", "🎯 Channel-specific scan: ${target.ssid} on channel ${target.channel} (${frequency}MHz)")
+                _connectionStatus.postValue("📡 Tuning to channel ${target.channel} for ${target.ssid}")
+                
+                // Use rapid scanning technique for channel awareness
+                // Android doesn't allow direct channel selection via public APIs,
+                // so we use rapid scanning with frequency filtering
+                val scanStarted = wifiManager.startScan()
+                if (scanStarted) {
+                    wifiScope.launch {
+                        delay(200) // Shorter delay for aggressive scanning
+                        processChannelSpecificResults(target, frequency)
+                    }
+                } else {
+                    // Fallback to regular scan
+                    performRegularScanWithChannelAwareness(target)
+                }
+            } else {
+                android.util.Log.w("WifiScanner", "Invalid frequency for channel ${target.channel}, falling back to regular scan")
+                performRegularScanWithChannelAwareness(target)
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("WifiScanner", "Channel-specific scan failed, falling back to regular scan", e)
+            performRegularScanWithChannelAwareness(target)
+        }
+    }
+
+    /**
+     * Perform rapid scanning with channel awareness for all Android versions
+     * Uses aggressive scanning to maximize chance of catching target AP packets
+     */
+    private fun performRegularScanWithChannelAwareness(target: WifiNetwork) {
+        try {
+            android.util.Log.d("WifiScanner", "🔄 Rapid channel scan: ${target.ssid} on channel ${target.channel}")
+            _connectionStatus.postValue("📡 Rapid scanning ${target.ssid} (Ch${target.channel})")
+            
+            val scanStarted = wifiManager.startScan()
+            if (scanStarted) {
+                wifiScope.launch {
+                    // Aggressive scanning approach: multiple quick scans to catch more packets
+                    repeat(5) { attempt ->
+                        delay(150) // Very short delay between attempts
+                        processIndependentLocatorResults()
+                        
+                        // Start another scan immediately unless it's the last attempt
+                        if (attempt < 4) {
+                            try {
+                                wifiManager.startScan()
+                            } catch (e: Exception) {
+                                // Ignore scan throttling errors - continue with existing results
+                                android.util.Log.w("WifiScanner", "Scan throttled on attempt ${attempt + 1}")
+                            }
+                        }
+                    }
+                }
+            } else {
+                android.util.Log.w("WifiScanner", "Failed to start rapid scan")
+                _connectionStatus.postValue("⚠️ Failed to start rapid scan")
+            }
+        } catch (e: Exception) {
+            android.util.Log.e("WifiScanner", "Rapid scan error", e)
+            _connectionStatus.postValue("⚠️ Scan error: ${e.message}")
+        }
+    }
+
+    /**
+     * Process results from channel-specific scanning
+     */
+    @RequiresApi(Build.VERSION_CODES.R)
+    private suspend fun processChannelSpecificResults(target: WifiNetwork, targetFrequency: Int) = withContext(Dispatchers.IO) {
+        if (!hasRequiredPermissions(checkChangeWifiState = false)) {
+            return@withContext
+        }
+        
+        try {
+            val results: List<ScanResult> = wifiManager.scanResults
+            android.util.Log.d("WifiScanner", "🔍 Processing ${results.size} channel-specific results for ${target.ssid}")
+            
+            // Filter results to prioritize those on the target frequency
+            val targetResults = results.filter { scanResult ->
+                scanResult.frequency == targetFrequency && 
+                (scanResult.BSSID == target.bssid || scanResult.SSID == target.ssid)
+            }
+            
+            val targetScanResult = targetResults.firstOrNull() ?: results.find { scanResult ->
+                scanResult.BSSID == target.bssid || 
+                (scanResult.SSID == target.ssid && scanResult.BSSID != null)
+            }
+            
+            if (targetScanResult != null) {
+                val newRssi = targetScanResult.level
+                val isChannelMatch = targetScanResult.frequency == targetFrequency
+                
+                withContext(Dispatchers.Main) {
+                    _locatorRSSI.postValue(newRssi)
+                    val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+                    val channelInfo = if (isChannelMatch) "📡 Ch${target.channel}" else "📶 Off-Ch"
+                    _connectionStatus.postValue("$channelInfo Fresh RSSI: ${newRssi} dBm @ $timestamp")
+                }
+                
+                android.util.Log.d("WifiScanner", "🎯 Channel-specific RSSI: ${target.ssid} = ${newRssi} dBm (freq: ${targetScanResult.frequency}MHz, expected: ${targetFrequency}MHz)")
+            } else {
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.postValue("⚠️ No packets on channel ${target.channel}")
+                }
+                android.util.Log.w("WifiScanner", "No packets found for ${target.ssid} on channel ${target.channel}")
+            }
+        } catch (e: SecurityException) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue("⚠️ Permission error in channel scan")
+            }
+            android.util.Log.e("WifiScanner", "Permission error in channel-specific scan", e)
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue("⚠️ Channel scan error")
+            }
+            android.util.Log.e("WifiScanner", "Error in channel-specific scan", e)
+        }
+    }
+
+    /**
+     * Schedule the next independent locator scan
+     */
+    private fun scheduleNextLocatorScan() {
+        if (_isLocatorScanning.value == true) {
+            locatorHandler.postDelayed(locatorScanRunnable, locatorScanInterval)
+        }
+    }
+
+    /**
+     * Process scan results independently for locator mode
+     * This doesn't wait for broadcasts - it directly reads scan results
+     */
+    private suspend fun processIndependentLocatorResults() = withContext(Dispatchers.IO) {
+        val target = targetNetworkForLocator ?: return@withContext
+        
+        if (!hasRequiredPermissions(checkChangeWifiState = false)) {
+            return@withContext
+        }
+        
+        try {
+            val results: List<ScanResult> = wifiManager.scanResults
+            android.util.Log.d("WifiScanner", "🔍 Processing ${results.size} scan results for locator")
+            
+            // Find the target network in scan results
+            val targetScanResult = results.find { scanResult ->
+                scanResult.BSSID == target.bssid || 
+                (scanResult.SSID == target.ssid && scanResult.BSSID != null)
+            }
+            
+            if (targetScanResult != null) {
+                // Found target network - update RSSI
+                val newRssi = targetScanResult.level
+                withContext(Dispatchers.Main) {
+                    _locatorRSSI.postValue(newRssi)
+                    // Update status with fresh measurement and timestamp
+                    val timestamp = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.getDefault()).format(java.util.Date())
+                    _connectionStatus.postValue("📡 Fresh RSSI: ${newRssi} dBm @ $timestamp")
+                }
+                android.util.Log.d("WifiScanner", "🎯 Independent locator RSSI update: ${target.ssid} = ${newRssi} dBm")
+            } else {
+                // Target network not found in latest scan
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.postValue("⚠️ Target network not visible in scan")
+                }
+                android.util.Log.w("WifiScanner", "Target network ${target.ssid} not found in independent scan results")
+            }
+        } catch (e: SecurityException) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue("⚠️ Permission error in independent locator scan")
+            }
+            android.util.Log.e("WifiScanner", "Permission error in independent locator scan", e)
+        } catch (e: Exception) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue("⚠️ Error processing independent locator scan")
+            }
+            android.util.Log.e("WifiScanner", "Error in independent locator scan", e)
+        }
+    }
+
+    /**
+     * Start connection-based RSSI tracking - forces AP to respond with fresh RSSI
+     * This approach initiates connection attempts to trigger immediate AP responses
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun startConnectionBasedRssiTracking(target: WifiNetwork) {
+        isConnectionBasedTracking = true
+        
+        // Start with immediate connection attempt
+        performConnectionBasedRssiCheck(target)
+        
+        // Schedule periodic connection-based RSSI checks
+        scheduleNextConnectionRssiCheck(target)
+    }
+    
+    /**
+     * Stop connection-based RSSI tracking
+     */
+    private fun stopConnectionBasedRssiTracking() {
+        isConnectionBasedTracking = false
+        connectionRssiHandler.removeCallbacks(connectionRssiRunnable)
+        
+        // Clean up any active connection callback
+        connectionTrackingCallback?.let { callback ->
+            try {
+                connectivityManager.unregisterNetworkCallback(callback)
+            } catch (e: Exception) {
+                android.util.Log.w("WifiScanner", "Error unregistering connection tracking callback", e)
+            }
+            connectionTrackingCallback = null
+        }
+        
+        // Unbind from any process network
+        try {
+            connectivityManager.bindProcessToNetwork(null)
+        } catch (e: Exception) {
+            android.util.Log.w("WifiScanner", "Error unbinding process network", e)
+        }
+    }
+    
+    /**
+     * Perform connection-based RSSI check - initiates connection to force AP response
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun performConnectionBasedRssiCheck(target: WifiNetwork) {
+        if (!isConnectionBasedTracking || targetNetworkForLocator?.bssid != target.bssid) {
+            return
+        }
+        
+        val currentTime = System.currentTimeMillis()
+        
+        // Throttle connection attempts to avoid overwhelming the AP
+        if (currentTime - lastConnectionAttemptTime < 1500) {
+            scheduleNextConnectionRssiCheck(target)
+            return
+        }
+        
+        lastConnectionAttemptTime = currentTime
+        
+        try {
+            android.util.Log.d("WifiScanner", "🔗 Connection-based RSSI check for ${target.ssid}")
+            
+            // Clean up any existing callback
+            connectionTrackingCallback?.let { callback ->
+                try {
+                    connectivityManager.unregisterNetworkCallback(callback)
+                } catch (e: Exception) { /* Ignore */ }
+            }
+            
+            // Create network specifier for connection attempt
+            val specifierBuilder = WifiNetworkSpecifier.Builder()
+                .setSsid(target.ssid)
+                .setIsEnhancedOpen(false)
+            
+            val networkRequest = NetworkRequest.Builder()
+                .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                .setNetworkSpecifier(specifierBuilder.build())
+                .build()
+            
+            // Track connection attempt state
+            var hasReceivedRssi = false
+            var connectionAttemptActive = true
+            
+            connectionTrackingCallback = object : ConnectivityManager.NetworkCallback() {
+                override fun onAvailable(network: Network) {
+                    super.onAvailable(network)
+                    if (!connectionAttemptActive || !isConnectionBasedTracking) return
+                    
+                    try {
+                        // Get fresh RSSI from the connection attempt
+                        val currentWifiInfo = wifiManager.connectionInfo
+                        if (currentWifiInfo != null && currentWifiInfo.bssid != null) {
+                            val freshRssi = currentWifiInfo.rssi
+                            
+                            // Verify this is our target network
+                            val connectedSsid = currentWifiInfo.ssid?.replace("\"", "")
+                            if (connectedSsid == target.ssid || currentWifiInfo.bssid == target.bssid) {
+                                hasReceivedRssi = true
+                                
+                                // Update RSSI with fresh value
+                                _locatorRSSI.postValue(freshRssi)
+                                val timestamp = java.text.SimpleDateFormat("HH:mm:ss.SSS", java.util.Locale.getDefault()).format(java.util.Date())
+                                _connectionStatus.postValue("🔗 Live RSSI: ${freshRssi} dBm @ $timestamp")
+                                
+                                android.util.Log.d("WifiScanner", "🎯 Connection-based RSSI: ${target.ssid} = ${freshRssi} dBm")
+                            }
+                        }
+                        
+                        // Immediately disconnect to avoid actually connecting
+                        Handler(Looper.getMainLooper()).postDelayed({
+                            try {
+                                connectivityManager.bindProcessToNetwork(null)
+                                connectivityManager.unregisterNetworkCallback(this)
+                            } catch (e: Exception) { /* Ignore */ }
+                        }, 200) // Very short connection time
+                        
+                    } catch (e: Exception) {
+                        android.util.Log.e("WifiScanner", "Error getting connection-based RSSI", e)
+                    }
+                    
+                    connectionAttemptActive = false
+                }
+                
+                override fun onUnavailable() {
+                    super.onUnavailable()
+                    connectionAttemptActive = false
+                    
+                    if (!hasReceivedRssi) {
+                        // Connection failed - fall back to regular scan
+                        wifiScope.launch {
+                            processIndependentLocatorResults()
+                        }
+                    }
+                }
+                
+                override fun onLost(network: Network) {
+                    super.onLost(network)
+                    // Connection lost - this is expected behavior
+                }
+            }
+            
+            // Set timeout for connection attempt
+            Handler(Looper.getMainLooper()).postDelayed({
+                if (connectionAttemptActive && !hasReceivedRssi) {
+                    connectionAttemptActive = false
+                    // Timeout - fall back to scan
+                    wifiScope.launch {
+                        processIndependentLocatorResults()
+                    }
+                }
+            }, 3000) // 3 second timeout
+            
+            // Request connection
+            connectivityManager.requestNetwork(networkRequest, connectionTrackingCallback!!)
+            
+        } catch (e: SecurityException) {
+            android.util.Log.e("WifiScanner", "Permission error in connection-based tracking", e)
+            _connectionStatus.postValue("⚠️ Connection tracking permission error")
+        } catch (e: Exception) {
+            android.util.Log.e("WifiScanner", "Error in connection-based tracking", e)
+            _connectionStatus.postValue("⚠️ Connection tracking error")
+        }
+        
+        // Schedule next check
+        scheduleNextConnectionRssiCheck(target)
+    }
+    
+    /**
+     * Schedule next connection-based RSSI check
+     */
+    private fun scheduleNextConnectionRssiCheck(target: WifiNetwork) {
+        if (isConnectionBasedTracking) {
+            connectionRssiHandler.postDelayed({
+                performConnectionBasedRssiCheck(target)
+            }, connectionRssiInterval)
+        }
+    }
+    
+    // Connection-based RSSI runnable
+    private val connectionRssiRunnable = Runnable {
+        targetNetworkForLocator?.let { target ->
+            if (isConnectionBasedTracking && Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                performConnectionBasedRssiCheck(target)
+            }
+        }
+    }
+    
+    /**
+     * Start probe-based RSSI tracking for secured networks
+     * This uses rapid scanning with connection attempts to trigger AP responses
+     */
+    private fun startProbeBasedRssiTracking(target: WifiNetwork) {
+        // Use the existing aggressive scanning as base
+        startIndependentLocatorScanning()
+        
+        // Additionally, try authentication attempts for secured networks to force responses
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            startAuthenticationProbes(target)
+        }
+    }
+    
+    /**
+     * Start authentication probes to force AP responses
+     * This creates fake authentication attempts that force the AP to respond immediately
+     */
+    @RequiresApi(Build.VERSION_CODES.Q)
+    private fun startAuthenticationProbes(target: WifiNetwork) {
+        wifiScope.launch {
+            while (_isLocatorScanning.value == true && targetNetworkForLocator?.bssid == target.bssid) {
+                try {
+                    // Create a fake connection attempt with wrong credentials to trigger AP response
+                    val specifierBuilder = WifiNetworkSpecifier.Builder()
+                        .setSsid(target.ssid)
+                        .setWpa2Passphrase("fake_password_to_trigger_response_${System.currentTimeMillis()}")
+                    
+                    val networkRequest = NetworkRequest.Builder()
+                        .addTransportType(NetworkCapabilities.TRANSPORT_WIFI)
+                        .setNetworkSpecifier(specifierBuilder.build())
+                        .build()
+                    
+                    var probeAttemptActive = true
+                    
+                    val probeCallback = object : ConnectivityManager.NetworkCallback() {
+                        override fun onUnavailable() {
+                            super.onUnavailable()
+                            probeAttemptActive = false
+                            
+                            // Authentication failed (expected) - but this should trigger fresh scan results
+                            wifiScope.launch {
+                                delay(100) // Short delay for AP to update
+                                processIndependentLocatorResults()
+                            }
+                        }
+                        
+                        override fun onAvailable(network: Network) {
+                            super.onAvailable(network)
+                            probeAttemptActive = false
+                            // Unexpected success - disconnect immediately
+                            try {
+                                connectivityManager.bindProcessToNetwork(null)
+                                connectivityManager.unregisterNetworkCallback(this)
+                            } catch (e: Exception) { /* Ignore */ }
+                        }
+                    }
+                    
+                    // Set timeout for probe attempt
+                    Handler(Looper.getMainLooper()).postDelayed({
+                        if (probeAttemptActive) {
+                            probeAttemptActive = false
+                            try {
+                                connectivityManager.unregisterNetworkCallback(probeCallback)
+                            } catch (e: Exception) { /* Ignore */ }
+                        }
+                    }, 2000) // 2 second timeout
+                    
+                    connectivityManager.requestNetwork(networkRequest, probeCallback)
+                    
+                    android.util.Log.d("WifiScanner", "🔍 Authentication probe sent to ${target.ssid}")
+                    _connectionStatus.postValue("🔍 Probing ${target.ssid} for fresh RSSI...")
+                    
+                } catch (e: Exception) {
+                    android.util.Log.w("WifiScanner", "Authentication probe failed", e)
+                }
+                
+                // Wait before next probe attempt
+                delay(3000) // 3 seconds between probes
+            }
+        }
     }
 
     private suspend fun startScanningLoop() {
@@ -274,6 +887,49 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
                 _wifiNetworks.postValue(emptyList())
                 _isScanning.value = false 
                 _connectionStatus.postValue("Permission error processing scan results.")
+            }
+        }
+    }
+
+    /**
+     * Process scan results specifically for locator mode
+     * Extracts RSSI for the target network and updates locator RSSI
+     */
+    private suspend fun processLocatorScanResults() = withContext(Dispatchers.IO) {
+        val target = targetNetworkForLocator ?: return@withContext
+        
+        if (!hasRequiredPermissions(checkChangeWifiState = false)) {
+            return@withContext
+        }
+        
+        try {
+            val results: List<ScanResult> = wifiManager.scanResults
+            
+            // Find the target network in scan results
+            val targetScanResult = results.find { scanResult ->
+                scanResult.BSSID == target.bssid || 
+                (scanResult.SSID == target.ssid && scanResult.BSSID != null)
+            }
+            
+            if (targetScanResult != null) {
+                // Found target network - update RSSI
+                val newRssi = targetScanResult.level
+                withContext(Dispatchers.Main) {
+                    _locatorRSSI.postValue(newRssi)
+                    // Optional: Update connection status with fresh measurement
+                    _connectionStatus.postValue("📡 Fresh RSSI: ${newRssi} dBm")
+                }
+                android.util.Log.d("WifiScanner", "Locator RSSI update: ${target.ssid} = ${newRssi} dBm")
+            } else {
+                // Target network not found in latest scan
+                withContext(Dispatchers.Main) {
+                    _connectionStatus.postValue("⚠️ Target network not visible in scan")
+                }
+                android.util.Log.w("WifiScanner", "Target network ${target.ssid} not found in scan results")
+            }
+        } catch (e: SecurityException) {
+            withContext(Dispatchers.Main) {
+                _connectionStatus.postValue("Permission error in locator scan")
             }
         }
     }
@@ -594,7 +1250,11 @@ class WifiScanner(private val context: Context, private val currentLocationFlow:
     fun unregisterReceiver() {
         try {
             context.unregisterReceiver(wifiScanReceiver)
-            releaseCurrentNetworkCallback() 
+            releaseCurrentNetworkCallback()
+            stopLocatorScanning() // Also stop locator scanning
+            locatorHandler.removeCallbacks(locatorScanRunnable) // Clean up locator handler
+            stopConnectionBasedRssiTracking() // Clean up connection-based tracking
+            connectionRssiHandler.removeCallbacks(connectionRssiRunnable) // Clean up connection RSSI handler
         } catch (e: IllegalArgumentException) {
         }
     }

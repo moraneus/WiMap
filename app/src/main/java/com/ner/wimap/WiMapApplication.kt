@@ -2,6 +2,10 @@ package com.ner.wimap
 
 import android.app.Application
 import android.content.Context
+import com.google.firebase.appcheck.AppCheckProviderFactory
+import com.google.firebase.appcheck.FirebaseAppCheck
+import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
+import com.google.firebase.appcheck.playintegrity.PlayIntegrityAppCheckProviderFactory
 import com.ner.wimap.ads.AdMobManager
 import com.ner.wimap.util.LocaleHelper
 import com.ner.wimap.utils.OUILookupManager
@@ -18,6 +22,9 @@ class WiMapApplication : Application() {
     
     override fun onCreate() {
         super.onCreate()
+        
+        // Initialize Firebase App Check
+        initializeAppCheck()
         
         // Initialize AdMob
         AdMobManager.initialize(this)
@@ -36,6 +43,21 @@ class WiMapApplication : Application() {
     
     override fun attachBaseContext(base: Context) {
         super.attachBaseContext(LocaleHelper.applyLanguage(base))
+    }
+    
+    private fun initializeAppCheck() {
+        val firebaseAppCheck = FirebaseAppCheck.getInstance()
+        
+        val providerFactory: AppCheckProviderFactory = if (BuildConfig.DEBUG) {
+            // Use Debug provider for debug builds
+            DebugAppCheckProviderFactory.getInstance()
+        } else {
+            // Use Play Integrity provider for release builds
+            PlayIntegrityAppCheckProviderFactory.getInstance()
+        }
+        
+        firebaseAppCheck.installAppCheckProviderFactory(providerFactory)
+        android.util.Log.d("AppCheck", "Firebase App Check initialized with ${if (BuildConfig.DEBUG) "Debug" else "Play Integrity"} provider")
     }
     
     private fun testVendorLookup() {

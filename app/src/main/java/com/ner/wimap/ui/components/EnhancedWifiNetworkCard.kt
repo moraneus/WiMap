@@ -134,7 +134,7 @@ fun EnhancedWifiNetworkCard(
         shape = RoundedCornerShape(16.dp),
         colors = CardDefaults.cardColors(
             containerColor = when {
-                network.isOffline -> Color(0xFFE8E8E8) // Uniform gray for all offline networks
+                network.isOffline -> MaterialTheme.colorScheme.surfaceVariant // Uniform gray for all offline networks
                 actuallyPinned -> MaterialTheme.colorScheme.surface
                 hasAttachedData -> MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)
                 else -> MaterialTheme.colorScheme.surface
@@ -144,8 +144,8 @@ fun EnhancedWifiNetworkCard(
             defaultElevation = if (network.isOffline) 1.dp else 2.dp
         ),
         border = when {
-            network.isOffline -> BorderStroke(1.5.dp, Color(0xFF95A5A6)) // Gray border for offline
-            isSelected -> BorderStroke(3.dp, Color(0xFF4CAF50)) // Green border for selected
+            network.isOffline -> BorderStroke(1.5.dp, MaterialTheme.colorScheme.outline) // Gray border for offline
+            isSelected -> BorderStroke(3.dp, MaterialTheme.colorScheme.primary) // Primary border for selected
             actuallyPinned -> BorderStroke(2.5.dp, MaterialTheme.colorScheme.primary)
             else -> null
         }
@@ -175,7 +175,7 @@ fun EnhancedWifiNetworkCard(
             Text(
                 text = bssidText,
                 style = MaterialTheme.typography.bodySmall,
-                color = if (network.isOffline) Color(0xFF95A5A6) else Color(0xFF7F8C8D), // Gray when offline
+                color = if (network.isOffline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurfaceVariant, // Gray when offline
                 maxLines = 1,
                 modifier = Modifier.padding(top = 4.dp)
             )

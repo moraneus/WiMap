@@ -11,6 +11,8 @@ import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.PushPin
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Explore
+import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -56,11 +58,15 @@ fun SwipeIndicators(
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
     ) {
-        // Left swipe indicator (to Pinned)
+        // Left swipe indicator 
         if (currentPage != 0) { // Don't show on leftmost page
+            val (leftIcon, leftLabel) = when (currentPage) {
+                1 -> Icons.Outlined.Explore to "Locator" // From Pinned to WiFi Locator
+                else -> Icons.Outlined.PushPin to "Pinned" // From other pages to Pinned
+            }
             SwipeHint(
-                icon = Icons.Outlined.PushPin,
-                label = "Pinned",
+                icon = leftIcon,
+                label = leftLabel,
                 direction = Icons.AutoMirrored.Filled.KeyboardArrowLeft,
                 modifier = Modifier
                     .align(Alignment.CenterStart)
@@ -74,16 +80,21 @@ fun SwipeIndicators(
         // Page indicators (center)
         PageIndicators(
             currentPage = currentPage,
-            totalPages = 4,
+            totalPages = 5,
             modifier = Modifier.align(Alignment.Center)
         )
         
-        // Right swipe indicator (to Maps or Scan History)
-        if (currentPage != 3) { // Don't show on rightmost page
-            val (rightIcon, rightLabel) = when {
-                currentPage < 2 -> Icons.Outlined.Map to "Maps"
+        // Right swipe indicator
+        if (currentPage != 4) { // Don't show on rightmost page (Scan History)
+            val rightIconAndLabel = when (currentPage) {
+                0 -> Icons.Outlined.PushPin to "Pinned" // From WiFi Locator to Pinned
+                1 -> Icons.Filled.Wifi to "Main" // From Pinned to Main
+                2 -> Icons.Outlined.Map to "Maps" // From Main to Maps
+                3 -> Icons.Outlined.History to "Scans" // From Maps to Scan History
                 else -> Icons.Outlined.History to "Scans"
             }
+            val rightIcon = rightIconAndLabel.first
+            val rightLabel = rightIconAndLabel.second
             SwipeHint(
                 icon = rightIcon,
                 label = rightLabel,
@@ -170,10 +181,11 @@ private fun PageIndicators(
             PageIndicatorDot(
                 isSelected = currentPage == index,
                 color = when (index) {
-                    0 -> MaterialTheme.colorScheme.tertiary // Pinned
-                    1 -> MaterialTheme.colorScheme.primary  // Main
-                    2 -> MaterialTheme.colorScheme.secondary // Maps
-                    3 -> MaterialTheme.colorScheme.error    // Scan History
+                    0 -> MaterialTheme.colorScheme.secondary // WiFi Locator
+                    1 -> MaterialTheme.colorScheme.tertiary // Pinned
+                    2 -> MaterialTheme.colorScheme.primary  // Main
+                    3 -> MaterialTheme.colorScheme.secondary // Maps
+                    4 -> MaterialTheme.colorScheme.error    // Scan History
                     else -> MaterialTheme.colorScheme.outline
                 }
             )
@@ -222,14 +234,15 @@ fun MinimalSwipeIndicators(
         horizontalArrangement = Arrangement.Center,
         verticalAlignment = Alignment.CenterVertically
     ) {
-        repeat(4) { index ->
+        repeat(5) { index ->
             PageIndicatorDot(
                 isSelected = currentPage == index,
                 color = when (index) {
-                    0 -> MaterialTheme.colorScheme.tertiary
-                    1 -> MaterialTheme.colorScheme.primary
-                    2 -> MaterialTheme.colorScheme.secondary
-                    3 -> MaterialTheme.colorScheme.error
+                    0 -> MaterialTheme.colorScheme.secondary // WiFi Locator
+                    1 -> MaterialTheme.colorScheme.tertiary // Pinned
+                    2 -> MaterialTheme.colorScheme.primary  // Main
+                    3 -> MaterialTheme.colorScheme.secondary // Maps
+                    4 -> MaterialTheme.colorScheme.error    // Scan History
                     else -> MaterialTheme.colorScheme.outline
                 },
                 modifier = Modifier.padding(horizontal = 2.dp)

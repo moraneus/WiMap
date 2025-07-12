@@ -95,4 +95,17 @@ class WifiRepositoryImpl @Inject constructor(
     override fun clearConnectionProgress() {
         connectionManager.clearConnectionProgress()
     }
+    
+    // WiFi Locator specific methods
+    override suspend fun startLocatorScanning(targetNetwork: WifiNetwork) {
+        scanManager.startLocatorScanning(targetNetwork)
+    }
+    
+    override suspend fun stopLocatorScanning() {
+        scanManager.stopLocatorScanning()
+    }
+    
+    override fun isLocatorScanning(): Flow<Boolean> = scanManager.isLocatorScanning
+    
+    override fun getLocatorRSSI(): Flow<Int> = scanManager.locatorRSSI
 }

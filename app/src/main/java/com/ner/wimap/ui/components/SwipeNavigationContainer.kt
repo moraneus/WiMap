@@ -32,7 +32,7 @@ fun SwipeNavigationContainer(
 ) {
     val internalPagerState = rememberPagerState(
         initialPage = initialPage,
-        pageCount = { 4 } // Pinned (0), Main (1), Maps (2), Scan History (3)
+        pageCount = { 5 } // WiFi Locator (0), Pinned (1), Main (2), Maps (3), Scan History (4)
     )
     val actualPagerState = pagerState ?: internalPagerState
     
@@ -56,10 +56,11 @@ fun SwipeNavigationContainer(
  * Navigation destinations for the swipe container
  */
 enum class SwipeDestination(val index: Int, val title: String, val icon: String) {
-    PINNED(0, "Pinned", "📌"),
-    MAIN(1, "Main", "📡"),
-    MAPS(2, "Map", "🗺"),
-    SCAN_HISTORY(3, "Scans", "🧾")
+    WIFI_LOCATOR(0, "Locator", "🧭"),
+    PINNED(1, "Pinned", "📌"),
+    MAIN(2, "Main", "📡"),
+    MAPS(3, "Map", "🗺"),
+    SCAN_HISTORY(4, "Scans", "🧾")
 }
 
 /**

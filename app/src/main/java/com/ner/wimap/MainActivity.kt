@@ -34,6 +34,7 @@ import com.ner.wimap.ui.MapsScreenWrapper
 import com.ner.wimap.ui.PinnedNetworksScreen
 import com.ner.wimap.ui.SettingsScreen
 import com.ner.wimap.ui.ScanHistoryScreen
+import com.ner.wimap.ui.WiFiLocatorScreen
 import com.ner.wimap.ui.components.SwipeNavigationContainer
 import com.ner.wimap.ui.components.SwipeDestination
 import com.ner.wimap.ui.components.NavigationWrapper
@@ -207,6 +208,10 @@ class MainActivity : ComponentActivity() {
         val wifiNetworks by viewModel.wifiNetworks.collectAsState()
         val isScanning by viewModel.isScanning.collectAsState()
         val hasEverScanned by viewModel.hasEverScanned.collectAsState()
+        
+        // WiFi Locator state
+        val isLocatorScanning by viewModel.isLocatorScanning.collectAsState()
+        val locatorRSSI by viewModel.locatorRSSI.collectAsState()
         val connectionStatus by viewModel.connectionStatus.collectAsState()
         val uploadStatus by viewModel.uploadStatus.collectAsState()
         
@@ -356,7 +361,7 @@ class MainActivity : ComponentActivity() {
         // Create a remembered pager state for the swipe navigation
         val pagerState = rememberPagerState(
             initialPage = SwipeDestination.MAIN.index,
-            pageCount = { 4 }
+            pageCount = { 5 }
         )
         
         // Handle scan history navigation trigger
@@ -407,6 +412,13 @@ class MainActivity : ComponentActivity() {
                     }
                     currentScreen == "main" -> {
                         when (currentPage) {
+                            SwipeDestination.WIFI_LOCATOR.index -> {
+                                // From WiFi locator, go back to main
+                                coroutineScope.launch {
+                                    pagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                                currentPage = SwipeDestination.MAIN.index
+                            }
                             SwipeDestination.PINNED.index -> {
                                 // From pinned, go back to main
                                 coroutineScope.launch {
@@ -490,6 +502,25 @@ class MainActivity : ComponentActivity() {
                 }
             ) { pageIndex, innerPagerState ->
                 when (pageIndex) {
+                    SwipeDestination.WIFI_LOCATOR.index -> {
+                        WiFiLocatorScreen(
+                            wifiNetworks = wifiNetworks,
+                            onBack = {
+                                // Navigate back to main screen (center page)
+                                coroutineScope.launch {
+                                    innerPagerState.animateScrollToPage(SwipeDestination.MAIN.index)
+                                }
+                            },
+                            onStartLocatorScanning = { network ->
+                                viewModel.startLocatorScanning(network)
+                            },
+                            onStopLocatorScanning = {
+                                viewModel.stopLocatorScanning()
+                            },
+                            locatorRSSI = locatorRSSI,
+                            isLocatorActive = isLocatorScanning
+                        )
+                    }
                     SwipeDestination.PINNED.index -> {
                         PinnedNetworksScreen(
                             pinnedNetworks = pinnedNetworks,

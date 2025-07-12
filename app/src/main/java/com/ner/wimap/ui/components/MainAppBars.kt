@@ -39,7 +39,10 @@ fun MainTopAppBar(
     onShowAbout: () -> Unit = {},
     onShowTerms: () -> Unit = {},
     currentPage: Int = 1,
-    onNavigateToPage: (Int) -> Unit = {}
+    onNavigateToPage: (Int) -> Unit = {},
+    title: String = "WiMap",
+    subtitle: String = "WiFi Network Scanner",
+    showSettingsButton: Boolean = true
 ) {
     // Animated gradient colors
     val infiniteTransition = rememberInfiniteTransition(label = "gradient")
@@ -102,10 +105,11 @@ fun MainTopAppBar(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            GlowingNavigationDot(isSelected = currentPage == 0)
-                            GlowingNavigationDot(isSelected = currentPage == 1)
-                            GlowingNavigationDot(isSelected = currentPage == 2)
-                            GlowingNavigationDot(isSelected = currentPage == 3)
+                            GlowingNavigationDot(isSelected = currentPage == 0) // WiFi Locator
+                            GlowingNavigationDot(isSelected = currentPage == 1) // Pinned
+                            GlowingNavigationDot(isSelected = currentPage == 2) // Main
+                            GlowingNavigationDot(isSelected = currentPage == 3) // Maps
+                            GlowingNavigationDot(isSelected = currentPage == 4) // Scan History
                         }
                     }
                 }
@@ -131,7 +135,7 @@ fun MainTopAppBar(
                             verticalArrangement = Arrangement.Center
                         ) {
                             Text(
-                                text = "WiMap",
+                                text = title,
                                 style = MaterialTheme.typography.headlineMedium.copy(
                                     fontWeight = FontWeight.ExtraBold
                                 ),
@@ -142,7 +146,7 @@ fun MainTopAppBar(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 Text(
-                                    text = "WiFi Network Scanner",
+                                    text = subtitle,
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = Color.White.copy(alpha = 0.85f)
                                 )
@@ -154,7 +158,7 @@ fun MainTopAppBar(
                     }
                     
                     // Right side - Action button
-                    if (showNavigationActions) {
+                    if (showNavigationActions && showSettingsButton) {
                         Box(
                             modifier = Modifier
                                 .align(Alignment.CenterEnd)
@@ -381,10 +385,11 @@ fun UnifiedTopAppBar(
                             horizontalArrangement = Arrangement.spacedBy(12.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            GlowingNavigationDot(isSelected = currentPage == 0)
-                            GlowingNavigationDot(isSelected = currentPage == 1)
-                            GlowingNavigationDot(isSelected = currentPage == 2)
-                            GlowingNavigationDot(isSelected = currentPage == 3)
+                            GlowingNavigationDot(isSelected = currentPage == 0) // WiFi Locator
+                            GlowingNavigationDot(isSelected = currentPage == 1) // Pinned
+                            GlowingNavigationDot(isSelected = currentPage == 2) // Main
+                            GlowingNavigationDot(isSelected = currentPage == 3) // Maps
+                            GlowingNavigationDot(isSelected = currentPage == 4) // Scan History
                         }
                     }
                 }

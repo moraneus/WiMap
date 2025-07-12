@@ -32,7 +32,7 @@ fun ExportFormatDialog(
             Text(
                 text = title,
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C3E50)
+                color = MaterialTheme.colorScheme.onBackground
             )
         },
         text = {
@@ -42,14 +42,14 @@ fun ExportFormatDialog(
                 Text(
                     "Select the format you want to export:",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF34495E)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 ExportFormatOption(
                     icon = Icons.Default.TableChart,
                     title = "CSV File",
                     description = "Spreadsheet format for data analysis",
-                    color = Color(0xFF27AE60),
+                    color = MaterialTheme.colorScheme.tertiary,
                     onClick = {
                         selectedFormat = ExportFormat.CSV
                         showActionDialog = true
@@ -60,7 +60,7 @@ fun ExportFormatDialog(
                     icon = Icons.Default.Map,
                     title = "Google Maps (KML)",
                     description = "View networks on Google Maps/Earth",
-                    color = Color(0xFF3498DB),
+                    color = MaterialTheme.colorScheme.primary,
                     onClick = {
                         selectedFormat = ExportFormat.GOOGLE_MAPS
                         showActionDialog = true
@@ -71,7 +71,7 @@ fun ExportFormatDialog(
                     icon = Icons.Default.PictureAsPdf,
                     title = "PDF Report",
                     description = "Professional document with network details",
-                    color = Color(0xFFE74C3C),
+                    color = MaterialTheme.colorScheme.error,
                     onClick = {
                         selectedFormat = ExportFormat.PDF
                         showActionDialog = true
@@ -82,7 +82,7 @@ fun ExportFormatDialog(
         confirmButton = { },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Cancel", color = Color(0xFF95A5A6))
+                Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         shape = RoundedCornerShape(20.dp)
@@ -116,7 +116,7 @@ private fun ExportActionDialog(
             Text(
                 text = "Choose Export Action",
                 fontWeight = FontWeight.Bold,
-                color = Color(0xFF2C3E50)
+                color = MaterialTheme.colorScheme.onBackground
             )
         },
         text = {
@@ -126,14 +126,14 @@ private fun ExportActionDialog(
                 Text(
                     "What would you like to do with the ${format.name} file?",
                     style = MaterialTheme.typography.bodyMedium,
-                    color = Color(0xFF34495E)
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
                 ExportActionOption(
                     icon = Icons.Default.Save,
                     title = "Save to Device",
                     description = "Save file to your device storage",
-                    color = Color(0xFF27AE60),
+                    color = MaterialTheme.colorScheme.tertiary,
                     onClick = { onActionSelected(ExportAction.SAVE_ONLY) }
                 )
 
@@ -141,7 +141,7 @@ private fun ExportActionDialog(
                     icon = Icons.Default.Share,
                     title = "Share File",
                     description = "Share immediately via apps",
-                    color = Color(0xFF3498DB),
+                    color = MaterialTheme.colorScheme.primary,
                     onClick = { onActionSelected(ExportAction.SHARE_ONLY) }
                 )
 
@@ -149,7 +149,7 @@ private fun ExportActionDialog(
                     icon = Icons.Default.CloudDownload,
                     title = "Save & Share",
                     description = "Save to device and share",
-                    color = Color(0xFF9B59B6),
+                    color = MaterialTheme.colorScheme.secondary,
                     onClick = { onActionSelected(ExportAction.SAVE_AND_SHARE) }
                 )
             }
@@ -157,7 +157,7 @@ private fun ExportActionDialog(
         confirmButton = { },
         dismissButton = {
             TextButton(onClick = onDismiss) {
-                Text("Back", color = Color(0xFF95A5A6))
+                Text("Back", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         },
         shape = RoundedCornerShape(20.dp)
@@ -211,7 +211,7 @@ private fun ExportFormatOption(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = Color(0xFF2C3E50)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = description,
@@ -277,7 +277,7 @@ private fun ExportActionOption(
                     style = MaterialTheme.typography.titleMedium.copy(
                         fontWeight = FontWeight.Bold
                     ),
-                    color = Color(0xFF2C3E50)
+                    color = MaterialTheme.colorScheme.onBackground
                 )
                 Text(
                     text = description,

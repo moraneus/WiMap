@@ -126,7 +126,7 @@ fun MainScreen(
 
     Box(modifier = Modifier.fillMaxSize()) {
         Scaffold(
-            containerColor = Color(0xFFF8F9FA),
+            containerColor = MaterialTheme.colorScheme.background,
             topBar = {
                 MainTopAppBar(
                     onOpenPinnedNetworks = onOpenPinnedNetworks,
@@ -135,11 +135,11 @@ fun MainScreen(
                     showNavigationActions = true,
                     onShowAbout = { showAboutDialog = true },
                     onShowTerms = { showTermsDialog = true },
-                    currentPage = 1, // Main screen is always page 1
+                    currentPage = 2, // Main screen is now page 2 (after WiFi Locator and Pinned)
                     onNavigateToPage = { page ->
                         when (page) {
-                            0 -> onOpenPinnedNetworks()
-                            2 -> onOpenMaps()
+                            1 -> onOpenPinnedNetworks() // Pinned is now page 1
+                            3 -> onOpenMaps() // Maps is now page 3
                         }
                     }
                 )
@@ -423,13 +423,13 @@ private fun NetworkCountHeader(
                 style = MaterialTheme.typography.headlineSmall.copy(
                     fontWeight = FontWeight.Bold
                 ),
-                color = Color(0xFF2C3E50)
+                color = MaterialTheme.colorScheme.onBackground
             )
             if (networksWithLocationCount > 0) {
                 Text(
                     text = "$networksWithLocationCount with GPS location",
                     style = MaterialTheme.typography.bodySmall,
-                    color = Color(0xFF27AE60)
+                    color = MaterialTheme.colorScheme.tertiary
                 )
             }
         }
@@ -438,7 +438,7 @@ private fun NetworkCountHeader(
             style = MaterialTheme.typography.headlineSmall.copy(
                 fontWeight = FontWeight.Bold
             ),
-            color = Color(0xFF3498DB)
+            color = MaterialTheme.colorScheme.primary
         )
     }
 }

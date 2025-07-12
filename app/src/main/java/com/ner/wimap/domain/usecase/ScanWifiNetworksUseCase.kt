@@ -19,4 +19,13 @@ class ScanWifiNetworksUseCase @Inject constructor(
     suspend fun clearNetworks() = wifiRepository.clearNetworks()
     
     suspend fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int) = wifiRepository.removeStaleNetworks(hideNetworksUnseenForSeconds)
+    
+    // WiFi Locator specific methods
+    suspend fun startLocatorScanning(targetNetwork: WifiNetwork) = wifiRepository.startLocatorScanning(targetNetwork)
+    
+    suspend fun stopLocatorScanning() = wifiRepository.stopLocatorScanning()
+    
+    fun isLocatorScanning(): Flow<Boolean> = wifiRepository.isLocatorScanning()
+    
+    fun getLocatorRSSI(): Flow<Int> = wifiRepository.getLocatorRSSI()
 }

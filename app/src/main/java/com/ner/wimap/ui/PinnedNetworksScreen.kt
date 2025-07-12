@@ -38,6 +38,7 @@ import com.ner.wimap.ui.components.InfoChip
 import com.ner.wimap.ui.components.DetailRow
 import com.ner.wimap.ui.components.ExportFormatDialog
 import com.ner.wimap.ui.components.UnifiedTopAppBar
+import com.ner.wimap.ui.components.UnifiedTopBarActionButton
 import com.ner.wimap.ads.NativeAdCard
 import com.ner.wimap.ads.WorkingNativeAdCard
 import com.ner.wimap.ads.ClickableNativeAdCard
@@ -344,7 +345,7 @@ fun PinnedNetworksScreen(
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .background(Color(0xFFF8F9FA))
+            .background(MaterialTheme.colorScheme.background)
     ) {
         // Always show the regular top bar
         UnifiedTopAppBar(
@@ -382,14 +383,14 @@ fun PinnedNetworksScreen(
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Color(0xFF2C3E50)
+                        color = MaterialTheme.colorScheme.onBackground
                     )
                     Text(
                         text = "${pinnedNetworks.size}",
                         style = MaterialTheme.typography.headlineSmall.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = Color(0xFF667eea) // Same accent color
+                        color = MaterialTheme.colorScheme.primary
                     )
                 }
             }
@@ -406,7 +407,7 @@ fun PinnedNetworksScreen(
                         else 
                             "Long press on any network for multi-selection",
                         style = MaterialTheme.typography.bodyMedium,
-                        color = Color(0xFF7F8C8D),
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(bottom = 8.dp)
                     )
                 }
@@ -584,7 +585,7 @@ fun PinnedNetworksScreen(
                     ActionMenuItem(
                         icon = Icons.Default.Share,
                         text = "Share Network",
-                        color = Color(0xFF3498DB),
+                        color = MaterialTheme.colorScheme.primary,
                         onClick = {
                             onSharePinnedNetwork(selectedNetwork!!)
                             showActionMenu = false
@@ -593,7 +594,7 @@ fun PinnedNetworksScreen(
                     ActionMenuItem(
                         icon = Icons.Default.Save,
                         text = "Export as...",
-                        color = Color(0xFF27AE60),
+                        color = MaterialTheme.colorScheme.tertiary,
                         onClick = {
                             showExportDialog = true
                             showActionMenu = false
@@ -602,7 +603,7 @@ fun PinnedNetworksScreen(
                     ActionMenuItem(
                         icon = Icons.Default.Delete,
                         text = "Delete Network",
-                        color = Color(0xFFE74C3C),
+                        color = MaterialTheme.colorScheme.error,
                         onClick = {
                             onDeletePinnedNetwork(selectedNetwork!!)
                             showActionMenu = false
@@ -614,7 +615,7 @@ fun PinnedNetworksScreen(
                 TextButton(
                     onClick = { showActionMenu = false }
                 ) {
-                    Text("Cancel", color = Color(0xFF95A5A6))
+                    Text("Cancel", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             },
             shape = RoundedCornerShape(20.dp)
@@ -713,7 +714,7 @@ fun ModernPinnedNetworkCard(
                     Icon(
                         imageVector = Icons.Default.PushPin,
                         contentDescription = "Pinned",
-                        tint = Color(0xFF667eea),
+                        tint = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.size(16.dp)
                     )
 
@@ -722,7 +723,7 @@ fun ModernPinnedNetworkCard(
                         style = MaterialTheme.typography.titleMedium.copy(
                             fontWeight = FontWeight.Bold
                         ),
-                        color = if (isOffline) Color(0xFF95A5A6) else Color(0xFF2C3E50), // Grey when offline
+                        color = if (isOffline) MaterialTheme.colorScheme.onSurfaceVariant else MaterialTheme.colorScheme.onSurface, // Grey when offline
                         maxLines = 1,
                         overflow = TextOverflow.Ellipsis
                     )
@@ -739,14 +740,14 @@ fun ModernPinnedNetworkCard(
                         Icon(
                             imageVector = Icons.Default.LockOpen,
                             contentDescription = "Open Network",
-                            tint = Color(0xFFE74C3C),
+                            tint = MaterialTheme.colorScheme.error,
                             modifier = Modifier.size(14.dp)
                         )
                     } else if (hasValidPassword) {
                         Icon(
                             imageVector = Icons.Default.Key,
                             contentDescription = "Valid Password Available",
-                            tint = Color(0xFF27AE60),
+                            tint = MaterialTheme.colorScheme.tertiary,
                             modifier = Modifier.size(14.dp)
                         )
                     } else {
@@ -887,7 +888,7 @@ fun ModernPinnedNetworkCard(
             Text(
                 text = "Pinned on ${SimpleDateFormat("MMM dd, HH:mm", Locale.getDefault()).format(Date(network.pinnedAt))}",
                 style = MaterialTheme.typography.bodySmall,
-                color = Color(0xFF667eea), // Use main app color
+                color = MaterialTheme.colorScheme.primary, // Use main app color
                 fontWeight = FontWeight.Medium
             )
 
@@ -937,7 +938,7 @@ fun ModernPinnedNetworkCard(
             TextButton(
                 onClick = { showDetails = !showDetails },
                 colors = ButtonDefaults.textButtonColors(
-                    contentColor = Color(0xFF667eea) // Use main app color
+                    contentColor = MaterialTheme.colorScheme.primary // Use main app color
                 ),
                 modifier = Modifier.align(Alignment.CenterHorizontally)
             ) {

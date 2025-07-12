@@ -25,4 +25,10 @@ interface WifiRepository {
     suspend fun removeStaleNetworks(hideNetworksUnseenForSeconds: Int)
     fun clearConnectionStatus()
     fun clearConnectionProgress()
+    
+    // WiFi Locator specific methods
+    suspend fun startLocatorScanning(targetNetwork: WifiNetwork)
+    suspend fun stopLocatorScanning()
+    fun isLocatorScanning(): Flow<Boolean>
+    fun getLocatorRSSI(): Flow<Int>
 }

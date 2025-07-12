@@ -306,4 +306,41 @@ class ScanManager(
             WifiNetwork("DemoWiFi", "77:88:99:aa:bb:cc", -50, 40, "WPA2", null, null, System.currentTimeMillis(), "demo12345")
         )
     }
+    
+    // WiFi Locator specific methods
+    private val _isLocatorScanning = MutableStateFlow(false)
+    val isLocatorScanning: StateFlow<Boolean> = _isLocatorScanning
+    
+    private val _locatorRSSI = MutableStateFlow(-100)
+    val locatorRSSI: StateFlow<Int> = _locatorRSSI
+    
+    // Observer for locator scanning state
+    private val locatorScanningStateObserver = Observer<Boolean> { isScanning ->
+        _isLocatorScanning.value = isScanning
+    }
+    
+    // Observer for locator RSSI updates
+    private val locatorRSSIObserver = Observer<Int> { rssi ->
+        _locatorRSSI.value = rssi
+    }
+    
+    fun startLocatorScanning(targetNetwork: WifiNetwork) {
+        // Set up observers for locator scanning
+        wifiScanner.isLocatorScanning.observeForever(locatorScanningStateObserver)
+        wifiScanner.locatorRSSI.observeForever(locatorRSSIObserver)
+        
+        // Start the locator scanning
+        wifiScanner.startLocatorScanning(targetNetwork)
+    }
+    
+    fun stopLocatorScanning() {
+        // Stop scanning and remove observers
+        wifiScanner.stopLocatorScanning()
+        wifiScanner.isLocatorScanning.removeObserver(locatorScanningStateObserver)
+        wifiScanner.locatorRSSI.removeObserver(locatorRSSIObserver)
+        
+        // Reset state
+        _isLocatorScanning.value = false
+        _locatorRSSI.value = -100
+    }
 }
