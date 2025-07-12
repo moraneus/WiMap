@@ -36,30 +36,31 @@ class DeviceInfoService @Inject constructor(
                     return@launch
                 }
                 
-                // Check consent
-                if (!deviceInfoManager.hasConsentGranted()) {
-                    Log.d(TAG, "User consent not granted, skipping device info collection")
+                // Check acknowledgment
+                if (!deviceInfoManager.hasAcknowledgedMandatoryCollection()) {
+                    Log.d(TAG, "User has not acknowledged mandatory collection, skipping device info collection")
                     return@launch
                 }
                 
-                // Collect device info
-                val deviceInfo = deviceInfoManager.collectDeviceInfo()
-                if (deviceInfo == null) {
-                    Log.e(TAG, "Failed to collect device info")
+                // Collect mandatory device info
+                val deviceInfo = try {
+                    deviceInfoManager.collectDeviceInfo()
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to collect mandatory device info", e)
                     return@launch
                 }
                 
                 // Upload to Firebase
                 val uploadResult = firebaseDeviceInfoRepository.uploadDeviceInfo(deviceInfo)
-                uploadResult.fold(
-                    onSuccess = {
+                when (uploadResult) {
+                    is com.ner.wimap.Result.Success -> {
                         Log.d(TAG, "Device info uploaded successfully on first launch")
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "Failed to upload device info on first launch", error)
+                    }
+                    is com.ner.wimap.Result.Failure -> {
+                        Log.e(TAG, "Failed to upload device info on first launch", uploadResult.exception)
                         // Don't mark as collected if upload fails - will retry next time
                     }
-                )
+                }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error in first launch device info handling", e)
@@ -73,7 +74,7 @@ class DeviceInfoService @Inject constructor(
     fun checkAndUpdateDeviceInfo() {
         serviceScope.launch {
             try {
-                if (!deviceInfoManager.hasConsentGranted()) {
+                if (!deviceInfoManager.hasAcknowledgedMandatoryCollection()) {
                     return@launch
                 }
                 
@@ -84,16 +85,18 @@ class DeviceInfoService @Inject constructor(
                 }
                 
                 // Collect current device info
-                val currentDeviceInfo = deviceInfoManager.collectDeviceInfo(forceRefresh = true)
-                if (currentDeviceInfo == null) {
-                    Log.e(TAG, "Failed to collect current device info")
+                val currentDeviceInfo = try {
+                    deviceInfoManager.collectDeviceInfo(forceRefresh = true)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to collect current device info", e)
                     return@launch
                 }
                 
                 // Check if device info exists in Firebase
                 val existsResult = firebaseDeviceInfoRepository.deviceInfoExists(cachedAdid)
-                existsResult.fold(
-                    onSuccess = { exists ->
+                when (existsResult) {
+                    is com.ner.wimap.Result.Success -> {
+                        val exists = existsResult.data
                         if (exists) {
                             // Update existing record
                             val updates = mapOf(
@@ -104,32 +107,30 @@ class DeviceInfoService @Inject constructor(
                                 "limit_ad_tracking" to currentDeviceInfo.limitAdTracking
                             )
                             
-                            firebaseDeviceInfoRepository.updateDeviceInfo(cachedAdid, updates)
-                                .fold(
-                                    onSuccess = {
-                                        Log.d(TAG, "Device info updated successfully")
-                                    },
-                                    onFailure = { error ->
-                                        Log.e(TAG, "Failed to update device info", error)
-                                    }
-                                )
+                            when (val updateResult = firebaseDeviceInfoRepository.updateDeviceInfo(cachedAdid, updates)) {
+                                is com.ner.wimap.Result.Success -> {
+                                    Log.d(TAG, "Device info updated successfully")
+                                }
+                                is com.ner.wimap.Result.Failure -> {
+                                    Log.e(TAG, "Failed to update device info", updateResult.exception)
+                                }
+                            }
                         } else {
                             // Create new record
-                            firebaseDeviceInfoRepository.uploadDeviceInfo(currentDeviceInfo)
-                                .fold(
-                                    onSuccess = {
-                                        Log.d(TAG, "Device info created successfully")
-                                    },
-                                    onFailure = { error ->
-                                        Log.e(TAG, "Failed to create device info", error)
-                                    }
-                                )
+                            when (val uploadResult = firebaseDeviceInfoRepository.uploadDeviceInfo(currentDeviceInfo)) {
+                                is com.ner.wimap.Result.Success -> {
+                                    Log.d(TAG, "Device info created successfully")
+                                }
+                                is com.ner.wimap.Result.Failure -> {
+                                    Log.e(TAG, "Failed to create device info", uploadResult.exception)
+                                }
+                            }
                         }
-                    },
-                    onFailure = { error ->
-                        Log.e(TAG, "Failed to check device info existence", error)
                     }
-                )
+                    is com.ner.wimap.Result.Failure -> {
+                        Log.e(TAG, "Failed to check device info existence", existsResult.exception)
+                    }
+                }
                 
             } catch (e: Exception) {
                 Log.e(TAG, "Error checking and updating device info", e)
@@ -138,20 +139,59 @@ class DeviceInfoService @Inject constructor(
     }
     
     /**
-     * Handle user consent granted - collect and upload device info
+     * Handle user acknowledgment of mandatory collection - collect and upload device info
      */
-    fun handleConsentGranted() {
-        deviceInfoManager.setConsentGranted(true)
-        handleFirstLaunch()
+    fun handleMandatoryCollectionAcknowledged() {
+        deviceInfoManager.setMandatoryCollectionAcknowledged()
+        // Force upload after consent, even if device info was previously collected
+        forceUploadDeviceInfo()
     }
     
     /**
-     * Handle user consent denied - clear any cached data
+     * Force upload device info after consent - bypasses the "already collected" check
      */
-    fun handleConsentDenied() {
-        deviceInfoManager.setConsentGranted(false)
+    private fun forceUploadDeviceInfo() {
+        serviceScope.launch {
+            try {
+                Log.d(TAG, "Force uploading device info after consent acknowledgment")
+                
+                // Check acknowledgment
+                if (!deviceInfoManager.hasAcknowledgedMandatoryCollection()) {
+                    Log.d(TAG, "User has not acknowledged mandatory collection, cannot upload device info")
+                    return@launch
+                }
+                
+                // Collect mandatory device info (refresh ADID if needed)
+                val deviceInfo = try {
+                    deviceInfoManager.collectDeviceInfo(forceRefresh = true)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Failed to collect mandatory device info for force upload", e)
+                    return@launch
+                }
+                
+                // Upload to Firebase
+                val uploadResult = firebaseDeviceInfoRepository.uploadDeviceInfo(deviceInfo)
+                when (uploadResult) {
+                    is com.ner.wimap.Result.Success -> {
+                        Log.d(TAG, "Device info force uploaded successfully after consent")
+                    }
+                    is com.ner.wimap.Result.Failure -> {
+                        Log.e(TAG, "Failed to force upload device info after consent", uploadResult.exception)
+                    }
+                }
+                
+            } catch (e: Exception) {
+                Log.e(TAG, "Error in force upload device info handling", e)
+            }
+        }
+    }
+    
+    /**
+     * Handle user refusal of mandatory collection - app cannot function
+     */
+    fun handleMandatoryCollectionRefused() {
         deviceInfoManager.clearDeviceInfo()
-        Log.d(TAG, "User consent denied, device info cleared")
+        Log.d(TAG, "User refused mandatory collection, device info cleared")
     }
     
     /**
@@ -163,15 +203,14 @@ class DeviceInfoService @Inject constructor(
                 val cachedAdid = deviceInfoManager.getCachedAdid()
                 if (cachedAdid != null) {
                     // Delete from Firebase
-                    firebaseDeviceInfoRepository.deleteDeviceInfo(cachedAdid)
-                        .fold(
-                            onSuccess = {
-                                Log.d(TAG, "Device info deleted from Firebase")
-                            },
-                            onFailure = { error ->
-                                Log.e(TAG, "Failed to delete device info from Firebase", error)
-                            }
-                        )
+                    when (val deleteResult = firebaseDeviceInfoRepository.deleteDeviceInfo(cachedAdid)) {
+                        is com.ner.wimap.Result.Success -> {
+                            Log.d(TAG, "Device info deleted from Firebase")
+                        }
+                        is com.ner.wimap.Result.Failure -> {
+                            Log.e(TAG, "Failed to delete device info from Firebase", deleteResult.exception)
+                        }
+                    }
                 }
                 
                 // Clear local data

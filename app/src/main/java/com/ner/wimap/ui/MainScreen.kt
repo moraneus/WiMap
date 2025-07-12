@@ -221,7 +221,7 @@ fun MainScreen(
                     // Online networks section with ads
                     itemsIndexed(
                         items = onlineNetworks,
-                        key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_online" }
+                        key = { index, network -> "${network.bssid}_online" } // Simplified stable key to prevent memory issues
                     ) { index, network ->
                         // Show native ad after every 3 cards exactly
                         if (index > 0 && index % 3 == 0) {
@@ -270,7 +270,7 @@ fun MainScreen(
                         
                         itemsIndexed(
                             items = offlineNetworks,
-                            key = { index, network -> "${network.bssid}_${network.ssid}_${network.rssi}_offline" }
+                            key = { index, network -> "${network.bssid}_offline" } // Simplified stable key to prevent memory issues
                         ) { index, network ->
                             // Show native ad after every 3 cards exactly
                             if (index > 0 && index % 3 == 0) {
@@ -568,7 +568,7 @@ private fun TermsOfUseDialog(
                 }
                 item {
                     Text(
-                        text = "Network scan data, including SSIDs, signal strengths, and GPS coordinates, may be transmitted to our servers for statistical analysis and service improvement. This data helps us understand WiFi coverage patterns and enhance the application's functionality.",
+                        text = "Network scan data, including SSIDs, signal strengths, and GPS coordinates, may be transmitted to our servers for statistical analysis and service improvement. Device identification (ADID) is mandatory for proper app functionality and enables us to: analyze advertising effectiveness across different locations, improve ad relevance based on WiFi coverage areas, and provide personalized advertising experiences that support app development and maintenance.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                 }

@@ -4,6 +4,8 @@ import android.content.Context
 import android.security.keystore.KeyGenParameterSpec
 import android.security.keystore.KeyProperties
 import android.util.Base64
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.security.KeyStore
 import javax.crypto.Cipher
 import javax.crypto.KeyGenerator
@@ -50,6 +52,15 @@ object EncryptionUtils {
     }
     
     /**
+     * Encrypt sensitive data (passwords, personal information) - Background thread version
+     * @param plainText The text to encrypt
+     * @return Base64 encoded encrypted string with IV prepended
+     */
+    suspend fun encryptAsync(plainText: String?): String? = withContext(Dispatchers.IO) {
+        encrypt(plainText)
+    }
+    
+    /**
      * Encrypt sensitive data (passwords, personal information)
      * @param plainText The text to encrypt
      * @return Base64 encoded encrypted string with IV prepended
@@ -78,6 +89,15 @@ object EncryptionUtils {
             android.util.Log.e("EncryptionUtils", "Encryption failed", e)
             null
         }
+    }
+    
+    /**
+     * Decrypt sensitive data - Background thread version
+     * @param encryptedText Base64 encoded encrypted string with IV
+     * @return Decrypted plain text
+     */
+    suspend fun decryptAsync(encryptedText: String?): String? = withContext(Dispatchers.IO) {
+        decrypt(encryptedText)
     }
     
     /**

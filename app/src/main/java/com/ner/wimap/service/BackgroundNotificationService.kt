@@ -23,6 +23,7 @@ class BackgroundNotificationService : Service() {
         const val NOTIFICATION_ID = 1002
         const val CHANNEL_ID = "background_scan_status_channel"
         const val ACTION_STOP_BACKGROUND_SCANNING = "com.ner.wimap.STOP_BACKGROUND_SCANNING"
+        const val ACTION_SAVE_SESSION_FROM_NOTIFICATION = "com.ner.wimap.SAVE_SESSION_FROM_NOTIFICATION"
         private const val TAG = "BackgroundNotificationService"
         
         fun startService(context: Context) {
@@ -140,6 +141,15 @@ class BackgroundNotificationService : Service() {
     
     private fun handleStopBackgroundScanning() {
         Log.d(TAG, "Handling stop background scanning request")
+        
+        // Send broadcast to save scan session before stopping
+        try {
+            val saveSessionIntent = Intent(ACTION_SAVE_SESSION_FROM_NOTIFICATION)
+            sendBroadcast(saveSessionIntent)
+            Log.d(TAG, "Broadcast sent to save scan session from notification")
+        } catch (e: Exception) {
+            Log.w(TAG, "Failed to send save session broadcast", e)
+        }
         
         // Disable background scanning in preferences
         sharedPreferences.edit()

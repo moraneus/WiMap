@@ -10,9 +10,11 @@ import androidx.core.content.FileProvider
 import com.ner.wimap.model.WifiNetwork
 import com.ner.wimap.data.database.PinnedNetwork
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
 import java.io.FileWriter
@@ -72,21 +74,29 @@ class ExportManager(
                     ExportFormat.PDF -> "WiMap_Report_$timestamp.pdf"
                 }
 
-                val file = createExportFile(context, fileName, format, action)
+                val file = withContext(Dispatchers.IO) {
+                    createExportFile(context, fileName, format, action)
+                }
 
                 Log.d(TAG, "Export file path: ${file.absolutePath}")
 
-                when (format) {
-                    ExportFormat.CSV -> exportToCsv(networks, file)
-                    ExportFormat.GOOGLE_MAPS -> exportToGoogleMaps(networks, file)
-                    ExportFormat.PDF -> exportToPdf(networks, file, context)
+                // Perform heavy file I/O operations on background thread
+                withContext(Dispatchers.IO) {
+                    when (format) {
+                        ExportFormat.CSV -> exportToCsv(networks, file)
+                        ExportFormat.GOOGLE_MAPS -> exportToGoogleMaps(networks, file)
+                        ExportFormat.PDF -> exportToPdf(networks, file, context)
+                    }
                 }
 
                 Log.d(TAG, "Export completed. File exists: ${file.exists()}, Size: ${file.length()}")
 
                 if (file.exists() && file.length() > 0) {
-                    handleExportAction(context, file, format, action)
-                    onComplete(file.absolutePath)
+                    // Handle export action on Main dispatcher for UI operations
+                    withContext(Dispatchers.Main) {
+                        handleExportAction(context, file, format, action)
+                        onComplete(file.absolutePath)
+                    }
                 } else {
                     throw Exception("File was not created or is empty")
                 }
@@ -126,30 +136,41 @@ class ExportManager(
                     ExportFormat.PDF -> "WiMap_${safeSsid}_$timestamp.pdf"
                 }
 
-                val file = createExportFile(context, fileName, format, action)
+                val file = withContext(Dispatchers.IO) {
+                    createExportFile(context, fileName, format, action)
+                }
 
-                // Convert PinnedNetwork to WifiNetwork for export
-                val wifiNetwork = WifiNetwork(
-                    ssid = network.ssid,
-                    bssid = network.bssid,
-                    rssi = network.rssi,
-                    channel = network.channel,
-                    security = network.security,
-                    latitude = network.latitude,
-                    longitude = network.longitude,
-                    timestamp = network.timestamp,
-                    password = network.savedPassword
-                )
+                // Convert PinnedNetwork to WifiNetwork for export - decrypt password in background
+                val wifiNetwork = withContext(Dispatchers.IO) {
+                    val decryptedPassword = com.ner.wimap.utils.EncryptionUtils.decrypt(network.encryptedPassword)
+                    WifiNetwork(
+                        ssid = network.ssid,
+                        bssid = network.bssid,
+                        rssi = network.rssi,
+                        channel = network.channel,
+                        security = network.security,
+                        latitude = network.latitude,
+                        longitude = network.longitude,
+                        timestamp = network.timestamp,
+                        password = decryptedPassword
+                    )
+                }
 
-                when (format) {
-                    ExportFormat.CSV -> exportToCsv(listOf(wifiNetwork), file)
-                    ExportFormat.GOOGLE_MAPS -> exportToGoogleMaps(listOf(wifiNetwork), file)
-                    ExportFormat.PDF -> exportToPdf(listOf(wifiNetwork), file, context)
+                // Perform heavy file I/O operations on background thread
+                withContext(Dispatchers.IO) {
+                    when (format) {
+                        ExportFormat.CSV -> exportToCsv(listOf(wifiNetwork), file)
+                        ExportFormat.GOOGLE_MAPS -> exportToGoogleMaps(listOf(wifiNetwork), file)
+                        ExportFormat.PDF -> exportToPdf(listOf(wifiNetwork), file, context)
+                    }
                 }
 
                 if (file.exists() && file.length() > 0) {
-                    handleExportAction(context, file, format, action, network.ssid)
-                    onComplete(file.absolutePath)
+                    // Handle export action on Main dispatcher for UI operations
+                    withContext(Dispatchers.Main) {
+                        handleExportAction(context, file, format, action, network.ssid)
+                        onComplete(file.absolutePath)
+                    }
                 } else {
                     throw Exception("File was not created or is empty")
                 }

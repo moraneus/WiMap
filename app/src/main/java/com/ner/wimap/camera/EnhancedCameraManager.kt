@@ -96,19 +96,14 @@ private fun handleCameraResult(
     onPhotoTaken: (Uri) -> Unit,
     onError: (String) -> Unit
 ) {
+    // Optimized: Trust the camera intent result without heavy file validation
+    // The camera app will only return a URI if the photo was successfully captured
     try {
-        val file = File(photoUri.path ?: "")
-        if (file.exists() && file.length() > 0) {
+        // Basic URI validation without blocking file I/O
+        if (photoUri.path?.isNotEmpty() == true) {
             onPhotoTaken(photoUri)
         } else {
-            // Try to find the file using the URI
-            context.contentResolver.openInputStream(photoUri)?.use { inputStream ->
-                if (inputStream.available() > 0) {
-                    onPhotoTaken(photoUri)
-                } else {
-                    onError("Photo file is empty")
-                }
-            } ?: onError("Could not access photo file")
+            onError("Invalid photo URI")
         }
     } catch (e: Exception) {
         // Still try to return the URI as it might be valid

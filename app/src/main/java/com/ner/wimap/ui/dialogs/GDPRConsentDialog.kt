@@ -45,6 +45,7 @@ fun GDPRConsentDialog(
     var showAgeVerification by remember { mutableStateOf(true) }
     var ageVerified by remember { mutableStateOf(false) }
     var isChild by remember { mutableStateOf(false) }
+    var showMoreOptions by remember { mutableStateOf(false) }
     
     Dialog(
         onDismissRequest = onDismiss,
@@ -88,11 +89,13 @@ fun GDPRConsentDialog(
                         advertisingConsent = advertisingConsent,
                         locationConsent = locationConsent,
                         dataUploadConsent = dataUploadConsent,
+                        showMoreOptions = showMoreOptions,
                         onEssentialChanged = { essentialConsent = it },
                         onAnalyticsChanged = { analyticsConsent = it },
                         onAdvertisingChanged = { advertisingConsent = it },
                         onLocationChanged = { locationConsent = it },
                         onDataUploadChanged = { dataUploadConsent = it },
+                        onMoreOptionsToggle = { showMoreOptions = !showMoreOptions },
                         onAccept = {
                             onConsentGiven(
                                 essentialConsent,
@@ -171,11 +174,13 @@ private fun ConsentSection(
     advertisingConsent: Boolean,
     locationConsent: Boolean,
     dataUploadConsent: Boolean,
+    showMoreOptions: Boolean,
     onEssentialChanged: (Boolean) -> Unit,
     onAnalyticsChanged: (Boolean) -> Unit,
     onAdvertisingChanged: (Boolean) -> Unit,
     onLocationChanged: (Boolean) -> Unit,
     onDataUploadChanged: (Boolean) -> Unit,
+    onMoreOptionsToggle: () -> Unit,
     onAccept: () -> Unit,
     onDecline: () -> Unit,
     canAccept: Boolean
@@ -235,7 +240,7 @@ private fun ConsentSection(
         }
         
         Text(
-            text = "WiMap builds a global WiFi database. Essential features (marked with •) are required for the app to function:",
+            text = "WiMap builds a global WiFi database. Essential features (marked with •) are mandatory for the app to function and cannot be disabled:",
             style = MaterialTheme.typography.bodyMedium,
             textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -245,32 +250,11 @@ private fun ConsentSection(
         ConsentOption(
             icon = Icons.Default.Security,
             title = "Essential App Functions",
-            description = "Required for the app to work properly. Includes basic WiFi scanning and local data storage.",
+            description = "Required for the app to work properly. Includes WiFi scanning, device identification (ADID), and local data storage. ADID enables us to analyze location-based advertising effectiveness, improve ad relevance based on WiFi coverage areas, and provide personalized ad experiences that support app development.",
             isRequired = true,
             isChecked = essentialConsent,
             onCheckedChange = onEssentialChanged,
             isEnabled = true
-        )
-        
-        // Optional Consents
-        ConsentOption(
-            icon = Icons.Default.Analytics,
-            title = "Anonymous Analytics",
-            description = "Help improve the app with anonymous usage statistics. No personal data is collected.",
-            isRequired = false,
-            isChecked = analyticsConsent,
-            onCheckedChange = onAnalyticsChanged,
-            isEnabled = !isChild
-        )
-        
-        ConsentOption(
-            icon = Icons.Default.AttachMoney,
-            title = "Personalized Advertising",
-            description = "Show relevant ads based on app usage. Helps support free app development.",
-            isRequired = false,
-            isChecked = advertisingConsent,
-            onCheckedChange = onAdvertisingChanged,
-            isEnabled = !isChild
         )
         
         ConsentOption(
@@ -292,6 +276,50 @@ private fun ConsentSection(
             onCheckedChange = onDataUploadChanged,
             isEnabled = true
         )
+        
+        // More Options Button
+        OutlinedButton(
+            onClick = onMoreOptionsToggle,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Settings,
+                    contentDescription = null
+                )
+                Text("More Options (Optional)")
+                Icon(
+                    imageVector = if (showMoreOptions) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                    contentDescription = null
+                )
+            }
+        }
+        
+        // Collapsible Optional Consents
+        if (showMoreOptions) {
+            ConsentOption(
+                icon = Icons.Default.Analytics,
+                title = "Anonymous Analytics",
+                description = "Help improve the app with anonymous usage statistics. No personal data is collected.",
+                isRequired = false,
+                isChecked = analyticsConsent,
+                onCheckedChange = onAnalyticsChanged,
+                isEnabled = !isChild
+            )
+            
+            ConsentOption(
+                icon = Icons.Default.AttachMoney,
+                title = "Personalized Advertising",
+                description = "Show relevant ads based on app usage. Helps support free app development.",
+                isRequired = false,
+                isChecked = advertisingConsent,
+                onCheckedChange = onAdvertisingChanged,
+                isEnabled = !isChild
+            )
+        }
         
         Spacer(modifier = Modifier.height(8.dp))
         

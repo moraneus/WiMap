@@ -1,6 +1,10 @@
 package com.ner.wimap
 
+import android.app.ActivityManager
+import android.content.BroadcastReceiver
+import android.content.Context
 import android.content.Intent
+import android.content.IntentFilter
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -58,6 +62,9 @@ class MainActivity : ComponentActivity() {
     @Inject
     lateinit var adManager: com.ner.wimap.ads.AdManager
 
+    private var sessionSaveReceiver: BroadcastReceiver? = null
+    private var mainViewModel: MainViewModel? = null
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         
@@ -102,10 +109,91 @@ class MainActivity : ComponentActivity() {
         super.onDestroy()
         // Clear the activity reference
         adManager.setCurrentActivity(null)
+        
+        // Unregister broadcast receiver
+        sessionSaveReceiver?.let { receiver ->
+            try {
+                unregisterReceiver(receiver)
+                sessionSaveReceiver = null
+            } catch (e: Exception) {
+                // Receiver might not be registered
+            }
+        }
+    }
+    
+    private fun setupSessionSaveBroadcastReceiver() {
+        // Unregister existing receiver if any
+        sessionSaveReceiver?.let { receiver ->
+            try {
+                unregisterReceiver(receiver)
+            } catch (e: Exception) {
+                // Receiver might not be registered
+            }
+        }
+        
+        // Create new receiver
+        sessionSaveReceiver = object : BroadcastReceiver() {
+            override fun onReceive(context: Context?, intent: Intent?) {
+                when (intent?.action) {
+                    com.ner.wimap.service.BackgroundNotificationService.ACTION_SAVE_SESSION_FROM_NOTIFICATION -> {
+                        android.util.Log.d("MainActivity", "Received save session broadcast from notification")
+                        
+                        // Check if app is in foreground
+                        val isAppInForeground = isAppInForeground()
+                        android.util.Log.d("MainActivity", "App in foreground: $isAppInForeground")
+                        
+                        if (isAppInForeground) {
+                            // App is in foreground - show normal session dialog
+                            android.util.Log.d("MainActivity", "App in foreground - stopping scan and showing session dialog")
+                            mainViewModel?.onStopScanFromNotification()
+                        } else {
+                            // App is in background - auto-save with default name
+                            android.util.Log.d("MainActivity", "App in background - auto-saving session")
+                            mainViewModel?.autoSaveCurrentScanSession()
+                        }
+                    }
+                }
+            }
+        }
+        
+        // Register receiver
+        val filter = IntentFilter().apply {
+            addAction(com.ner.wimap.service.BackgroundNotificationService.ACTION_SAVE_SESSION_FROM_NOTIFICATION)
+        }
+        
+        try {
+            registerReceiver(sessionSaveReceiver, filter)
+            android.util.Log.d("MainActivity", "Session save broadcast receiver registered")
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Failed to register session save broadcast receiver", e)
+        }
+    }
+    
+    private fun isAppInForeground(): Boolean {
+        return try {
+            val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
+            val runningAppProcesses = activityManager.runningAppProcesses
+            
+            for (appProcess in runningAppProcesses) {
+                if (appProcess.processName == packageName) {
+                    return appProcess.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+                }
+            }
+            false
+        } catch (e: Exception) {
+            android.util.Log.e("MainActivity", "Error checking if app is in foreground", e)
+            false
+        }
     }
 
     @Composable
     fun WiMapApp(viewModel: MainViewModel = hiltViewModel()) {
+        
+        // Store viewModel reference for broadcast receiver
+        LaunchedEffect(viewModel) {
+            mainViewModel = viewModel
+            setupSessionSaveBroadcastReceiver()
+        }
         
         val requestPermissionsLauncher = rememberLauncherForActivityResult(
             ActivityResultContracts.RequestMultiplePermissions()
@@ -286,6 +374,25 @@ class MainActivity : ComponentActivity() {
                 }
                 currentPage = SwipeDestination.SCAN_HISTORY.index
                 viewModel.onNavigateToScanHistoryHandled()
+            }
+        }
+        
+        // Auto-save session broadcast receiver
+        DisposableEffect(Unit) {
+            val autoSaveBroadcastReceiver = object : android.content.BroadcastReceiver() {
+                override fun onReceive(context: android.content.Context?, intent: android.content.Intent?) {
+                    if (intent?.action == "com.ner.wimap.AUTO_SAVE_SESSION") {
+                        android.util.Log.d("MainActivity", "Received auto-save broadcast")
+                        viewModel.autoSaveCurrentScanSession()
+                    }
+                }
+            }
+            
+            val filter = android.content.IntentFilter("com.ner.wimap.AUTO_SAVE_SESSION")
+            registerReceiver(autoSaveBroadcastReceiver, filter, android.content.Context.RECEIVER_NOT_EXPORTED)
+            
+            onDispose {
+                unregisterReceiver(autoSaveBroadcastReceiver)
             }
         }
         

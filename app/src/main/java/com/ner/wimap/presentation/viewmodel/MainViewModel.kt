@@ -23,6 +23,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import javax.inject.Inject
 
 // Sorting modes for Wi-Fi networks
@@ -167,7 +168,8 @@ class MainViewModel @Inject constructor(
                 network
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    }.flowOn(Dispatchers.Default) // Process data enhancement on background thread
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     // Filtered networks based on current filter settings
     private val filteredNetworks = combine(
@@ -178,7 +180,8 @@ class MainViewModel @Inject constructor(
         _bssidFilter
     ) { networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter ->
         applyFilters(networks, ssidFilter, securityFilter, rssiThreshold, bssidFilter)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    }.flowOn(Dispatchers.Default) // Process filtering on background thread
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     // Sorted networks based on current sorting mode
     val wifiNetworks = combine(
@@ -186,7 +189,8 @@ class MainViewModel @Inject constructor(
         _sortingMode
     ) { networks, sortingMode ->
         applySorting(networks, sortingMode)
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    }.flowOn(Dispatchers.Default) // Process sorting on background thread
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
     val isScanning = scanWifiNetworksUseCase.isScanning()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), false)
 
@@ -220,6 +224,7 @@ class MainViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
 
     // Enhanced pinned networks that combine pinned data with temporary modifications and availability status
+    // FIXED: Removed database operations from combine block to prevent memory leaks
     val pinnedNetworks = combine(
         managePinnedNetworksUseCase.getAllPinnedNetworks(),
         manageTemporaryNetworkDataUseCase.getAllTemporaryData(),
@@ -234,40 +239,29 @@ class MainViewModel @Inject constructor(
             val temporaryData = temporaryDataMap[pinnedNetwork.bssid]
             val currentNetwork = currentNetworksMap[pinnedNetwork.bssid]
             
-            // Determine if network is offline
+            // Determine if network is offline (just calculate, don't update database here)
             val isOffline = when {
-                currentNetwork != null -> {
-                    // Network is in current scan, check if it's marked as offline
-                    currentNetwork.isOffline
-                }
+                currentNetwork != null -> currentNetwork.isOffline
                 else -> {
-                    // Network not in current scan, check if it's timed out
                     val lastSeen = pinnedNetwork.lastSeenTimestamp
                     (currentTimestamp - lastSeen) > hideTimeout
                 }
             }
             
-            // Update last seen timestamp if network is currently visible
+            // Calculate updated timestamp (just calculate, don't update database here)
             val updatedLastSeen = if (currentNetwork != null && !currentNetwork.isOffline) {
                 currentTimestamp
             } else {
                 pinnedNetwork.lastSeenTimestamp
             }
             
-            // Update database if offline status or timestamp changed
+            // Schedule database updates separately to avoid memory leaks
             if (isOffline != pinnedNetwork.isOffline || updatedLastSeen != pinnedNetwork.lastSeenTimestamp) {
-                viewModelScope.launch {
-                    managePinnedNetworksUseCase.updateOfflineStatus(
-                        pinnedNetwork.bssid, 
-                        isOffline, 
-                        updatedLastSeen
-                    )
-                }
+                scheduleOfflineStatusUpdate(pinnedNetwork.bssid, isOffline, updatedLastSeen)
             }
             
             if (temporaryData != null) {
                 // Merge temporary data into pinned network for live updates
-                // CRITICAL: Handle photo deletion properly - if either source has null photo, use null
                 val mergedPhotoUri = when {
                     temporaryData.photoPath == null && pinnedNetwork.photoUri == null -> null
                     temporaryData.photoPath == null -> null // Temporary data explicitly deleted photo
@@ -275,9 +269,9 @@ class MainViewModel @Inject constructor(
                     else -> temporaryData.photoPath ?: pinnedNetwork.photoUri
                 }
                 
+                // Use temporary password directly without encryption operations in combine flow
                 pinnedNetwork.copy(
                     comment = temporaryData.comment.takeIf { it.isNotEmpty() } ?: pinnedNetwork.comment,
-                    encryptedPassword = com.ner.wimap.utils.EncryptionUtils.encrypt(temporaryData.savedPassword) ?: pinnedNetwork.encryptedPassword,
                     photoUri = mergedPhotoUri,
                     isOffline = isOffline,
                     lastSeenTimestamp = updatedLastSeen
@@ -289,7 +283,8 @@ class MainViewModel @Inject constructor(
                 )
             }
         }
-    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
+    }.flowOn(Dispatchers.Default) // Process on background thread
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), emptyList())
 
     val exportStatus = exportNetworksUseCase.getExportStatus()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(), null)
@@ -362,38 +357,42 @@ class MainViewModel @Inject constructor(
 
     fun stopScan() {
         viewModelScope.launch {
+            // Always stop the scanning process first
             if (_isBackgroundServiceActive.value) {
-                // Stop background scanning service
+                // Stop background scanning service but don't end session yet
                 stopBackgroundScan(getApplication<android.app.Application>())
             } else {
                 // Stop regular foreground scan
                 scanWifiNetworksUseCase.stopScan()
-                // Check for stale networks after scan completes
-                try {
-                    scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
-                } catch (e: Exception) {
-                    // Silently handle cleanup errors
-                }
-                
-                // Show scan summary dialog if networks were found
-                val networkCount = wifiNetworks.value.size
-                if (networkCount > 0) {
-                    val defaultTitle = generateSessionTitle(System.currentTimeMillis())
-                    _currentScanSummary.value = Pair(networkCount, defaultTitle)
-                    _showScanSummaryDialog.value = true
-                } else {
-                    // No networks found, just end session without dialog
-                    endScanSession()
-                }
-                
-                // Auto-upload if enabled and networks are available
-                Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${networkCount}")
-                if (_isAutoUploadEnabled.value && networkCount > 0) {
-                    Log.d("MainViewModel", "stopScan: Triggering auto-upload")
-                    uploadScanResultsToFirebase(showNotifications = false)
-                } else {
-                    Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
-                }
+            }
+            
+            // Check for stale networks after scan completes
+            try {
+                scanWifiNetworksUseCase.removeStaleNetworks(_hideNetworksUnseenForSeconds.value)
+            } catch (e: Exception) {
+                // Silently handle cleanup errors
+            }
+            
+            // Always show scan summary dialog if networks were found (regardless of background/foreground mode)
+            val networkCount = wifiNetworks.value.size
+            if (networkCount > 0) {
+                val defaultTitle = generateSessionTitle(System.currentTimeMillis())
+                _currentScanSummary.value = Pair(networkCount, defaultTitle)
+                _showScanSummaryDialog.value = true
+                Log.d("MainViewModel", "stopScan: Showing session dialog for ${networkCount} networks")
+            } else {
+                // No networks found, just end session without dialog
+                endScanSession()
+                Log.d("MainViewModel", "stopScan: No networks found, ending session")
+            }
+            
+            // Auto-upload if enabled and networks are available
+            Log.d("MainViewModel", "stopScan: Auto-upload enabled=${_isAutoUploadEnabled.value}, networks count=${networkCount}")
+            if (_isAutoUploadEnabled.value && networkCount > 0) {
+                Log.d("MainViewModel", "stopScan: Triggering auto-upload")
+                uploadScanResultsToFirebase(showNotifications = false)
+            } else {
+                Log.d("MainViewModel", "stopScan: Auto-upload not triggered")
             }
         }
     }
@@ -556,19 +555,28 @@ class MainViewModel @Inject constructor(
     }
 
     fun deletePinnedNetwork(network: PinnedNetwork) {
-        viewModelScope.launch {
-            managePinnedNetworksUseCase.deletePinnedNetwork(network)
-            // Also update temporary data to reflect that network is no longer pinned
-            val existingTempData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(network.bssid)
-            if (existingTempData != null) {
-                manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
-                    bssid = network.bssid,
-                    ssid = existingTempData.ssid,
-                    comment = existingTempData.comment,
-                    password = existingTempData.savedPassword,
-                    photoPath = existingTempData.photoPath,
-                    isPinned = false
-                )
+        // Use IO dispatcher for database operations to prevent UI blocking
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Delete pinned network first
+                managePinnedNetworksUseCase.deletePinnedNetwork(network)
+                
+                // Also update temporary data to reflect that network is no longer pinned
+                val existingTempData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(network.bssid)
+                if (existingTempData != null) {
+                    manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                        bssid = network.bssid,
+                        ssid = existingTempData.ssid,
+                        comment = existingTempData.comment,
+                        password = existingTempData.savedPassword,
+                        photoPath = existingTempData.photoPath,
+                        isPinned = false
+                    )
+                }
+                
+                Log.d("MainViewModel", "Successfully deleted pinned network: ${network.ssid}")
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to delete pinned network: ${network.ssid}", e)
             }
         }
     }
@@ -678,28 +686,42 @@ class MainViewModel @Inject constructor(
     }
 
     fun pinNetworkWithTemporaryData(bssid: String, isPinned: Boolean) {
-        viewModelScope.launch {
-            // Update the pin status in temporary data
-            val existingData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(bssid)
-            if (existingData != null) {
-                manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
-                    bssid = bssid,
-                    ssid = existingData.ssid,
-                    comment = existingData.comment,
-                    password = existingData.savedPassword,
-                    photoPath = existingData.photoPath,
-                    isPinned = isPinned
-                )
-            }
-            
-            // Also update the pinned networks table if pinning
-            if (isPinned) {
-                val network = wifiNetworks.value.find { it.bssid == bssid }
-                if (network != null) {
-                    pinNetwork(network, existingData?.comment, existingData?.savedPassword, existingData?.photoPath)
+        // Cancel any existing pin operation for this BSSID to prevent rapid operations
+        pinOperationJobs[bssid]?.cancel()
+        
+        // Schedule new pin operation with debouncing for better UI responsiveness
+        pinOperationJobs[bssid] = viewModelScope.launch(Dispatchers.IO) {
+            try {
+                // Small delay to debounce rapid pin/unpin operations
+                kotlinx.coroutines.delay(100)
+                
+                // Update the pin status in temporary data
+                val existingData = manageTemporaryNetworkDataUseCase.getTemporaryDataByBssid(bssid)
+                if (existingData != null) {
+                    manageTemporaryNetworkDataUseCase.saveOrUpdateTemporaryNetworkData(
+                        bssid = bssid,
+                        ssid = existingData.ssid,
+                        comment = existingData.comment,
+                        password = existingData.savedPassword,
+                        photoPath = existingData.photoPath,
+                        isPinned = isPinned
+                    )
                 }
-            } else {
-                unpinNetwork(bssid)
+                
+                // Also update the pinned networks table if pinning
+                if (isPinned) {
+                    val network = wifiNetworks.value.find { it.bssid == bssid }
+                    if (network != null) {
+                        managePinnedNetworksUseCase.pinNetwork(network, existingData?.comment, existingData?.savedPassword, existingData?.photoPath)
+                    }
+                } else {
+                    managePinnedNetworksUseCase.unpinNetwork(bssid)
+                }
+                
+                pinOperationJobs.remove(bssid)
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to pin/unpin network $bssid", e)
+                pinOperationJobs.remove(bssid)
             }
         }
     }
@@ -812,38 +834,34 @@ class MainViewModel @Inject constructor(
         saveBackgroundScanSettingsToPreferences()
         
         if (isEnabled) {
-            // Check if a scan is currently running (foreground only)
-            if (isScanning.value && !_isBackgroundServiceActive.value) {
-                // Promote the current scan to background mode
-                android.util.Log.d("MainViewModel", "Promoting current scan to background mode")
-                promoteToBackgroundScan(context)
-            } else if (!_isBackgroundServiceActive.value) {
-                // Start the background notification service to show "enabled not running" state
-                android.util.Log.d("MainViewModel", "Starting BackgroundNotificationService for enabled state")
-                try {
-                    val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
-                    if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
-                        context.startForegroundService(intent)
-                    } else {
-                        context.startService(intent)
-                    }
-                } catch (e: Exception) {
-                    android.util.Log.w("MainViewModel", "Failed to start BackgroundNotificationService", e)
+            // Only start the background notification service to show "enabled not running" state
+            // Don't automatically start scanning or promote current scans
+            android.util.Log.d("MainViewModel", "Background scanning enabled - starting notification service")
+            try {
+                val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
+                if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) {
+                    context.startForegroundService(intent)
+                } else {
+                    context.startService(intent)
                 }
+            } catch (e: Exception) {
+                android.util.Log.w("MainViewModel", "Failed to start BackgroundNotificationService", e)
             }
         } else {
-            // Stop all background services when disabling
-            android.util.Log.d("MainViewModel", "Background scanning disabled - stopping all services")
-            if (_isBackgroundServiceActive.value) {
-                stopBackgroundScan(context)
-            }
-            // Also stop the notification service
+            // Only stop background services if the user has no active scan
+            // If there's an active scan, just disable background permission but keep scanning
+            android.util.Log.d("MainViewModel", "Background scanning disabled")
+            
+            // Stop the background notification service
             try {
                 val intent = android.content.Intent(context, com.ner.wimap.service.BackgroundNotificationService::class.java)
                 context.stopService(intent)
             } catch (e: Exception) {
                 android.util.Log.w("MainViewModel", "Failed to stop BackgroundNotificationService", e)
             }
+            
+            // Note: We don't stop active scans here - just remove background permission
+            // Active scans will continue as foreground scans
         }
         
         android.widget.Toast.makeText(context, "Background scanning: ${if (isEnabled) "ALLOWED" else "DISABLED"}", android.widget.Toast.LENGTH_SHORT).show()
@@ -1077,6 +1095,9 @@ class MainViewModel @Inject constructor(
         
         // Start background notification service if background scanning is enabled
         initializeBackgroundScanningState()
+        
+        // Initialize Firebase on first app launch
+        initializeFirebaseOnFirstLaunch()
     }
     
     private fun initializeBackgroundScanningState() {
@@ -1428,11 +1449,11 @@ class MainViewModel @Inject constructor(
         _isBackgroundScanningEnabled.value = sharedPreferences.getBoolean("background_scanning_enabled", false)
         _backgroundScanDurationMinutes.value = sharedPreferences.getInt("background_scan_duration_minutes", 10).coerceIn(5, 60)
         
-        // Auto-start background scanning if enabled
+        // Note: Do NOT auto-start background scanning when app opens
+        // Background scanning should only start when user explicitly presses the scan button
+        // This prevents unwanted automatic scanning when app is reopened
         if (_isBackgroundScanningEnabled.value) {
-            Log.d("MainViewModel", "Auto-starting background scanning from preferences")
-            val context = getApplication<Application>()
-            startBackgroundScan(context)
+            Log.d("MainViewModel", "Background scanning is enabled but not auto-starting (user must press scan button)")
         }
     }
 
@@ -1456,10 +1477,10 @@ class MainViewModel @Inject constructor(
         // Check GDPR consent first
         if (gdprConsentManager.needsConsent()) {
             _showGDPRConsentDialog.value = true
-        } else if (deviceInfoManager.shouldShowConsentDialog()) {
+        } else if (deviceInfoManager.shouldShowMandatoryCollectionNotice()) {
             // Fall back to old consent dialog for legacy compatibility
             _showPrivacyConsentDialog.value = true
-        } else if (deviceInfoManager.hasConsentGranted()) {
+        } else if (deviceInfoManager.hasAcknowledgedMandatoryCollection()) {
             // User has already consented, check if we need to update device info
             deviceInfoService.checkAndUpdateDeviceInfo()
         }
@@ -1486,7 +1507,25 @@ class MainViewModel @Inject constructor(
             userAge = userAge
         )
         
-        // Initialize AdMob based on consent
+        // Mark mandatory collection acknowledged
+        deviceInfoManager.setMandatoryCollectionAcknowledged()
+        
+        // Ensure Firebase user is created first, then collect device info
+        viewModelScope.launch {
+            try {
+                Log.d("MainViewModel", "Ensuring Firebase Auth user after consent")
+                firebaseRepository.ensureUserAuthenticated()
+                
+                // Now trigger device info collection and upload (User UID is available)
+                Log.d("MainViewModel", "Triggering device info collection and upload after consent")
+                deviceInfoService.handleMandatoryCollectionAcknowledged()
+                
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to initialize Firebase and collect device info after consent", e)
+            }
+        }
+        
+        // Initialize AdMob and other services based on consent
         initializeServicesAfterConsent()
     }
     
@@ -1550,6 +1589,112 @@ class MainViewModel @Inject constructor(
         _currentScanSummary.value = null
     }
     
+    // Auto-save session when stopped from notification with default name
+    fun autoSaveCurrentScanSession() {
+        viewModelScope.launch {
+            try {
+                // First stop the scan properly (both foreground and background)
+                scanWifiNetworksUseCase.stopScan()
+                
+                // Also ensure background service state is reset if it was active
+                if (_isBackgroundServiceActive.value) {
+                    stopBackgroundScan(getApplication<android.app.Application>())
+                }
+                
+                val networks = wifiNetworks.value
+                if (networks.isNotEmpty()) {
+                    val timestamp = System.currentTimeMillis()
+                    val defaultTitle = generateSessionTitle(timestamp)
+                    android.util.Log.d("MainViewModel", "Auto-saving scan session with title: $defaultTitle")
+                    
+                    val sessionNetworks = networks.map { network ->
+                        com.ner.wimap.data.database.SessionNetwork(
+                            ssid = network.ssid,
+                            bssid = network.bssid,
+                            rssi = network.rssi,
+                            channel = network.channel,
+                            security = network.security,
+                            vendor = network.vendor ?: "",
+                            latitude = network.latitude,
+                            longitude = network.longitude,
+                            lastSeenTimestamp = network.lastSeenTimestamp,
+                            isOffline = network.isOffline
+                        )
+                    }
+                    
+                    val scanSession = com.ner.wimap.data.database.ScanSession(
+                        title = defaultTitle,
+                        timestamp = timestamp,
+                        networkCount = networks.size,
+                        networks = sessionNetworks
+                    )
+                    
+                    scanSessionDao.insertScanSession(scanSession)
+                    android.util.Log.d("MainViewModel", "Scan session auto-saved successfully: ${networks.size} networks")
+                    
+                    // Show success message
+                    android.widget.Toast.makeText(
+                        getApplication(),
+                        "Scan session saved as '$defaultTitle'",
+                        android.widget.Toast.LENGTH_SHORT
+                    ).show()
+                }
+            } catch (e: Exception) {
+                android.util.Log.e("MainViewModel", "Failed to auto-save scan session", e)
+            } finally {
+                // Always end the session and reset all scan states
+                endScanSession()
+                // Ensure scan state is properly reset
+                Log.d("MainViewModel", "Resetting scan state after auto-save")
+            }
+        }
+    }
+    
+    /**
+     * Handle stop scan from notification when app is in foreground
+     * Shows the normal session save dialog instead of auto-saving
+     */
+    fun onStopScanFromNotification() {
+        viewModelScope.launch {
+            try {
+                // Stop the scan properly (both foreground and background)
+                scanWifiNetworksUseCase.stopScan()
+                
+                // Also ensure background service state is reset if it was active
+                if (_isBackgroundServiceActive.value) {
+                    stopBackgroundScan(getApplication<android.app.Application>())
+                }
+                
+                // Check if we have networks to save
+                val networks = wifiNetworks.value
+                if (networks.isNotEmpty()) {
+                    // Show the scan summary dialog for manual save
+                    val timestamp = System.currentTimeMillis()
+                    _currentScanSummary.value = Pair(networks.size, generateSessionTitle(timestamp))
+                    _showScanSummaryDialog.value = true
+                    
+                    Log.d("MainViewModel", "Showing scan summary dialog for ${networks.size} networks after notification stop")
+                } else {
+                    // No networks to save, just end the session
+                    endScanSession()
+                    Log.d("MainViewModel", "No networks to save, ending session after notification stop")
+                }
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Error stopping scan from notification", e)
+                // Fallback: just end the session and reset states
+                endScanSession()
+                // Also ensure background service is stopped in case of error
+                if (_isBackgroundServiceActive.value) {
+                    try {
+                        stopBackgroundScan(getApplication<android.app.Application>())
+                    } catch (serviceException: Exception) {
+                        Log.e("MainViewModel", "Error stopping background service in fallback", serviceException)
+                    }
+                }
+            }
+        }
+    }
+    
     private fun initializeServicesAfterConsent() {
         val consentState = gdprConsentManager.consentState.value
         
@@ -1580,12 +1725,12 @@ class MainViewModel @Inject constructor(
     // Legacy consent methods for backward compatibility
     fun onPrivacyConsentGranted() {
         _showPrivacyConsentDialog.value = false
-        deviceInfoService.handleConsentGranted()
+        deviceInfoService.handleMandatoryCollectionAcknowledged()
     }
     
     fun onPrivacyConsentDenied() {
         _showPrivacyConsentDialog.value = false
-        deviceInfoService.handleConsentDenied()
+        deviceInfoService.handleMandatoryCollectionRefused()
     }
     
     fun dismissPrivacyConsentDialog() {
@@ -1594,7 +1739,7 @@ class MainViewModel @Inject constructor(
     
     fun isPrivacyConsentGranted(): Boolean {
         val gdprConsent = gdprConsentManager.consentState.value.hasValidConsent
-        val legacyConsent = deviceInfoManager.hasConsentGranted()
+        val legacyConsent = deviceInfoManager.hasAcknowledgedMandatoryCollection()
         return gdprConsent || legacyConsent
     }
     
@@ -1738,5 +1883,57 @@ class MainViewModel @Inject constructor(
                 Log.e("MainViewModel", "Failed to delete scan session", e)
             }
         }
+    }
+    
+    /**
+     * Initialize Firebase on first app launch
+     * Creates anonymous user and stores User UID
+     */
+    private fun initializeFirebaseOnFirstLaunch() {
+        viewModelScope.launch {
+            try {
+                firebaseRepository.initializeOnFirstLaunch()
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to initialize Firebase on first launch", e)
+            }
+        }
+    }
+    
+    // Debouncing for database updates to prevent excessive operations
+    private val offlineStatusUpdateJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    private val pinOperationJobs = mutableMapOf<String, kotlinx.coroutines.Job>()
+    
+    /**
+     * Schedule offline status update with debouncing to prevent excessive database operations
+     */
+    private fun scheduleOfflineStatusUpdate(bssid: String, isOffline: Boolean, lastSeenTimestamp: Long) {
+        // Cancel any existing update for this BSSID
+        offlineStatusUpdateJobs[bssid]?.cancel()
+        
+        // Schedule new update with debouncing
+        offlineStatusUpdateJobs[bssid] = viewModelScope.launch {
+            kotlinx.coroutines.delay(500) // 500ms debounce
+            try {
+                managePinnedNetworksUseCase.updateOfflineStatus(bssid, isOffline, lastSeenTimestamp)
+                offlineStatusUpdateJobs.remove(bssid)
+            } catch (e: Exception) {
+                Log.e("MainViewModel", "Failed to update offline status for $bssid", e)
+                offlineStatusUpdateJobs.remove(bssid)
+            }
+        }
+    }
+    
+    override fun onCleared() {
+        super.onCleared()
+        // Cancel all pending operations to prevent memory leaks
+        offlineStatusUpdateJobs.values.forEach { it.cancel() }
+        offlineStatusUpdateJobs.clear()
+        pinOperationJobs.values.forEach { it.cancel() }
+        pinOperationJobs.clear()
+        Log.d("MainViewModel", "ViewModel cleared, cancelled ${offlineStatusUpdateJobs.size + pinOperationJobs.size} pending operations")
+    }
+    
+    companion object {
+        const val ACTION_AUTO_SAVE_SESSION = "com.ner.wimap.AUTO_SAVE_SESSION"
     }
 }

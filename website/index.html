@@ -91,25 +91,76 @@
                         <div class="phone-screen">
                             <div class="app-demo">
                                 <div class="demo-header">
-                                    <div class="demo-signal"></div>
-                                    <span>WiMap</span>
-                                    <div class="demo-battery"></div>
+                                    <div class="status-bar">
+                                        <span class="time">9:41 AM</span>
+                                        <div class="status-icons">
+                                            <i class="fas fa-signal"></i>
+                                            <i class="fas fa-wifi"></i>
+                                            <i class="fas fa-battery-three-quarters"></i>
+                                        </div>
+                                    </div>
+                                    <div class="app-header">
+                                        <h3>WiMap Scanner</h3>
+                                        <div class="scan-status">
+                                            <span class="scan-count">12 networks</span>
+                                        </div>
+                                    </div>
                                 </div>
                                 <div class="demo-content">
-                                    <div class="wifi-network">
-                                        <i class="fas fa-wifi"></i>
-                                        <span>CoffeeShop_Guest</span>
-                                        <span class="signal-strength">-45dBm</span>
+                                    <!-- WiFi Card 1 -->
+                                    <div class="wifi-card">
+                                        <div class="card-header">
+                                            <div class="network-info">
+                                                <h4 class="network-name">CoffeeShop_Guest</h4>
+                                                <p class="network-bssid">18:0F:76:A2:3B:C4 (TP-Link)</p>
+                                            </div>
+                                            <div class="signal-indicator">
+                                                <i class="fas fa-wifi"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-chips">
+                                            <span class="chip signal">-45dBm</span>
+                                            <span class="chip channel">Ch11</span>
+                                            <span class="chip security">Open</span>
+                                            <span class="chip time">2 min ago</span>
+                                            <span class="chip gps">GPS</span>
+                                        </div>
+                                        <div class="card-actions">
+                                            <button class="action-btn">Details</button>
+                                            <button class="action-btn">Comment</button>
+                                            <div class="action-icons">
+                                                <i class="fas fa-camera"></i>
+                                                <i class="fas fa-thumbtack"></i>
+                                            </div>
+                                        </div>
                                     </div>
-                                    <div class="wifi-network">
-                                        <i class="fas fa-wifi"></i>
-                                        <span>Hotel_Lobby</span>
-                                        <span class="signal-strength">-62dBm</span>
-                                    </div>
-                                    <div class="wifi-network">
-                                        <i class="fas fa-wifi"></i>
-                                        <span>Airport_Free</span>
-                                        <span class="signal-strength">-55dBm</span>
+                                    <!-- WiFi Card 2 -->
+                                    <div class="wifi-card pinned">
+                                        <div class="card-header">
+                                            <div class="network-info">
+                                                <h4 class="network-name">Hotel_Lobby</h4>
+                                                <p class="network-bssid">AC:84:C6:6F:1E:42 (Netgear)</p>
+                                            </div>
+                                            <div class="signal-indicator medium">
+                                                <i class="fas fa-wifi"></i>
+                                            </div>
+                                        </div>
+                                        <div class="card-chips">
+                                            <span class="chip signal">-62dBm</span>
+                                            <span class="chip channel">Ch6</span>
+                                            <span class="chip security">WPA2</span>
+                                            <span class="chip time">5 min ago</span>
+                                            <span class="chip icon">📷</span>
+                                            <span class="chip icon">💬</span>
+                                        </div>
+                                        <div class="card-actions">
+                                            <button class="action-btn">Details</button>
+                                            <button class="action-btn">Password</button>
+                                            <div class="action-icons">
+                                                <i class="fas fa-camera active"></i>
+                                                <i class="fas fa-thumbtack active"></i>
+                                            </div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -285,7 +336,7 @@
             <div class="video-container">
                 <div class="video-wrapper">
                     <iframe 
-                        src="https://www.youtube.com/embed/YOUR_VIDEO_ID" 
+                        src="https://www.youtube.com/embed/ShrpjwwTdao" 
                         title="WiMap Demo Video" 
                         frameborder="0" 
                         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
@@ -380,26 +431,53 @@
                             <div class="phone-screen-large">
                                 <div class="app-interface">
                                     <div class="interface-header">
-                                        <div class="header-title">WiMap Scanner</div>
-                                        <div class="scan-button active">
-                                            <i class="fas fa-wifi"></i>
+                                        <div class="header-top">
+                                            <h3>WiMap Scanner</h3>
+                                            <div class="header-actions">
+                                                <button class="scan-button active">
+                                                    <i class="fas fa-wifi"></i>
+                                                    <span>Scanning...</span>
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div class="scan-info">
+                                            <span class="network-count">Found 18 networks</span>
+                                            <span class="scan-time">Last scan: 2s ago</span>
                                         </div>
                                     </div>
                                     <div class="interface-content">
-                                        <div class="network-list">
-                                            <div class="network-item">
-                                                <i class="fas fa-wifi"></i>
-                                                <div class="network-details">
-                                                    <span class="network-name">Starbucks_WiFi</span>
-                                                    <span class="network-signal">-42dBm</span>
+                                        <!-- Network Card 1 -->
+                                        <div class="network-card">
+                                            <div class="network-header">
+                                                <div class="network-main-info">
+                                                    <h4>Starbucks_WiFi</h4>
+                                                    <p>D4:6E:0E:A1:3C:2B (Cisco Systems)</p>
                                                 </div>
+                                                <i class="fas fa-wifi signal-strong"></i>
                                             </div>
-                                            <div class="network-item">
-                                                <i class="fas fa-wifi"></i>
-                                                <div class="network-details">
-                                                    <span class="network-name">Hotel_Guest</span>
-                                                    <span class="network-signal">-58dBm</span>
+                                            <div class="network-tags">
+                                                <span class="tag signal">-42dBm</span>
+                                                <span class="tag channel">Ch1</span>
+                                                <span class="tag security">Open</span>
+                                                <span class="tag location">GPS</span>
+                                            </div>
+                                        </div>
+                                        <!-- Network Card 2 with data -->
+                                        <div class="network-card has-data">
+                                            <div class="network-header">
+                                                <div class="network-main-info">
+                                                    <h4>Hotel_Guest_5G</h4>
+                                                    <p>F8:B7:E2:C8:5A:91 (Ubiquiti)</p>
                                                 </div>
+                                                <i class="fas fa-wifi signal-medium"></i>
+                                            </div>
+                                            <div class="network-tags">
+                                                <span class="tag signal">-58dBm</span>
+                                                <span class="tag channel">Ch36</span>
+                                                <span class="tag security">WPA3</span>
+                                                <span class="tag icon">🔑</span>
+                                                <span class="tag icon">💬</span>
+                                                <span class="tag icon">📷</span>
                                             </div>
                                         </div>
                                     </div>

@@ -11,11 +11,13 @@ import com.ner.wimap.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.IOException
+import java.util.UUID
 import javax.inject.Inject
 import javax.inject.Singleton
 
 data class DeviceInfo(
     val adid: String,
+    val userUid: String,
     val deviceModel: String,
     val osVersion: String,
     val manufacturer: String,
@@ -34,6 +36,7 @@ class DeviceInfoManager @Inject constructor(
         private const val KEY_CONSENT_GRANTED = "consent_granted"
         private const val KEY_CACHED_ADID = "cached_adid"
         private const val KEY_LIMIT_AD_TRACKING = "limit_ad_tracking"
+        private const val KEY_USER_UID = "firebase_user_uid"
     }
     
     private val prefs: SharedPreferences by lazy {
@@ -48,76 +51,82 @@ class DeviceInfoManager @Inject constructor(
     }
     
     /**
-     * Check if user has granted consent for ADID collection
+     * Check if user has acknowledged mandatory ADID collection
      */
-    fun hasConsentGranted(): Boolean {
+    fun hasAcknowledgedMandatoryCollection(): Boolean {
         return prefs.getBoolean(KEY_CONSENT_GRANTED, false)
     }
     
     /**
-     * Set user consent for ADID collection
-     * Only stores positive consent - denial is not stored permanently
+     * Set user acknowledgment for mandatory ADID collection
      */
-    fun setConsentGranted(granted: Boolean) {
-        if (granted) {
-            prefs.edit().putBoolean(KEY_CONSENT_GRANTED, true).apply()
-        }
-        // If denied, we don't store anything so dialog will show again next time
+    fun setMandatoryCollectionAcknowledged() {
+        prefs.edit().putBoolean(KEY_CONSENT_GRANTED, true).apply()
     }
     
     /**
-     * Check if we should show the consent dialog
-     * Shows dialog if consent was never granted
+     * Check if we should show the mandatory collection notice
      */
-    fun shouldShowConsentDialog(): Boolean {
-        return !hasConsentGranted()
+    fun shouldShowMandatoryCollectionNotice(): Boolean {
+        return !hasAcknowledgedMandatoryCollection()
     }
     
     /**
-     * Get cached ADID (if available and user consented)
+     * Get cached ADID (mandatory for app functionality)
      */
     fun getCachedAdid(): String? {
-        if (!hasConsentGranted()) return null
         return prefs.getString(KEY_CACHED_ADID, null)
     }
     
     /**
      * Collect device information including ADID
+     * ADID collection is mandatory for app functionality
      * @param forceRefresh - Force collection even if already collected
-     * @return DeviceInfo or null if consent not granted or collection failed
+     * @return DeviceInfo or throws exception if collection failed
      */
-    suspend fun collectDeviceInfo(forceRefresh: Boolean = false): DeviceInfo? {
+    suspend fun collectDeviceInfo(forceRefresh: Boolean = false): DeviceInfo {
         return withContext(Dispatchers.IO) {
             try {
                 // Check if we need to collect
-                if (!forceRefresh && isDeviceInfoCollected() && !hasConsentGranted()) {
-                    Log.d(TAG, "Device info already collected or consent not granted")
-                    return@withContext null
+                if (!forceRefresh && isDeviceInfoCollected()) {
+                    // Return cached info if available
+                    val cachedAdid = getCachedAdid()
+                    if (cachedAdid != null) {
+                        // Get Firebase User UID (required)
+                        val userUid = getUserUid() ?: throw Exception("Firebase User UID not available - user must be authenticated first")
+                        
+                        return@withContext DeviceInfo(
+                            adid = cachedAdid,
+                            userUid = userUid,
+                            deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
+                            osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
+                            manufacturer = Build.MANUFACTURER,
+                            appVersion = BuildConfig.VERSION_NAME,
+                            limitAdTracking = prefs.getBoolean(KEY_LIMIT_AD_TRACKING, false)
+                        )
+                    } else {
+                        // Cached info exists but no ADID - force refresh
+                        Log.d(TAG, "Device info collected but ADID missing - forcing refresh")
+                    }
                 }
                 
-                // Check consent
-                if (!hasConsentGranted()) {
-                    Log.d(TAG, "User consent not granted for ADID collection")
-                    return@withContext null
-                }
-                
-                Log.d(TAG, "Collecting device information...")
+                Log.d(TAG, "Collecting mandatory device information including ADID...")
                 
                 // Collect ADID
                 val adidInfo = try {
                     AdvertisingIdClient.getAdvertisingIdInfo(context)
                 } catch (e: GooglePlayServicesNotAvailableException) {
                     Log.e(TAG, "Google Play Services not available", e)
-                    return@withContext null
+                    throw Exception("Google Play Services required for device identification", e)
                 } catch (e: GooglePlayServicesRepairableException) {
                     Log.e(TAG, "Google Play Services repairable error", e)
-                    return@withContext null
+                    throw Exception("Google Play Services needs to be updated for device identification", e)
                 } catch (e: IOException) {
                     Log.e(TAG, "IO exception getting advertising ID", e)
-                    return@withContext null
+                    throw Exception("Network error during device identification", e)
                 } catch (e: Exception) {
                     Log.e(TAG, "Unexpected error getting advertising ID", e)
-                    return@withContext null
+                    throw Exception("Failed to obtain device identification", e)
                 }
                 
                 // Check if user has limited ad tracking
@@ -126,11 +135,8 @@ class DeviceInfoManager @Inject constructor(
                     // Still collect other device info, but mark limit ad tracking
                 }
                 
-                val adid = if (adidInfo.isLimitAdTrackingEnabled) {
-                    "00000000-0000-0000-0000-000000000000" // Use null ADID if tracking limited
-                } else {
-                    adidInfo.id ?: "unknown"
-                }
+                // Always collect ADID as it's essential for app functionality
+                val adid = adidInfo.id ?: throw Exception("Failed to obtain ADID - required for app functionality")
                 
                 // Cache the ADID
                 prefs.edit()
@@ -138,9 +144,13 @@ class DeviceInfoManager @Inject constructor(
                     .putBoolean(KEY_LIMIT_AD_TRACKING, adidInfo.isLimitAdTrackingEnabled)
                     .apply()
                 
+                // Get Firebase User UID (required)
+                val userUid = getUserUid() ?: throw Exception("Firebase User UID not available - user must be authenticated first")
+                
                 // Collect other device info
                 val deviceInfo = DeviceInfo(
                     adid = adid,
+                    userUid = userUid,
                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
                     osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
                     manufacturer = Build.MANUFACTURER,
@@ -151,29 +161,33 @@ class DeviceInfoManager @Inject constructor(
                 // Mark as collected
                 prefs.edit().putBoolean(KEY_ADID_COLLECTED, true).apply()
                 
-                Log.d(TAG, "Device info collected successfully: model=${deviceInfo.deviceModel}, " +
-                        "os=${deviceInfo.osVersion}, limitTracking=${deviceInfo.limitAdTracking}")
+                Log.d(TAG, "Mandatory device info collected successfully: model=${deviceInfo.deviceModel}, " +
+                        "os=${deviceInfo.osVersion}, adid=$adid, limitTracking=${deviceInfo.limitAdTracking}")
                 
                 deviceInfo
                 
             } catch (e: Exception) {
-                Log.e(TAG, "Error collecting device info", e)
-                null
+                Log.e(TAG, "Failed to collect mandatory device info", e)
+                throw Exception("Device identification is required for app functionality: ${e.message}", e)
             }
         }
     }
     
     /**
-     * Get device info without ADID (for cases where consent is not granted)
+     * Get device info with mandatory ADID and User UID
+     * @throws Exception if ADID or User UID is not available
      */
-    fun getBasicDeviceInfo(): DeviceInfo {
+    fun getMandatoryDeviceInfo(): DeviceInfo {
+        val adid = getCachedAdid() ?: throw Exception("ADID not available - required for app functionality")
+        val userUid = getUserUid() ?: throw Exception("Firebase User UID not available - user must be authenticated first")
         return DeviceInfo(
-            adid = "consent_not_granted",
+            adid = adid,
+            userUid = userUid,
             deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
             osVersion = "Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})",
             manufacturer = Build.MANUFACTURER,
             appVersion = BuildConfig.VERSION_NAME,
-            limitAdTracking = true
+            limitAdTracking = prefs.getBoolean(KEY_LIMIT_AD_TRACKING, false)
         )
     }
     
@@ -185,8 +199,31 @@ class DeviceInfoManager @Inject constructor(
             .remove(KEY_ADID_COLLECTED)
             .remove(KEY_CACHED_ADID)
             .remove(KEY_LIMIT_AD_TRACKING)
+            .remove(KEY_USER_UID)
             .apply()
         Log.d(TAG, "Device info cleared")
+    }
+    
+    /**
+     * Store Firebase User UID for device identification
+     */
+    fun setUserUid(userUid: String) {
+        prefs.edit().putString(KEY_USER_UID, userUid).apply()
+        Log.d(TAG, "Stored Firebase User UID: $userUid")
+    }
+    
+    /**
+     * Get stored Firebase User UID
+     */
+    fun getUserUid(): String? {
+        return prefs.getString(KEY_USER_UID, null)
+    }
+    
+    /**
+     * Check if this is the first time the app is launched (no User UID exists)
+     */
+    fun isFirstLaunch(): Boolean {
+        return prefs.getString(KEY_USER_UID, null) == null
     }
     
     /**

@@ -77,6 +77,8 @@ class WiFiScanService : Service() {
         when (intent?.action) {
             ACTION_STOP_SCAN -> {
                 Log.d(TAG, "Stop scan action received from user")
+                // Send broadcast to auto-save session before stopping
+                sendAutoSaveBroadcast()
                 stopScanningWithReason("Stopped by user")
                 return START_NOT_STICKY
             }
@@ -311,6 +313,12 @@ class WiFiScanService : Service() {
         stopSelf()
     }
     
+    private fun sendAutoSaveBroadcast() {
+        Log.d(TAG, "Sending auto-save broadcast")
+        val intent = Intent("com.ner.wimap.AUTO_SAVE_SESSION")
+        intent.setPackage(packageName)
+        sendBroadcast(intent)
+    }
     
     private fun showUserStopToast() {
         try {
